@@ -1,0 +1,31 @@
+# OS junk
+.DS_Store
+**/.DS_Store
+Thumbs.db
+
+# Runtime user uploads (keep folder structure via .gitkeep)
+public/uploads/*
+!public/uploads/.gitkeep
+!public/uploads/*/
+public/uploads/*/*
+!public/uploads/*/.gitkeep
+
+# Logs & temp
+*.log
+*.tmp
+/tmp/
+
+# Local environment / secrets (if ever added)
+.env
+config/local.php
+
+# Vendor libraries (installed separately per libs/*/README.txt)
+libs/PHPMailer/src/
+libs/fpdf/fpdf.php
+libs/fpdf/font/
+libs/phpqrcode/qrlib.php
+
+# Editor
+.idea/
+.vscode/
+*.swp
