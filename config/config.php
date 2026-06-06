@@ -9,7 +9,46 @@ define('ENVIRONMENT', getenv('APP_ENV') ?: 'development'); // development | prod
 
 // ---- Site basics ----
 define('SITE_NAME', 'GiftDekeDekho');
-define('SITE_URL', getenv('APP_URL') ?: 'http://localhost/giftdekedekho');
+
+/*
+ * Base URL resolution order:
+ *   1. APP_URL environment variable (set this in production for certainty), else
+ *   2. Auto-detected from the current request (scheme + host), else
+ *   3. localhost fallback for CLI / first-run.
+ * Auto-detection honours Hostinger/Cloudflare HTTPS proxies via X-Forwarded-Proto
+ * so asset URLs never fall back to http://localhost (which triggers the browser's
+ * "access other apps and services on this device" / Local Network Access prompt).
+ */
+if (!function_exists('gdd_detect_base_url')) {
+    function gdd_detect_base_url(): string
+    {
+        $envUrl = getenv('APP_URL');
+        if ($envUrl) {
+            return rtrim($envUrl, '/');
+        }
+        if (!empty($_SERVER['HTTP_HOST'])) {
+            $forwardedProto = strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
+            $isHttps = (!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off')
+                || $forwardedProto === 'https'
+                || (int)($_SERVER['SERVER_PORT'] ?? 0) === 443;
+            $scheme = $isHttps ? 'https' : 'http';
+
+            // Work out the sub-path the app lives in (e.g. "/giftdekedekho" on local
+            // XAMPP, "" when deployed at the domain root on the VPS) by comparing the
+            // app's folder to the web server's document root. Filesystem-based so it
+            // is correct from every entry point (index.php, api/*.php, sitemap.php).
+            $basePath = '';
+            $docRoot = str_replace('\\', '/', rtrim((string)($_SERVER['DOCUMENT_ROOT'] ?? ''), '/'));
+            $appRoot = str_replace('\\', '/', dirname(__DIR__)); // config/ -> app root
+            if ($docRoot !== '' && str_starts_with($appRoot, $docRoot)) {
+                $basePath = rtrim(substr($appRoot, strlen($docRoot)), '/');
+            }
+            return $scheme . '://' . $_SERVER['HTTP_HOST'] . $basePath;
+        }
+        return 'http://localhost/giftdekedekho';
+    }
+}
+define('SITE_URL', gdd_detect_base_url());
 define('CURRENCY_SYMBOL', '₹');
 define('CURRENCY_CODE', 'INR');
 
