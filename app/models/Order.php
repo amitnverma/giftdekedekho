@@ -161,10 +161,10 @@ class Order extends BaseModel
             'weekly' => "SELECT YEARWEEK(created_at) AS period, MIN(DATE(created_at)) AS label, SUM(total) AS revenue
                          FROM orders WHERE payment_status = 'paid' AND created_at >= DATE_SUB(NOW(), INTERVAL 12 WEEK)
                          GROUP BY period ORDER BY period ASC",
-            'monthly' => "SELECT DATE_FORMAT(created_at, '%Y-%m') AS period, DATE_FORMAT(created_at, '%b %Y') AS label, SUM(total) AS revenue
+            'monthly' => "SELECT DATE_FORMAT(created_at, '%Y-%m') AS period, MIN(DATE_FORMAT(created_at, '%b %Y')) AS label, SUM(total) AS revenue
                           FROM orders WHERE payment_status = 'paid' AND created_at >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
                           GROUP BY period ORDER BY period ASC",
-            default => "SELECT DATE(created_at) AS period, DATE_FORMAT(created_at, '%d %b') AS label, SUM(total) AS revenue
+            default => "SELECT DATE(created_at) AS period, MIN(DATE_FORMAT(created_at, '%d %b')) AS label, SUM(total) AS revenue
                         FROM orders WHERE payment_status = 'paid' AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
                         GROUP BY period ORDER BY period ASC",
         };
