@@ -78,7 +78,12 @@ class Order extends BaseModel
     {
         [$where, $params] = $this->buildFilters($filters);
         $whereSql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
-        $sql = "SELECT o.*, u.name AS customer_name, u.email AS customer_email
+        $sql = "SELECT o.*, u.name AS customer_name, u.email AS customer_email,
+                    EXISTS (
+                        SELECT 1 FROM order_items oi2
+                        WHERE oi2.order_id = o.id
+                          AND (oi2.customization_json LIKE '%photo_upload%' OR oi2.customization_json LIKE '%text_engraving%')
+                    ) AS has_personalization
                 FROM orders o LEFT JOIN users u ON u.id = o.user_id
                 {$whereSql} ORDER BY o.created_at DESC LIMIT :limit OFFSET :offset";
         $stmt = $this->db->prepare($sql);
@@ -125,6 +130,9 @@ class Order extends BaseModel
         if (!empty($filters['date_to'])) {
             $where[] = 'DATE(o.created_at) <= :date_to';
             $params['date_to'] = $filters['date_to'];
+        }
+        if (!empty($filters['has_personalization'])) {
+            $where[] = "EXISTS (SELECT 1 FROM order_items oi3 WHERE oi3.order_id = o.id AND (oi3.customization_json LIKE '%photo_upload%' OR oi3.customization_json LIKE '%text_engraving%'))";
         }
         return [$where, $params];
     }

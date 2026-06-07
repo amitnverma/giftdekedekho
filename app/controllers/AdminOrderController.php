@@ -13,6 +13,7 @@ class AdminOrderController extends BaseController
             'search' => $this->input('search', ''),
             'date_from' => $this->input('date_from', ''),
             'date_to' => $this->input('date_to', ''),
+            'has_personalization' => $this->input('has_personalization', ''),
         ];
         $page = max(1, (int)$this->input('page', 1));
         $perPage = 20;

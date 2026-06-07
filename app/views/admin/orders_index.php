@@ -14,6 +14,10 @@
     </select>
     <input type="date" name="date_from" value="<?= e($filters['date_from']) ?>">
     <input type="date" name="date_to" value="<?= e($filters['date_to']) ?>">
+    <select name="has_personalization">
+        <option value="">All Orders</option>
+        <option value="1" <?= !empty($filters['has_personalization']) ? 'selected' : '' ?>>Personalization Required</option>
+    </select>
     <button class="admin-btn" type="submit">Filter</button>
 </form>
 
@@ -24,7 +28,12 @@
             <tbody>
             <?php foreach ($orders as $o): ?>
                 <tr>
-                    <td>#<?= (int)$o['id'] ?></td>
+                    <td>
+                        #<?= (int)$o['id'] ?>
+                        <?php if (!empty($o['has_personalization'])): ?>
+                            <span class="admin-badge admin-badge-yellow" title="This order has photo/engraving personalization" style="font-size:10px;margin-left:4px;">Personalization</span>
+                        <?php endif; ?>
+                    </td>
                     <td><?= e($o['customer_name'] ?? $o['customer_email'] ?? 'Guest') ?></td>
                     <td><?= formatPrice($o['total']) ?></td>
                     <td>
@@ -47,7 +56,7 @@
 <?php if ($pagination['totalPages'] > 1): ?>
     <div class="admin-pagination">
         <?php for ($i = 1; $i <= $pagination['totalPages']; $i++): ?>
-            <a href="?page=<?= $i ?>&status=<?= urlencode($filters['status']) ?>&payment_gateway=<?= urlencode($filters['payment_gateway']) ?>&search=<?= urlencode($filters['search']) ?>&date_from=<?= urlencode($filters['date_from']) ?>&date_to=<?= urlencode($filters['date_to']) ?>"
+            <a href="?page=<?= $i ?>&status=<?= urlencode($filters['status']) ?>&payment_gateway=<?= urlencode($filters['payment_gateway']) ?>&search=<?= urlencode($filters['search']) ?>&date_from=<?= urlencode($filters['date_from']) ?>&date_to=<?= urlencode($filters['date_to']) ?>&has_personalization=<?= urlencode($filters['has_personalization'] ?? '') ?>"
                class="<?= $i === $pagination['currentPage'] ? 'active' : '' ?>"><?= $i ?></a>
         <?php endfor; ?>
     </div>
