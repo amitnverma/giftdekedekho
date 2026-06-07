@@ -42,7 +42,7 @@ class Category extends BaseModel
 
     public function withProductCount(): array
     {
-        $sql = "SELECT c.*, (SELECT COUNT(*) FROM products p WHERE p.category_id = c.id) AS product_count
+        $sql = "SELECT c.*, (SELECT COUNT(*) FROM product_categories pc WHERE pc.category_id = c.id) AS product_count
                 FROM categories c ORDER BY c.sort_order, c.name";
         return $this->db->query($sql)->fetchAll();
     }

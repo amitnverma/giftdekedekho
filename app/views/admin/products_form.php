@@ -12,14 +12,18 @@
                 <input type="text" name="name" required value="<?= e($product['name'] ?? old('name')) ?>">
             </label>
 
-            <label>Category
-                <select name="category_id" required>
-                    <option value="">— Select Category —</option>
-                    <?php foreach ($categories as $cat): ?>
-                        <option value="<?= (int)$cat['id'] ?>" <?= isset($product['category_id']) && (int)$product['category_id'] === (int)$cat['id'] ? 'selected' : '' ?>><?= e($cat['name']) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </label>
+            <label>Categories <span class="admin-label-hint">Check all that apply — the first checked is the primary</span></label>
+            <div class="admin-checkbox-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px 12px;margin-bottom:14px;">
+                <?php foreach ($categories as $cat):
+                    $checked = in_array((int)$cat['id'], $selectedCategoryIds ?? [], true);
+                ?>
+                    <label class="admin-checkbox" style="margin:0;">
+                        <input type="checkbox" name="category_ids[]" value="<?= (int)$cat['id'] ?>" <?= $checked ? 'checked' : '' ?>>
+                        <?= e($cat['name']) ?>
+                    </label>
+                <?php endforeach; ?>
+            </div>
+            <p id="catValidationMsg" style="color:#c00;font-size:13px;display:none;margin:-8px 0 10px;">Please select at least one category.</p>
 
             <label>Short Description
                 <textarea name="short_description" rows="2"><?= e($product['short_description'] ?? '') ?></textarea>
@@ -175,9 +179,15 @@
         if (hidden.value) quill.root.innerHTML = hidden.value;
         quill.on('text-change', function () { hidden.value = quill.root.innerHTML; });
         var form = el.closest('form');
-        form.addEventListener('submit', function () {
+        form.addEventListener('submit', function (e) {
             hidden.value = quill.root.innerHTML;
             hidden.name = 'description';
+            var checked = form.querySelectorAll('input[name="category_ids[]"]:checked');
+            if (checked.length === 0) {
+                e.preventDefault();
+                document.getElementById('catValidationMsg').style.display = 'block';
+                form.querySelector('input[name="category_ids[]"]').closest('.admin-checkbox-grid').scrollIntoView({behavior:'smooth', block:'center'});
+            }
         });
     }
 })();

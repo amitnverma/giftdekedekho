@@ -62,7 +62,6 @@ class AdminCategoryController extends BaseController
     private function save(Category $categoryModel, ?int $id, ?array $existing = null): void
     {
         $name = trim((string)$this->input('name'));
-        $description = trim((string)$this->input('description', ''));
         $parentId = $this->input('parent_id') ?: null;
         $sortOrder = (int)$this->input('sort_order', 0);
         $isActive = $this->input('is_active') ? 1 : 0;
@@ -73,7 +72,7 @@ class AdminCategoryController extends BaseController
         }
 
         $slug = slugify($name);
-        $imagePath = $existing['image_path'] ?? null;
+        $imagePath = $existing['image'] ?? null;
 
         if (!empty($_FILES['image']['name'])) {
             $uploaded = $this->handleImageUpload($_FILES['image']);
@@ -83,9 +82,8 @@ class AdminCategoryController extends BaseController
         $data = [
             'name' => $name,
             'slug' => $slug,
-            'description' => $description,
             'parent_id' => $parentId,
-            'image_path' => $imagePath,
+            'image' => $imagePath,
             'sort_order' => $sortOrder,
             'is_active' => $isActive,
         ];
@@ -120,6 +118,6 @@ class AdminCategoryController extends BaseController
 
         if (!move_uploaded_file($file['tmp_name'], $destination)) return null;
 
-        return 'categories/' . $filename;
+        return 'public/uploads/categories/' . $filename;
     }
 }

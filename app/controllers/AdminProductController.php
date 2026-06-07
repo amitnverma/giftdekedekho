@@ -46,6 +46,7 @@ class AdminProductController extends BaseController
             'images' => [],
             'options' => [],
             'categories' => $categoryModel->allActive(),
+            'selectedCategoryIds' => [],
         ]);
     }
 
@@ -70,6 +71,7 @@ class AdminProductController extends BaseController
             'images' => $productModel->images($id),
             'options' => $productModel->customizationOptions($id),
             'categories' => $categoryModel->allActive(),
+            'selectedCategoryIds' => $productModel->categoryIds($id),
         ]);
     }
 
@@ -133,8 +135,15 @@ class AdminProductController extends BaseController
             redirect($id ? "/admin/products/{$id}/edit" : '/admin/products/create');
         }
 
+        $categoryIds = array_values(array_filter(array_map('intval', (array)($_POST['category_ids'] ?? []))));
+        if (empty($categoryIds)) {
+            flash('error', 'Please select at least one category.');
+            redirect($id ? "/admin/products/{$id}/edit" : '/admin/products/create');
+        }
+        $primaryCategoryId = $categoryIds[0];
+
         $data = [
-            'category_id' => (int)$this->input('category_id'),
+            'category_id' => $primaryCategoryId,
             'name' => $name,
             'slug' => slugify($name),
             'short_description' => trim((string)$this->input('short_description', '')),
@@ -156,6 +165,8 @@ class AdminProductController extends BaseController
         } else {
             $productId = $productModel->create($data);
         }
+
+        $productModel->syncCategories($productId, $categoryIds);
 
         // Image uploads (multiple)
         if (!empty($_FILES['images']['name'][0])) {

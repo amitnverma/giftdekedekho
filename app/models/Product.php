@@ -44,10 +44,13 @@ class Product extends BaseModel
     {
         $stmt = $this->db->prepare(
             'SELECT p.*, (SELECT image_path FROM product_images WHERE product_id = p.id ORDER BY is_primary DESC, sort_order ASC LIMIT 1) AS thumbnail
-             FROM products p WHERE p.category_id = ? AND p.id != ? AND p.is_active = 1 ORDER BY RAND() LIMIT ?'
+             FROM products p
+             WHERE p.id != ? AND p.is_active = 1
+             AND EXISTS (SELECT 1 FROM product_categories pc WHERE pc.product_id = p.id AND pc.category_id = ?)
+             ORDER BY RAND() LIMIT ?'
         );
-        $stmt->bindValue(1, $categoryId, PDO::PARAM_INT);
-        $stmt->bindValue(2, $excludeId, PDO::PARAM_INT);
+        $stmt->bindValue(1, $excludeId, PDO::PARAM_INT);
+        $stmt->bindValue(2, $categoryId, PDO::PARAM_INT);
         $stmt->bindValue(3, $limit, PDO::PARAM_INT);
         $stmt->execute();
         return $stmt->fetchAll();
@@ -62,8 +65,7 @@ class Product extends BaseModel
         $params = [];
 
         if ($categoryId !== null) {
-            // include sub-categories
-            $where[] = '(p.category_id = :cat OR p.category_id IN (SELECT id FROM categories WHERE parent_id = :cat_parent))';
+            $where[] = 'EXISTS (SELECT 1 FROM product_categories pc JOIN categories c2 ON c2.id = pc.category_id WHERE pc.product_id = p.id AND (pc.category_id = :cat OR c2.parent_id = :cat_parent))';
             $params['cat'] = $categoryId;
             $params['cat_parent'] = $categoryId;
         }
@@ -115,7 +117,7 @@ class Product extends BaseModel
         $where = ['p.is_active = 1'];
         $params = [];
         if ($categoryId !== null) {
-            $where[] = '(p.category_id = :cat OR p.category_id IN (SELECT id FROM categories WHERE parent_id = :cat_parent))';
+            $where[] = 'EXISTS (SELECT 1 FROM product_categories pc JOIN categories c2 ON c2.id = pc.category_id WHERE pc.product_id = p.id AND (pc.category_id = :cat OR c2.parent_id = :cat_parent))';
             $params['cat'] = $categoryId;
             $params['cat_parent'] = $categoryId;
         }
@@ -188,7 +190,7 @@ class Product extends BaseModel
             $params['search_sku'] = '%' . $filters['search'] . '%';
         }
         if (!empty($filters['category_id'])) {
-            $where[] = 'p.category_id = :category_id';
+            $where[] = 'EXISTS (SELECT 1 FROM product_categories pc WHERE pc.product_id = p.id AND pc.category_id = :category_id)';
             $params['category_id'] = $filters['category_id'];
         }
         if (isset($filters['status']) && $filters['status'] !== '') {
@@ -232,6 +234,22 @@ class Product extends BaseModel
     {
         $stmt = $this->db->prepare('DELETE FROM product_images WHERE id = ?');
         return $stmt->execute([$imageId]);
+    }
+
+    public function categoryIds(int $productId): array
+    {
+        $stmt = $this->db->prepare('SELECT category_id FROM product_categories WHERE product_id = ?');
+        $stmt->execute([$productId]);
+        return array_column($stmt->fetchAll(), 'category_id');
+    }
+
+    public function syncCategories(int $productId, array $categoryIds): void
+    {
+        $this->db->prepare('DELETE FROM product_categories WHERE product_id = ?')->execute([$productId]);
+        foreach (array_unique(array_filter(array_map('intval', $categoryIds))) as $catId) {
+            $this->db->prepare('INSERT IGNORE INTO product_categories (product_id, category_id) VALUES (?, ?)')
+                ->execute([$productId, $catId]);
+        }
     }
 
     public function replaceCustomizationOptions(int $productId, array $options): void

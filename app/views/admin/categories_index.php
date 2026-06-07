@@ -13,8 +13,8 @@
             <?php foreach ($categories as $cat): ?>
                 <tr>
                     <td>
-                        <?php if (!empty($cat['image_path'])): ?>
-                            <img class="admin-thumb" src="<?= asset('uploads/' . $cat['image_path']) ?>" alt="">
+                        <?php if (!empty($cat['image'])): ?>
+                            <img class="admin-thumb" src="<?= asset($cat['image']) ?>" alt="">
                         <?php else: ?>
                             <span class="admin-muted">—</span>
                         <?php endif; ?>

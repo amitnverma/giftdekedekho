@@ -29,8 +29,8 @@
             <input type="file" name="image" accept="image/*" data-image-preview="#catImgPreview">
             <span class="admin-label-hint">JPEG, PNG, WebP or GIF.</span>
         </label>
-        <?php if (!empty($category['image_path'])): ?>
-            <img id="catImgPreview" src="<?= asset('uploads/' . $category['image_path']) ?>" style="width:90px;height:90px;object-fit:cover;border-radius:8px;margin-bottom:14px;">
+        <?php if (!empty($category['image'])): ?>
+            <img id="catImgPreview" src="<?= asset($category['image']) ?>" style="width:90px;height:90px;object-fit:cover;border-radius:8px;margin-bottom:14px;">
         <?php else: ?>
             <img id="catImgPreview" style="width:90px;height:90px;object-fit:cover;border-radius:8px;margin-bottom:14px;display:none;">
         <?php endif; ?>
