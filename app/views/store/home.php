@@ -173,6 +173,7 @@ $_csNameColor = $catSection['name_color']   ?? '#ffffff';
 $_csNameSize  = $catSection['name_size']    ?? '15';
 $_csNameWeight= $catSection['name_weight']  ?? '700';
 $_csOverlay   = $catSection['overlay_color']?? '#000000';
+$_csCardStyle = $catSection['card_style']    ?? 'boxed';
 $_csOrder     = $catSection['category_order']?? [];
 // Re-order $categories to match admin-defined order
 $_catMap = [];
@@ -195,14 +196,23 @@ $_csJustify = ['left' => 'flex-start', 'center' => 'center', 'right' => 'flex-en
 <section class="section" style="<?= sectionBgStyle($_csStyle) ?>">
   <div class="container">
     <?php renderSectionHeading($_csStyle, $_csKicker, $_csHeading, $_csSubtext); ?>
-    <div class="gdd-cat-grid reveal-stagger reveal">
+    <div class="gdd-cat-grid<?= $_csCardStyle === 'plain' ? ' gdd-cat-grid--plain' : '' ?> reveal-stagger reveal">
       <?php foreach ($_orderedCats as $cat): ?>
+        <?php if ($_csCardStyle === 'plain'): ?>
+        <a class="gdd-cat-card gdd-cat-card--plain" href="<?= url('/category/' . $cat['slug']) ?>">
+          <div class="cat-img-wrap">
+            <img src="<?= e(asset($cat['image'] ?: '/images/GDKD logo.png')) ?>" alt="<?= e($cat['name']) ?>" loading="lazy">
+          </div>
+          <span class="cat-label" style="color:<?= e($_csNameColor !== '#ffffff' ? $_csNameColor : '#1d1d1f') ?>;font-size:<?= (int)$_csNameSize ?>px;font-weight:<?= e($_csNameWeight) ?>"><?= e($cat['name']) ?></span>
+        </a>
+        <?php else: ?>
         <a class="gdd-cat-card" href="<?= url('/category/' . $cat['slug']) ?>">
           <img src="<?= e(asset($cat['image'] ?: '/images/GDKD logo.png')) ?>" alt="<?= e($cat['name']) ?>" loading="lazy">
           <div class="overlay" style="justify-content:<?= e($_csJustify) ?><?= $_csOverlayCss ? ';background:' . e($_csOverlayCss) : '' ?>">
             <span style="color:<?= e($_csNameColor) ?>;font-size:<?= (int)$_csNameSize ?>px;font-weight:<?= e($_csNameWeight) ?>"><?= e($cat['name']) ?></span>
           </div>
         </a>
+        <?php endif; ?>
       <?php endforeach; ?>
     </div>
   </div>

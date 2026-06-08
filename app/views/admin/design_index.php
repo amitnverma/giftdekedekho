@@ -749,6 +749,20 @@ foreach (($categories ?? []) as $cat) {
                 designAppearancePanel($catStyle);
                 ?>
 
+                <h4 class="gdd-section-subtitle">Category Card Style</h4>
+                <div class="admin-form-row" style="align-items:stretch">
+                    <label>Card Display Mode <span class="admin-label-hint">Controls whether category cards show a box or just the image</span>
+                        <select name="card_style">
+                            <option value="boxed"  <?= ($catSection['card_style'] ?? 'boxed') === 'boxed'  ? 'selected' : '' ?>>Boxed card (image fills card with overlay label)</option>
+                            <option value="plain"  <?= ($catSection['card_style'] ?? 'boxed') === 'plain'  ? 'selected' : '' ?>>Image only (circular image, label below — no box)</option>
+                        </select>
+                    </label>
+                </div>
+                <p style="font-size:12px;color:#888;margin-top:-8px;margin-bottom:16px">
+                    <strong>Image only:</strong> label text appears below the image — long category names wrap neatly and never overlap the image.
+                    <strong>Boxed:</strong> label sits on a gradient overlay at the bottom of the card (current default).
+                </p>
+
                 <h4 class="gdd-section-subtitle">Category Card Labels</h4>
                 <div class="admin-form-row" style="align-items:stretch">
                     <?php designAlignSelect('name_align', 'Label Text Alignment', $catSection['name_align'] ?? 'left', 'left'); ?>

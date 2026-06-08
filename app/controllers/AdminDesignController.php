@@ -303,6 +303,8 @@ class AdminDesignController extends BaseController
                     'subtext'        => trim((string)$this->input('subtext',        'Find the perfect personalised gift for every occasion')),
                     'kicker'         => trim((string)$this->input('kicker',         'Browse')),
                     'style'          => $style,
+                    // Card display mode
+                    'card_style'     => in_array($this->input('card_style', 'boxed'), ['boxed','plain'], true) ? $this->input('card_style', 'boxed') : 'boxed',
                     // Card-label specific styling
                     'name_align'     => in_array($this->input('name_align', 'left'), ['left','center','right'], true) ? $this->input('name_align', 'left') : 'left',
                     'name_color'     => trim((string)$this->input('name_color',  '#ffffff')),
@@ -522,6 +524,7 @@ class AdminDesignController extends BaseController
                 'subtext'        => 'Find the perfect personalised gift for every occasion',
                 'kicker'         => 'Browse',
                 'style'          => array_merge(sectionStyleDefaults(), ['bg_color' => '#f8f9fb']),
+                'card_style'     => 'boxed',
                 'name_align'     => 'left',
                 'name_color'     => '#ffffff',
                 'name_size'      => '15',
