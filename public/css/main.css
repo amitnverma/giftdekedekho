@@ -437,6 +437,7 @@ table.data-table th, table.data-table td { padding: 12px 14px; border-bottom: 1p
 .gdd-topbar-link + .gdd-topbar-link { position:relative; }
 .gdd-topbar-link + .gdd-topbar-link::before { content:""; position:absolute; left:-3px; top:50%; transform:translateY(-50%); width:1px; height:14px; background:rgba(255,255,255,.18); }
 .gdd-topbar-link-img { width:18px; height:18px; border-radius:50%; object-fit:cover; }
+.gdd-topbar-link-emoji { font-size:14px; line-height:1; }
 @media (max-width: 760px){ .gdd-topbar-links{ display:none; } }
 
 .gdd-header { position:sticky; top:0; z-index:200; background:rgba(255,255,255,.92); backdrop-filter:saturate(180%) blur(14px); -webkit-backdrop-filter:saturate(180%) blur(14px); border-bottom:1px solid var(--color-border); }
@@ -535,8 +536,44 @@ table.data-table th, table.data-table td { padding: 12px 14px; border-bottom: 1p
 .gdd-account-btn span { font-size:13.5px; font-weight:700; }
 .gdd-burger { display:none; width:44px; height:44px; border-radius:12px; border:1px solid var(--color-border); background:#fff; font-size:20px; cursor:pointer; align-items:center; justify-content:center; }
 
-.gdd-catnav { border-top:1px solid var(--color-border); background:#fff; }
-.gdd-catnav-inner { display:flex; flex-wrap:nowrap; justify-content:flex-start; gap:4px; padding:10px 20px; margin-left:0; margin-right:0; max-width:none; }
+/* ── Category Nav Bar ─────────────────────────────────────── */
+.gdd-catnav {
+  border-top:1px solid var(--color-border);
+  background:#fff;
+  position:relative; /* anchor for arrows + fades */
+}
+/* Edge fades — only shown (via JS toggles) when there's more to scroll */
+.gdd-catnav::before,
+.gdd-catnav::after {
+  content:''; position:absolute; top:0; bottom:0; width:56px;
+  pointer-events:none; z-index:2; opacity:0; transition:opacity .2s ease;
+}
+.gdd-catnav::before { left:0;  background:linear-gradient(to right, #fff, transparent); }
+.gdd-catnav::after  { right:0; background:linear-gradient(to left,  #fff, transparent); }
+.gdd-catnav.has-left-fade::before  { opacity:1; }
+.gdd-catnav.has-right-fade::after  { opacity:1; }
+.gdd-catnav-inner {
+  display:flex; flex-wrap:nowrap; align-items:center; gap:2px;
+  padding:8px 16px;
+  overflow-x:auto;
+  -webkit-overflow-scrolling:touch;
+  scroll-behavior:smooth;
+  scrollbar-width:none;            /* arrows are the affordance; hide native bar */
+}
+.gdd-catnav-inner::-webkit-scrollbar { display:none; }
+/* Scroll arrow buttons */
+.gdd-catnav-arrow {
+  position:absolute; top:0; bottom:0; z-index:3;
+  width:44px; border:none; cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  color:var(--color-text); background:#fff;
+  box-shadow:0 0 18px 10px #fff;   /* blend into the fade */
+}
+.gdd-catnav-arrow[hidden] { display:none; }
+.gdd-catnav-arrow-left  { left:0;  }
+.gdd-catnav-arrow-right { right:0; }
+.gdd-catnav-arrow svg { display:block; }
+.gdd-catnav-arrow:hover { color:var(--color-primary); }
 .gdd-catpill {
   flex:none; display:inline-flex; align-items:center; gap:8px; padding:6px 14px 6px 6px; border-radius:50px;
   font-size:13px; font-weight:700; color:var(--color-text); white-space:nowrap; border:1px solid transparent;

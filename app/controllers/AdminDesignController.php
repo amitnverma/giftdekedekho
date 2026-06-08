@@ -7,10 +7,15 @@ class AdminDesignController extends BaseController
         $this->requireAdmin();
         $settings = new Settings();
 
+        $categories = Database::getInstance()
+            ->query('SELECT slug, name, image FROM categories WHERE is_active = 1 ORDER BY name')
+            ->fetchAll();
+
         $this->viewAdmin('admin/design_index', [
-            'metaTitle' => 'Design Editor',
-            'settings' => $settings->getAll(),
-            'sections' => $this->loadSections(),
+            'metaTitle'  => 'Design Editor',
+            'settings'   => $settings->getAll(),
+            'sections'   => $this->loadSections(),
+            'categories' => $categories,
         ]);
     }
 
@@ -125,26 +130,32 @@ class AdminDesignController extends BaseController
             case 'topbar_buttons':
                 $items = [];
                 $labels = (array)($_POST['tb_label'] ?? []);
-                $urls = (array)($_POST['tb_url'] ?? []);
+                $urls   = (array)($_POST['tb_url']   ?? []);
+                $emojis = (array)($_POST['tb_emoji'] ?? []);
                 $existingImages = (array)($_POST['tb_existing_image'] ?? []);
                 $files = $_FILES['tb_image'] ?? null;
                 foreach ($labels as $i => $label) {
                     $label = trim((string)$label);
-                    $url = trim((string)($urls[$i] ?? ''));
+                    $url   = trim((string)($urls[$i] ?? ''));
                     if ($label === '' && $url === '') continue;
                     $image = trim((string)($existingImages[$i] ?? ''));
                     if ($files && isset($files['name'][$i]) && $files['error'][$i] === UPLOAD_ERR_OK) {
                         $singleFile = [
-                            'name' => $files['name'][$i],
-                            'type' => $files['type'][$i],
+                            'name'     => $files['name'][$i],
+                            'type'     => $files['type'][$i],
                             'tmp_name' => $files['tmp_name'][$i],
-                            'error' => $files['error'][$i],
-                            'size' => $files['size'][$i],
+                            'error'    => $files['error'][$i],
+                            'size'     => $files['size'][$i],
                         ];
                         $uploaded = $this->handleImageUpload($singleFile, 'topbar', 'btn');
                         if ($uploaded) $image = $uploaded;
                     }
-                    $items[] = ['label' => $label, 'url' => $url ?: '#', 'image' => $image];
+                    $items[] = [
+                        'label' => $label,
+                        'url'   => $url ?: '#',
+                        'emoji' => trim((string)($emojis[$i] ?? '')),
+                        'image' => $image,
+                    ];
                 }
                 $this->saveSection('topbar_buttons', [
                     'is_active' => $this->input('is_active') ? true : false,
@@ -219,6 +230,32 @@ class AdminDesignController extends BaseController
                 ]);
                 break;
 
+            case 'nav_category_bar':
+                $slugs   = (array)($_POST['nav_slug']    ?? []);
+                $labels  = (array)($_POST['nav_label']   ?? []);
+                $emojis  = (array)($_POST['nav_emoji']   ?? []);
+                $visible = (array)($_POST['nav_visible'] ?? []);
+                $items = [];
+                foreach ($slugs as $i => $slug) {
+                    $slug = trim((string)$slug);
+                    if ($slug === '') continue;
+                    $items[] = [
+                        'slug'    => $slug,
+                        'label'   => trim((string)($labels[$i] ?? '')),
+                        'emoji'   => trim((string)($emojis[$i] ?? '')),
+                        'visible' => isset($visible[$i]),
+                    ];
+                }
+                $maxItems = (int)$this->input('max_items', 0);
+                $this->saveSection('nav_category_bar', [
+                    'is_active'      => $this->input('is_active') ? true : false,
+                    'show_home'      => $this->input('show_home') ? true : false,
+                    'show_all_gifts' => $this->input('show_all_gifts') ? true : false,
+                    'max_items'      => $maxItems > 0 ? $maxItems : 0,
+                    'items'          => $items,
+                ]);
+                break;
+
             case 'about_us':
                 $settings->set('about_us_text', (string)$this->input('about_us_text', ''));
                 break;
@@ -252,7 +289,88 @@ class AdminDesignController extends BaseController
         foreach ($rows as $row) {
             $out[$row['section_key']] = json_decode($row['content_json'], true) ?: [];
         }
+        // Inject defaults for sections not yet saved to DB so admin always has something visible
+        foreach ($this->getSectionDefaults() as $key => $defaults) {
+            if (!isset($out[$key])) {
+                $out[$key] = $defaults;
+            }
+        }
         return $out;
+    }
+
+    private function getSectionDefaults(): array
+    {
+        return [
+            'hero_banner' => [
+                'headline'    => '',
+                'subheadline' => 'Photo frames, engraved keepsakes, custom mugs & video-message gifts — designed by you, crafted by us, delivered with love anywhere in India.',
+                'cta_text'    => 'Start Customising',
+                'cta_url'     => '/category/all',
+                'is_active'   => true,
+            ],
+            'promo_strip' => [
+                'text'      => '✨ Perfect Gifting Made Simple',
+                'is_active' => true,
+            ],
+            'featured_products_section' => [
+                'heading'   => 'Featured Gifts',
+                'is_active' => true,
+            ],
+            'signature_feature' => [
+                'kicker'      => 'Signature Feature',
+                'heading'     => 'Turn any gift into a Video & Photo Memory',
+                'description' => 'Attach a scannable QR code to your gift — recipients scan it with any phone camera to unlock a private video or photo message from you. No app required.',
+                'cta_text'    => 'Explore Video & Photo Gifts →',
+                'cta_url'     => '/category/video-photo-gifts',
+                'steps'       => [
+                    'Upload your video/photo message while placing the order',
+                    'We generate a unique, secure QR code for your gift',
+                    'Recipient scans the QR printed on the packaging',
+                    'Your personal message plays instantly — straight from the heart',
+                ],
+                'is_active'   => true,
+            ],
+            'trust_badges' => [
+                'is_active' => true,
+                'items'     => [
+                    ['icon' => '🔒', 'title' => 'Secure Payments',   'desc' => 'Razorpay, UPI, Cards & COD — pay your way'],
+                    ['icon' => '🚚', 'title' => 'Pan-India Delivery', 'desc' => 'Fast dispatch, real-time tracking'],
+                    ['icon' => '🎨', 'title' => 'Fully Personalised', 'desc' => 'Every item made just for you'],
+                    ['icon' => '💬', 'title' => '24/7 Support',       'desc' => 'Friendly help whenever you need it'],
+                ],
+            ],
+            'testimonials_section' => [
+                'heading'   => 'What Our Customers Say',
+                'is_active' => true,
+                'items'     => [
+                    ['name' => 'Priya Sharma', 'rating' => 5, 'text' => 'The photo frame I customised for my parents\' anniversary was stunning — exactly like the preview! Delivery was quick too.'],
+                    ['name' => 'Rahul Mehta',  'rating' => 5, 'text' => 'Sent a video-message keychain to my best friend abroad. He scanned the QR and got emotional instantly. Magical experience!'],
+                    ['name' => 'Ananya Iyer',  'rating' => 4, 'text' => 'Beautiful engraving quality on the wooden mug. Packaging was premium and the order tracking kept me updated throughout.'],
+                ],
+            ],
+            'topbar_buttons' => [
+                'is_active' => true,
+                'items'     => [
+                    ['label' => 'Video & Photo QR Gifts', 'url' => '/category/video-photo-gifts', 'emoji' => '🎬', 'image' => ''],
+                    ['label' => 'Track Order',            'url' => '/account/orders',             'emoji' => '📦', 'image' => ''],
+                    ['label' => 'Help & Support',         'url' => '/contact',                    'emoji' => '💬', 'image' => ''],
+                ],
+            ],
+            'instagram_gallery' => [
+                'kicker'    => '#GiftDekeDekhoMoments',
+                'heading'   => 'Real gifts, real smiles',
+                'subtext'   => 'Tag @giftdekedekho on Instagram for a chance to be featured here',
+                'is_active' => true,
+                'items'     => [],
+            ],
+            'nav_category_bar' => [
+                'is_active'      => true,
+                'show_home'      => true,
+                'show_all_gifts' => true,
+                'max_items'      => 8,
+                'items'          => [],
+            ],
+        ];
     }
 
     private function handleImageUpload(array $file, string $folder, string $prefix): ?string

@@ -76,15 +76,25 @@ function gddNavActive(string $href, string $current): string {
 }
 ?>
 <header class="gdd-header-wrap">
-  <?php if ($__promoActive): ?>
+  <?php
+    $__topbarButtonsActive = !empty($__topbarSection['is_active']);
+    $__showTopbar = $__promoActive || $__topbarButtonsActive;
+  ?>
+  <?php if ($__showTopbar): ?>
   <div class="gdd-topbar">
     <div class="container gdd-topbar-inner">
+      <?php if ($__promoActive): ?>
       <span class="gdd-topbar-msg">🎁 <?= e($__promoText) ?></span>
+      <?php else: ?>
+      <span class="gdd-topbar-msg"></span>
+      <?php endif; ?>
       <nav class="gdd-topbar-links">
         <?php foreach ($__topbarButtons as $__tbi => $__tb): $__lbl = trim((string)($__tb['label'] ?? '')); if ($__lbl === '') continue; ?>
           <a href="<?= e($__tb['url'] ?? '#') ?>" class="gdd-topbar-link">
             <?php if (!empty($__tb['image'])): ?>
               <img src="<?= e(asset($__tb['image'])) ?>" alt="" class="gdd-topbar-link-img">
+            <?php elseif (!empty($__tb['emoji'])): ?>
+              <span class="gdd-topbar-link-emoji"><?= e($__tb['emoji']) ?></span>
             <?php endif; ?>
             <span><?= e($__lbl) ?></span>
           </a>
@@ -154,36 +164,136 @@ function gddNavActive(string $href, string $current): string {
       </div>
     </div>
 
-    <nav class="gdd-catnav">
-      <div class="container gdd-catnav-inner">
-        <a href="<?= url('/') ?>" class="gdd-catpill <?= ($__currentPath === '/' || $__currentPath === '') ? 'active' : '' ?>">
-          <span class="gdd-catpill-icon emoji">🏠</span>
-          <span class="gdd-catpill-label">Home</span>
-        </a>
-        <a href="<?= url('/category/all') ?>" class="gdd-catpill">
-          <span class="gdd-catpill-icon emoji">🎁</span>
-          <span class="gdd-catpill-label">All Gifts</span>
-        </a>
-        <?php foreach ($__topNavCats as $__cat):
-          $__href = url('/category/' . $__cat['slug']);
-          $__isFeature = $__cat['slug'] === 'video-photo-gifts';
-          $__catImg = $__cat['image'] ?? '';
-        ?>
-          <a href="<?= e($__href) ?>" class="gdd-catpill<?= $__isFeature ? ' featured' : '' ?><?= gddNavActive($__href, (string)$__currentPath) ?>">
-            <span class="gdd-catpill-icon">
-              <?php if ($__catImg): ?>
-                <img src="<?= e(asset($__catImg)) ?>" alt="<?= e($__cat['name']) ?>" loading="lazy">
-              <?php else: ?>
-                <span class="emoji"><?= $__isFeature ? '🎬' : '🎀' ?></span>
-              <?php endif; ?>
-            </span>
-            <span class="gdd-catpill-label"><?= e($__cat['name']) ?></span>
-          </a>
-        <?php endforeach; ?>
-      </div>
-    </nav>
-  </div>
+  </div><!-- /.gdd-header -->
 </header>
+
+<?php
+// Category nav bar — outside the sticky header so overflow-x scroll works correctly
+$__navBarRow = Database::getInstance()->prepare('SELECT content_json FROM site_sections WHERE section_key = ? LIMIT 1');
+$__navBarRow->execute(['nav_category_bar']);
+$__navBarSection = ($__r = $__navBarRow->fetch()) ? (json_decode($__r['content_json'], true) ?: []) : [];
+$__navBarActive  = !isset($__navBarSection['is_active'])      || !empty($__navBarSection['is_active']);
+$__navShowHome   = !isset($__navBarSection['show_home'])      || !empty($__navBarSection['show_home']);
+$__navShowAll    = !isset($__navBarSection['show_all_gifts']) || !empty($__navBarSection['show_all_gifts']);
+$__navMaxItems   = (int)($__navBarSection['max_items'] ?? 0);
+$__navBarItems   = $__navBarSection['items'] ?? [];
+
+// If not configured yet, fall back to the top N active categories
+if (empty($__navBarItems)) {
+    $__navBarItems = array_map(fn($c) => [
+        'slug'    => $c['slug'],
+        'label'   => $c['name'],
+        'emoji'   => '',
+        'visible' => true,
+    ], $__topNavCats);
+}
+
+// Apply max_items limit (only count visible items)
+if ($__navMaxItems > 0) {
+    $__limited = []; $__visCount = 0;
+    foreach ($__navBarItems as $__nbi) {
+        if (!empty($__nbi['visible'])) {
+            if ($__visCount >= $__navMaxItems) { $__nbi['visible'] = false; }
+            else $__visCount++;
+        }
+        $__limited[] = $__nbi;
+    }
+    $__navBarItems = $__limited;
+}
+
+// Build category lookup
+$__catLookup = [];
+foreach ($__navCats as $__nc) { $__catLookup[$__nc['slug']] = $__nc; }
+?>
+<?php if ($__navBarActive): ?>
+<nav class="gdd-catnav">
+  <button type="button" class="gdd-catnav-arrow gdd-catnav-arrow-left" aria-label="Scroll left" hidden>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+  <div class="gdd-catnav-inner">
+    <?php if ($__navShowHome): ?>
+    <a href="<?= url('/') ?>" class="gdd-catpill <?= ($__currentPath === '/' || $__currentPath === '') ? 'active' : '' ?>">
+      <span class="gdd-catpill-icon emoji">🏠</span>
+      <span class="gdd-catpill-label">Home</span>
+    </a>
+    <?php endif; ?>
+    <?php if ($__navShowAll): ?>
+    <a href="<?= url('/category/all') ?>" class="gdd-catpill">
+      <span class="gdd-catpill-icon emoji">🎁</span>
+      <span class="gdd-catpill-label">All Gifts</span>
+    </a>
+    <?php endif; ?>
+    <?php foreach ($__navBarItems as $__nbi):
+      if (empty($__nbi['visible'])) continue;
+      $__nbiSlug  = $__nbi['slug'] ?? '';
+      $__nbiLabel = $__nbi['label'] ?: ($__catLookup[$__nbiSlug]['name'] ?? $__nbiSlug);
+      $__nbiEmoji = $__nbi['emoji'] ?? '';
+      $__nbiCat   = $__catLookup[$__nbiSlug] ?? null;
+      $__nbiImg   = $__nbiCat['image'] ?? '';
+      $__nbiHref  = url('/category/' . $__nbiSlug);
+      $__isFeat   = $__nbiSlug === 'video-photo-gifts';
+    ?>
+      <a href="<?= e($__nbiHref) ?>" class="gdd-catpill<?= $__isFeat ? ' featured' : '' ?><?= gddNavActive($__nbiHref, (string)$__currentPath) ?>">
+        <span class="gdd-catpill-icon">
+          <?php if ($__nbiImg): ?>
+            <img src="<?= e(asset($__nbiImg)) ?>" alt="<?= e($__nbiLabel) ?>" loading="lazy">
+          <?php else: ?>
+            <span class="emoji"><?= e($__nbiEmoji ?: ($__isFeat ? '🎬' : '🎀')) ?></span>
+          <?php endif; ?>
+        </span>
+        <span class="gdd-catpill-label"><?= e($__nbiLabel) ?></span>
+      </a>
+    <?php endforeach; ?>
+  </div>
+  <button type="button" class="gdd-catnav-arrow gdd-catnav-arrow-right" aria-label="Scroll right" hidden>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+</nav>
+<script>
+(function(){
+  var nav = document.querySelector('.gdd-catnav');
+  if (!nav) return;
+  var el    = nav.querySelector('.gdd-catnav-inner');
+  var left  = nav.querySelector('.gdd-catnav-arrow-left');
+  var right = nav.querySelector('.gdd-catnav-arrow-right');
+  if (!el) return;
+
+  function update() {
+    var maxScroll = el.scrollWidth - el.clientWidth;
+    var x = el.scrollLeft;
+    // Show left arrow once scrolled away from start
+    if (left)  left.hidden  = x <= 1;
+    // Show right arrow while there is more to scroll
+    if (right) right.hidden = x >= maxScroll - 1;
+    // Edge fades
+    nav.classList.toggle('has-left-fade',  x > 1);
+    nav.classList.toggle('has-right-fade', x < maxScroll - 1);
+  }
+
+  function scrollByStep(dir) {
+    el.scrollBy({ left: dir * Math.max(240, el.clientWidth * 0.6), behavior: 'smooth' });
+  }
+
+  if (left)  left.addEventListener('click',  function(){ scrollByStep(-1); });
+  if (right) right.addEventListener('click', function(){ scrollByStep(1); });
+
+  // Mouse-wheel scrolls horizontally on desktop
+  el.addEventListener('wheel', function(e) {
+    if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+      e.preventDefault();
+      el.scrollLeft += e.deltaY;
+    }
+  }, { passive: false });
+
+  el.addEventListener('scroll', update, { passive: true });
+  window.addEventListener('resize', update);
+  // Run after layout settles (images can change widths)
+  update();
+  window.addEventListener('load', update);
+  setTimeout(update, 300);
+})();
+</script>
+<?php endif; ?>
 
 <!-- Mobile slide-in nav -->
 <div class="gdd-mobile-nav" id="gddMobileNav">
