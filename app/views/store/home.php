@@ -20,12 +20,15 @@ $heroRightPhoto = !empty($hero['transform_right_photo']) ? asset($hero['transfor
 <!-- =========================================================
      HERO — Full-bleed split: left text | right before/after reveal
      ========================================================= -->
+<?php if (!isset($hero['is_active']) || !empty($hero['is_active'])): ?>
 <section class="gdd-ht">
 
   <!-- ── Left: text column (self-contained, no outer container needed) ── -->
   <div class="gdd-ht-text">
     <div class="gdd-ht-text-inner">
+      <?php if (!empty($promo['is_active'])): ?>
       <span class="gdd-ht-eyebrow"><?= e($promo['text'] ?? '✨ Perfect Gifting Made Simple') ?></span>
+      <?php endif; ?>
       <?php if ($heroHeadline !== ''): ?>
         <h1><?= e($heroHeadline) ?></h1>
       <?php else: ?>
@@ -82,6 +85,7 @@ $heroRightPhoto = !empty($hero['transform_right_photo']) ? asset($hero['transfor
   </div>
 
 </section>
+<?php endif; ?>
 
 <!-- Scrolling marquee strip -->
 <div class="gdd-marquee" aria-hidden="true">
@@ -156,7 +160,7 @@ $heroRightPhoto = !empty($hero['transform_right_photo']) ? asset($hero['transfor
 <!-- =========================================================
      FEATURED PRODUCTS
      ========================================================= -->
-<?php if (!empty($featured)): ?>
+<?php if (!empty($featured) && (!isset($featuredSection['is_active']) || !empty($featuredSection['is_active']))): ?>
 <section class="section" style="background:var(--color-bg-alt)">
   <div class="container">
     <div class="section-heading reveal">
@@ -243,6 +247,7 @@ $heroRightPhoto = !empty($hero['transform_right_photo']) ? asset($hero['transfor
 <!-- =========================================================
      TESTIMONIALS
      ========================================================= -->
+<?php if (!empty($testimonials['is_active']) || !empty($testimonials['items'])): ?>
 <section class="section">
   <div class="container">
     <div class="section-heading reveal">
@@ -274,6 +279,7 @@ $heroRightPhoto = !empty($hero['transform_right_photo']) ? asset($hero['transfor
     </div>
   </div>
 </section>
+<?php endif; ?>
 
 <?php if (!isset($igGallery['is_active']) || !empty($igGallery['is_active'])): ?>
 <section class="section" style="background:var(--color-bg-alt)">

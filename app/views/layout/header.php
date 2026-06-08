@@ -11,6 +11,13 @@ $__metaTitle = $metaTitle ?? ($__siteName . ' — ' . $__settings->get('site_tag
 $__metaDesc = $metaDescription ?? $__settings->get('site_tagline', 'Shop personalized gifts online in India.');
 $__canonical = url($_SERVER['REQUEST_URI'] ?? '/');
 
+// Promo strip (admin-managed via Design Studio → Promo Strip)
+$__promoRow = Database::getInstance()->prepare('SELECT content_json FROM site_sections WHERE section_key = ? LIMIT 1');
+$__promoRow->execute(['promo_strip']);
+$__promoSection = ($__r = $__promoRow->fetch()) ? (json_decode($__r['content_json'], true) ?: []) : [];
+$__promoActive = !empty($__promoSection['is_active']);
+$__promoText = $__promoSection['text'] ?? $__settings->get('promo_strip_text', 'Free Shipping on Orders Above ₹999');
+
 // Topbar round image buttons (admin-managed via Design Studio → Topbar Buttons; sensible defaults if not configured)
 $__topbarRow = Database::getInstance()->prepare('SELECT content_json FROM site_sections WHERE section_key = ? LIMIT 1');
 $__topbarRow->execute(['topbar_buttons']);
@@ -69,9 +76,10 @@ function gddNavActive(string $href, string $current): string {
 }
 ?>
 <header class="gdd-header-wrap">
+  <?php if ($__promoActive): ?>
   <div class="gdd-topbar">
     <div class="container gdd-topbar-inner">
-      <span class="gdd-topbar-msg">🎁 <?= e($__settings->get('promo_strip_text') ?: 'Free Shipping on Orders Above ₹999') ?></span>
+      <span class="gdd-topbar-msg">🎁 <?= e($__promoText) ?></span>
       <nav class="gdd-topbar-links">
         <?php foreach ($__topbarButtons as $__tbi => $__tb): $__lbl = trim((string)($__tb['label'] ?? '')); if ($__lbl === '') continue; ?>
           <a href="<?= e($__tb['url'] ?? '#') ?>" class="gdd-topbar-link">
@@ -84,6 +92,7 @@ function gddNavActive(string $href, string $current): string {
       </nav>
     </div>
   </div>
+  <?php endif; ?>
 
   <div class="gdd-header">
     <div class="container gdd-header-main">
