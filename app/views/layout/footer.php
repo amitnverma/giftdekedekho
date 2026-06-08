@@ -52,6 +52,6 @@ $__whatsapp = $__settings->get('whatsapp_number', '');
 </a>
 <?php endif; ?>
 
-<script src="<?= asset('public/js/main.js') ?>"></script>
+<script src="<?= asset('public/js/main.js') ?>?v=<?= filemtime(BASE_PATH . '/public/js/main.js') ?>"></script>
 </body>
 </html>

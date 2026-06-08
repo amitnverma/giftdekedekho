@@ -1,4 +1,84 @@
 /* GiftDekeDekho — storefront JS */
+
+/* ---- Header search: typewriter placeholder + category dropdown ---- */
+(function () {
+  'use strict';
+
+  var wrap   = document.getElementById('gddHSearch');
+  var input  = document.getElementById('gddHSearchInput');
+  var drop   = document.getElementById('gddHSearchDrop');
+  if (!wrap || !input || !drop) return;
+
+  /* ── Category dropdown ── */
+  function openDrop()  { drop.classList.add('open'); }
+  function closeDrop() { drop.classList.remove('open'); }
+
+  input.addEventListener('focus', function () {
+    if (input.value.trim() === '') openDrop();
+  });
+  input.addEventListener('input', function () {
+    if (input.value.trim() !== '') closeDrop(); else openDrop();
+  });
+  document.addEventListener('mousedown', function (e) {
+    if (!wrap.contains(e.target)) closeDrop();
+  });
+  drop.querySelectorAll('a').forEach(function (a) {
+    a.addEventListener('mousedown', function (e) {
+      e.preventDefault();
+      closeDrop();
+      window.location.href = a.href;
+    });
+  });
+
+  /* ── Typewriter placeholder animation ── */
+  var phrases = (window.GDD_SEARCH_PHRASES && window.GDD_SEARCH_PHRASES.length)
+    ? window.GDD_SEARCH_PHRASES
+    : ['Search personalised gifts…'];
+
+  var pi = 0, ci = 0, deleting = false, timer = null;
+
+  var TYPING_SPEED  = 55;   /* ms per character while typing */
+  var DELETE_SPEED  = 30;   /* ms per character while deleting */
+  var PAUSE_AFTER   = 2000; /* ms to wait when full text is displayed */
+  var PAUSE_BEFORE  = 400;  /* ms to wait before typing next phrase */
+
+  function tick() {
+    /* pause animation while user is typing */
+    if (document.activeElement === input) {
+      timer = setTimeout(tick, 300);
+      return;
+    }
+
+    var phrase = phrases[pi];
+
+    if (!deleting) {
+      /* typing in */
+      ci++;
+      input.placeholder = phrase.slice(0, ci);
+      if (ci === phrase.length) {
+        deleting = true;
+        timer = setTimeout(tick, PAUSE_AFTER);
+      } else {
+        timer = setTimeout(tick, TYPING_SPEED);
+      }
+    } else {
+      /* deleting */
+      ci--;
+      input.placeholder = phrase.slice(0, ci);
+      if (ci === 0) {
+        deleting = false;
+        pi = (pi + 1) % phrases.length;
+        timer = setTimeout(tick, PAUSE_BEFORE);
+      } else {
+        timer = setTimeout(tick, DELETE_SPEED);
+      }
+    }
+  }
+
+  /* start after a short delay so page feels settled */
+  timer = setTimeout(tick, 800);
+})();
+
 (function () {
   'use strict';
 
@@ -350,4 +430,86 @@
       el.style.setProperty('--py', '0px');
     });
   });
+})();
+
+/* ---- Hero Before/After Drag Slider ---- */
+(function () {
+  'use strict';
+
+  var showcase = document.querySelector('.gdd-ht-showcase');
+  var divider  = document.querySelector('.gdd-ht-divider');
+  if (!showcase) return;
+
+  var dragging = false;
+
+  function setSplit(pct) {
+    pct = Math.max(2, Math.min(98, pct));
+    showcase.style.setProperty('--cr', (100 - pct).toFixed(1) + '%');
+    if (divider) divider.style.left = pct.toFixed(1) + '%';
+  }
+
+  function animateTo(targetPct, durationMs) {
+    var cr = showcase.style.getPropertyValue('--cr');
+    var startPct = cr ? 100 - parseFloat(cr) : 50;
+    var start = null;
+    function step(ts) {
+      if (!start) start = ts;
+      var p    = Math.min((ts - start) / durationMs, 1);
+      var ease = 1 - Math.pow(1 - p, 3);
+      setSplit(startPct + (targetPct - startPct) * ease);
+      if (p < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  setSplit(80); /* start: left image 80% visible, right 20% */
+
+  /* Mouse hover — split follows cursor */
+  showcase.addEventListener('mousemove', function (e) {
+    if (dragging) return;
+    var rect = showcase.getBoundingClientRect();
+    setSplit(((e.clientX - rect.left) / rect.width) * 100);
+  });
+  showcase.addEventListener('mouseleave', function () {
+    if (!dragging) animateTo(50, 700);
+  });
+
+  /* Mouse drag */
+  showcase.addEventListener('mousedown', function (e) {
+    dragging = true;
+    showcase.classList.add('dragging');
+    var rect = showcase.getBoundingClientRect();
+    setSplit(((e.clientX - rect.left) / rect.width) * 100);
+  });
+  document.addEventListener('mousemove', function (e) {
+    if (!dragging) return;
+    var rect = showcase.getBoundingClientRect();
+    setSplit(((e.clientX - rect.left) / rect.width) * 100);
+  });
+  document.addEventListener('mouseup', function () {
+    if (!dragging) return;
+    dragging = false;
+    showcase.classList.remove('dragging');
+  });
+
+  /* Touch */
+  showcase.addEventListener('touchstart', function (e) {
+    dragging = true;
+    showcase.classList.add('dragging');
+    var rect = showcase.getBoundingClientRect();
+    setSplit(((e.touches[0].clientX - rect.left) / rect.width) * 100);
+  }, { passive: true });
+  showcase.addEventListener('touchmove', function (e) {
+    var rect = showcase.getBoundingClientRect();
+    setSplit(((e.touches[0].clientX - rect.left) / rect.width) * 100);
+    e.preventDefault();
+  }, { passive: false });
+  showcase.addEventListener('touchend', function () {
+    dragging = false;
+    showcase.classList.remove('dragging');
+    animateTo(50, 600);
+  });
+
+  /* Intro: starts at 80% then eases to 50% so visitor notices the slider */
+  setTimeout(function () { animateTo(50, 900); }, 1200);
 })();

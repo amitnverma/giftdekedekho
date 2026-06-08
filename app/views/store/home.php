@@ -10,81 +10,75 @@ $heroSub = $hero['subheadline'] ?? 'Photo frames, engraved keepsakes, custom mug
 $heroCtaUrl = $hero['cta_url'] ?? url('/category/all');
 $heroCtaText = $hero['cta_text'] ?? 'Start Customising';
 
-// Floating product photos — managed in Admin → Design Studio → Hero Banner.
-// Falls back to real category product shots so the hero always looks complete.
-$heroFloaters = array_values(array_filter($hero['floaters'] ?? []));
-$heroUsingDefaults = false;
-if (empty($heroFloaters)) {
-    $heroUsingDefaults = true;
-    $heroFloaters = array_values(array_filter(array_map(
-        fn($c) => $c['image'] ?? '',
-        $categories
-    )));
-}
-// Cutout mode = transparent PNGs floated in true 3D (admin toggle).
-// Default category photos have backgrounds, so they render as tidy "cards".
-$heroCutout = !empty($hero['floaters_cutout']) && !$heroUsingDefaults;
-$floaterMode = $heroCutout ? 'is-cutout' : 'is-card';
-// Ensure we have 6 slots (cycle through whatever images we have)
-$heroFloaterImgs = [];
-if (!empty($heroFloaters)) {
-    for ($i = 0; $i < 6; $i++) { $heroFloaterImgs[] = $heroFloaters[$i % count($heroFloaters)]; }
-}
+// Hero split panels — admin-managed photos; default to heroleft/heroright.
+$heroLeftPhoto  = !empty($hero['transform_left_photo'])  ? asset($hero['transform_left_photo'])  : asset('/images/heroleft.png');
+$heroRightPhoto = !empty($hero['transform_right_photo']) ? asset($hero['transform_right_photo']) : asset('/images/heroright.png');
 ?>
 
 <!-- =========================================================
-     HERO v2 — centered headline with floating product photo cards
-     confined to the left/right gutter columns (never overlap text).
-     Floater images come from Admin → Design Studio → Hero Banner;
-     they fall back to category product photos automatically.
+     HERO — Full-bleed split: left text | right before/after reveal
      ========================================================= -->
-<section class="gdd-hero2">
-  <div class="gdd-hero2-grid">
-    <!-- LEFT gutter floaters -->
-    <div class="gdd-hero2-side left" aria-hidden="true">
-      <?php foreach ([['p1',26],['p2',16],['p3',34]] as $idx => $f):
-        [$cls, $depth] = $f; $img = $heroFloaterImgs[$idx] ?? ''; ?>
-        <div class="gdd-floater <?= $cls ?> <?= $img ? $floaterMode : 'placeholder' ?>" data-depth="<?= $depth ?>">
-          <?php if ($img): ?><img src="<?= e(asset($img)) ?>" alt="" loading="lazy"><?php else: ?><span>Add hero<br>cutout PNG</span><?php endif; ?>
-        </div>
-      <?php endforeach; ?>
-    </div>
+<section class="gdd-ht">
 
-    <!-- CENTER content -->
-    <div class="gdd-hero2-content">
-      <span class="gdd-hero2-kicker reveal is-visible"><?= e($promo['text'] ?? 'Perfect Gifting Made Simple.') ?></span>
+  <!-- ── Left: text column (self-contained, no outer container needed) ── -->
+  <div class="gdd-ht-text">
+    <div class="gdd-ht-text-inner">
+      <span class="gdd-ht-eyebrow"><?= e($promo['text'] ?? '✨ Perfect Gifting Made Simple') ?></span>
       <?php if ($heroHeadline !== ''): ?>
-        <h1 class="reveal is-visible"><?= e($heroHeadline) ?></h1>
+        <h1><?= e($heroHeadline) ?></h1>
       <?php else: ?>
-        <h1 class="reveal is-visible">Make every moment<br><span class="grad">memorable, every time.</span></h1>
+        <h1>Turn your photos into<br><em class="gdd-ht-grad">unforgettable gifts</em></h1>
       <?php endif; ?>
-      <p class="lead reveal is-visible"><?= e($heroSub) ?></p>
-      <form class="gdd-hero2-bar reveal is-visible" action="<?= url('/category/all') ?>" method="get">
-        <span class="icon-orb">🎁</span>
-        <input type="search" name="q" placeholder="Curious about gift ideas? Try “photo frame”…" value="<?= e($_GET['q'] ?? '') ?>" aria-label="Search for gift ideas">
-        <button type="submit" aria-label="Search">→</button>
-      </form>
-      <div class="gdd-hero-cta" style="justify-content:center;margin-top:24px">
-        <a href="<?= e($heroCtaUrl) ?>" class="btn btn-primary"><?= e($heroCtaText) ?> →</a>
-        <a href="<?= url('/category/video-photo-gifts') ?>" class="btn btn-outline">🎬 Try Video &amp; Photo QR Gifts</a>
-      </div>
-      <div class="gdd-hero-stats" style="justify-content:center">
-        <div><strong><span data-count-to="50" data-suffix="K+">0</span></strong><span>Happy customers</span></div>
-        <div><strong><span data-count-to="4.8" data-suffix="★">0</span></strong><span>Average rating</span></div>
-        <div><strong><span data-count-to="500" data-suffix="+">0</span></strong><span>Gift designs</span></div>
-      </div>
-    </div>
+      <p class="gdd-ht-lead"><?= e($heroSub) ?></p>
 
-    <!-- RIGHT gutter floaters -->
-    <div class="gdd-hero2-side right" aria-hidden="true">
-      <?php foreach ([['p4',30],['p5',18],['p6',38]] as $idx => $f):
-        [$cls, $depth] = $f; $img = $heroFloaterImgs[$idx + 3] ?? ''; ?>
-        <div class="gdd-floater <?= $cls ?> <?= $img ? $floaterMode : 'placeholder' ?>" data-depth="<?= $depth ?>">
-          <?php if ($img): ?><img src="<?= e(asset($img)) ?>" alt="" loading="lazy"><?php else: ?><span>Add hero<br>cutout PNG</span><?php endif; ?>
-        </div>
-      <?php endforeach; ?>
+      <div class="gdd-ht-ctas">
+        <a href="<?= e($heroCtaUrl) ?>" class="btn btn-primary"><?= e($heroCtaText) ?> →</a>
+        <a href="<?= url('/category/video-photo-gifts') ?>" class="btn btn-outline">🎬 Video &amp; QR Gifts</a>
+      </div>
+
+      <div class="gdd-hero-stats">
+        <div><strong><span data-count-to="50" data-suffix="K+">50K+</span></strong><span>Happy customers</span></div>
+        <div><strong><span data-count-to="4.8" data-suffix="★">4.8★</span></strong><span>Average rating</span></div>
+        <div><strong><span data-count-to="500" data-suffix="+">500+</span></strong><span>Gift designs</span></div>
+      </div>
     </div>
   </div>
+
+  <!-- ── Right: full-bleed before/after drag reveal ── -->
+  <div class="gdd-ht-showcase">
+
+    <!-- corner ornament brackets on the image area -->
+    <span class="gdd-ht-corner tl"></span>
+    <span class="gdd-ht-corner tr"></span>
+    <span class="gdd-ht-corner bl"></span>
+    <span class="gdd-ht-corner br"></span>
+
+    <!-- LEFT side image -->
+    <div class="gdd-ht-plain">
+      <img src="<?= e($heroLeftPhoto) ?>" alt="Before personalisation" loading="eager">
+    </div>
+
+    <!-- RIGHT side — revealed as divider moves left -->
+    <div class="gdd-ht-reveal">
+      <img src="<?= e($heroRightPhoto) ?>" alt="After personalisation" loading="eager">
+    </div>
+
+    <!-- floating chips -->
+    <div class="gdd-ht-chip chip-photo">📸 Add your photo</div>
+    <div class="gdd-ht-chip chip-done">✨ Personalised!</div>
+
+    <!-- drag divider -->
+    <div class="gdd-ht-divider" aria-hidden="true">
+      <div class="gdd-ht-handle">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+          <path d="M7 11 L2 11 M2 11 L5 8 M2 11 L5 14" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M15 11 L20 11 M20 11 L17 8 M20 11 L17 14" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+    </div>
+
+  </div>
+
 </section>
 
 <!-- Scrolling marquee strip -->

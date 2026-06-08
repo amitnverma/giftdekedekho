@@ -25,10 +25,11 @@ class AdminDesignController extends BaseController
         switch ($section) {
             case 'branding':
                 $settings->setMany([
-                    'site_name' => trim((string)$this->input('site_name')),
-                    'site_tagline' => trim((string)$this->input('site_tagline')),
-                    'primary_color' => trim((string)$this->input('primary_color', '#e63946')),
-                    'accent_color' => trim((string)$this->input('accent_color', '#457b9d')),
+                    'site_name'          => trim((string)$this->input('site_name')),
+                    'site_tagline'       => trim((string)$this->input('site_tagline')),
+                    'primary_color'      => trim((string)$this->input('primary_color', '#e63946')),
+                    'accent_color'       => trim((string)$this->input('accent_color', '#457b9d')),
+                    'search_placeholders' => trim((string)$this->input('search_placeholders', "Search personalised gifts…\nTry \"photo frame\" or \"mug\"…")),
                 ]);
                 if (!empty($_FILES['logo']['name'])) {
                     $path = $this->handleImageUpload($_FILES['logo'], 'branding', 'logo');
@@ -43,32 +44,27 @@ class AdminDesignController extends BaseController
                     $uploaded = $this->handleImageUpload($_FILES['hero_image'], 'sections', 'hero');
                     if ($uploaded) $imagePath = $uploaded;
                 }
-                // Floating product photos (6 slots) — keep existing unless a new file is uploaded for that slot.
-                $existingFloaters = (array)($existing['floaters'] ?? []);
-                $floaters = [];
-                $hf = $_FILES['hero_floater'] ?? null;
-                for ($i = 0; $i < 6; $i++) {
-                    $current = trim((string)($_POST['hero_floater_existing'][$i] ?? ($existingFloaters[$i] ?? '')));
-                    if ($hf && isset($hf['name'][$i]) && $hf['error'][$i] === UPLOAD_ERR_OK) {
-                        $single = [
-                            'name' => $hf['name'][$i], 'type' => $hf['type'][$i], 'tmp_name' => $hf['tmp_name'][$i],
-                            'error' => $hf['error'][$i], 'size' => $hf['size'][$i],
-                        ];
-                        $up = $this->handleImageUpload($single, 'sections', 'herofloat');
+
+                // Hero split panel photos (left / right)
+                $transformPhotos = [];
+                foreach (['left', 'right'] as $slot) {
+                    $photoKey = 'transform_' . $slot . '_photo';
+                    $current  = trim((string)($_POST[$photoKey . '_existing'] ?? ($existing[$photoKey] ?? '')));
+                    if (!empty($_FILES[$photoKey]['name']) && $_FILES[$photoKey]['error'] === UPLOAD_ERR_OK) {
+                        $up = $this->handleImageUpload($_FILES[$photoKey], 'sections', 'hero_' . $slot);
                         if ($up) $current = $up;
                     }
-                    $floaters[] = $current;
+                    $transformPhotos[$photoKey] = $current;
                 }
-                $this->saveSection('hero_banner', [
-                    'headline' => trim((string)$this->input('headline')),
+
+                $this->saveSection('hero_banner', array_merge([
+                    'headline'    => trim((string)$this->input('headline')),
                     'subheadline' => trim((string)$this->input('subheadline')),
-                    'cta_text' => trim((string)$this->input('cta_text')),
-                    'cta_url' => trim((string)$this->input('cta_url')),
-                    'image' => $imagePath,
-                    'floaters' => $floaters,
-                    'floaters_cutout' => $this->input('floaters_cutout') ? true : false,
-                    'is_active' => $this->input('is_active') ? true : false,
-                ]);
+                    'cta_text'    => trim((string)$this->input('cta_text')),
+                    'cta_url'     => trim((string)$this->input('cta_url')),
+                    'image'       => $imagePath,
+                    'is_active'   => $this->input('is_active') ? true : false,
+                ], $transformPhotos));
                 break;
 
             case 'promo_strip':

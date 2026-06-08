@@ -41,6 +41,10 @@ $topbarButtons = $sections['topbar_buttons'] ?? ['items' => []];
                         <input type="color" name="accent_color" value="<?= e($settings['accent_color'] ?? '#457b9d') ?>">
                     </label>
                 </div>
+                <label>Search Bar Placeholder Texts <small style="font-weight:400;color:#888">(one per line — they cycle with a typing animation)</small>
+                    <textarea name="search_placeholders" rows="5" placeholder="Search personalised gifts…&#10;Try &quot;photo frame&quot; or &quot;mug&quot;…&#10;Birthday gifts for her…&#10;Anniversary surprises…"><?= e($settings['search_placeholders'] ?? "Search personalised gifts…\nTry \"photo frame\" or \"mug\"…\nBirthday gifts for her…\nAnniversary surprises…\nCustom name gifts…") ?></textarea>
+                    <small class="admin-help-text" style="display:block;margin-top:4px">Each line is typed in and out in sequence inside the header search bar.</small>
+                </label>
                 <label>Logo
                     <input type="file" name="logo" accept="image/*" data-image-preview="#logoPreview">
                 </label>
@@ -71,32 +75,43 @@ $topbarButtons = $sections['topbar_buttons'] ?? ['items' => []];
                     </label>
                 </div>
                 <hr class="admin-hr">
-                <h4 style="margin:0 0 4px">Floating Product Photos</h4>
-                <p class="admin-help-text">Up to 6 images float around the hero headline (3 on each side). Leave a slot empty to hide it. If none are set, your category photos are used automatically.</p>
-                <div class="admin-callout">
-                  <strong>💡 For the 3D “floating product” look</strong> (like a premium gifting site), upload <strong>transparent PNG cut-outs</strong> — product photos with the background removed. Then tick the box below so they float with a realistic shadow instead of sitting in a photo box.
-                  <br>Quick way to make cut-outs: drop your product photo into a free background-remover (e.g. <em>remove.bg</em>, Canva “Remove background”, or Photoshop) and export as <strong>PNG</strong> (~600–900px, transparent).
+                <!-- ── Transformation Showcase Photos ── -->
+                <h4 style="margin:0 0 6px">🖼️ Hero Split Panel Photos</h4>
+                <p class="admin-help-text">
+                  The hero section shows two photos side by side — <strong>Left Panel</strong> and <strong>Right Panel</strong> — filling the right half of the hero. Upload one image for each side.
+                </p>
+                <div class="admin-callout" style="margin-bottom:20px">
+                  💡 Use portrait-oriented images (e.g. <strong>600×700 px</strong>) for the best fit. Both panels will fill their half equally.
                 </div>
-                <label class="admin-checkbox" style="margin:10px 0 16px">
-                    <input type="checkbox" name="floaters_cutout" value="1" <?= !empty($hero['floaters_cutout']) ? 'checked' : '' ?>>
-                    My hero images are transparent PNG cut-outs — float them in 3D (no photo box)
-                </label>
+
                 <?php
-                  $heroFloaters = (array)($hero['floaters'] ?? []);
-                  $floaterHints = ['Left · top', 'Left · middle', 'Left · bottom', 'Right · top', 'Right · middle', 'Right · bottom'];
+                  $transformSlots = [
+                    ['key'=>'left',  'default_img'=>'/images/heroleft.png',  'label'=>'Left Panel',  'emoji'=>'◀️', 'color'=>'#f2496b'],
+                    ['key'=>'right', 'default_img'=>'/images/heroright.png', 'label'=>'Right Panel', 'emoji'=>'▶️', 'color'=>'#457bdb'],
+                  ];
                 ?>
-                <div class="admin-floater-grid">
-                  <?php for ($i = 0; $i < 6; $i++): $fimg = $heroFloaters[$i] ?? ''; ?>
-                    <div class="admin-floater-slot">
-                      <span class="admin-floater-hint"><?= e($floaterHints[$i]) ?></span>
-                      <div class="admin-floater-preview">
-                        <?php if ($fimg): ?><img src="<?= e(asset($fimg)) ?>" alt=""><?php else: ?><span>Empty</span><?php endif; ?>
-                      </div>
-                      <input type="file" name="hero_floater[<?= $i ?>]" accept="image/*">
-                      <input type="hidden" name="hero_floater_existing[<?= $i ?>]" value="<?= e($fimg) ?>">
+                <div class="admin-transform-grid">
+                  <?php foreach ($transformSlots as $slot):
+                    $photoKey   = 'transform_' . $slot['key'] . '_photo';
+                    $savedPhoto = $hero[$photoKey] ?? '';
+                    $previewSrc = $savedPhoto ? asset($savedPhoto) : asset($slot['default_img']);
+                  ?>
+                  <div class="admin-transform-slot" style="--slot-color:<?= e($slot['color']) ?>">
+                    <div class="admin-transform-preview">
+                      <img id="transformPreview_<?= $slot['key'] ?>" src="<?= e($previewSrc) ?>" alt="">
+                      <div class="admin-transform-badge"><?= $slot['emoji'] ?> <?= e($slot['label']) ?></div>
                     </div>
-                  <?php endfor; ?>
+                    <label style="margin-top:10px">
+                      Photo — <?= e($slot['label']) ?> <small style="font-weight:400;color:#888">(portrait recommended)</small>
+                      <input type="file" name="transform_<?= $slot['key'] ?>_photo" accept="image/*"
+                             data-image-preview="#transformPreview_<?= $slot['key'] ?>">
+                    </label>
+                    <input type="hidden" name="transform_<?= $slot['key'] ?>_photo_existing" value="<?= e($savedPhoto) ?>">
+                  </div>
+                  <?php endforeach; ?>
                 </div>
+
+                <hr class="admin-hr" style="margin:28px 0 20px">
                 <input type="hidden" name="hero_image" value="">
                 <label class="admin-checkbox">
                     <input type="checkbox" name="is_active" value="1" <?= !empty($hero['is_active']) ? 'checked' : '' ?>>
@@ -110,7 +125,7 @@ $topbarButtons = $sections['topbar_buttons'] ?? ['items' => []];
     <!-- Topbar round image buttons -->
     <div class="admin-tab-pane" data-pane="topbar">
         <div class="admin-card">
-            <p class="admin-help-text">These appear as text links in the dark utility bar at the very top of every storefront page. The <strong>Label</strong> is the text shown to visitors, so keep it clear (e.g. “Track Order”, “Help &amp; Support”). The image is optional — if set, a small round icon appears before the label.</p>
+            <p class="admin-help-text">These appear as text links in the dark utility bar at the very top of every storefront page. The <strong>Label</strong> is the text shown to visitors, so keep it clear (e.g. "Track Order", "Help &amp; Support"). The image is optional — if set, a small round icon appears before the label.</p>
             <form method="post" action="<?= url('/admin/design/save') ?>" class="admin-form" enctype="multipart/form-data">
                 <?= csrfField() ?>
                 <input type="hidden" name="section" value="topbar_buttons">

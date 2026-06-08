@@ -24,6 +24,8 @@ if (empty($__topbarButtons)) {
     ];
 }
 $__topbarEmojis = ['🎬', '📦', '💬', '🎁', '⭐', '❤️'];
+$__searchPhrasesRaw  = $__settings->get('search_placeholders', "Search personalised gifts…\nTry \"photo frame\" or \"mug\"…\nBirthday gifts for her…\nAnniversary surprises…\nCustom name gifts…");
+$__searchPhrases     = array_values(array_filter(array_map('trim', explode("\n", $__searchPhrasesRaw))));
 ?><!DOCTYPE html>
 <html lang="en">
 <head>
@@ -39,10 +41,11 @@ $__topbarEmojis = ['🎬', '📦', '💬', '🎁', '⭐', '❤️'];
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500;1,9..144,600&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="<?= asset('public/css/main.css') ?>">
+<link rel="stylesheet" href="<?= asset('public/css/main.css') ?>?v=<?= filemtime(BASE_PATH . '/public/css/main.css') ?>">
 <style>:root{ --color-primary: <?= e($__primary) ?>; --color-accent: <?= e($__accent) ?>; }</style>
 <meta name="csrf-token" content="<?= e(csrfToken()) ?>">
-<script>window.GDD_BASE_URL = <?= json_encode(rtrim(SITE_URL, '/')) ?>;</script>
+<script>window.GDD_BASE_URL = <?= json_encode(rtrim(SITE_URL, '/')) ?>;
+window.GDD_SEARCH_PHRASES = <?= json_encode($__searchPhrases, JSON_UNESCAPED_UNICODE) ?>;</script>
 </head>
 <body>
 <?php
@@ -87,6 +90,43 @@ function gddNavActive(string $href, string $current): string {
       <a href="<?= url('/') ?>" class="gdd-logo">
         <img src="<?= e(asset($__logo)) ?>" alt="<?= e($__siteName) ?>">
       </a>
+
+      <!-- ── Header search bar ── -->
+      <div class="gdd-hsearch" id="gddHSearch">
+        <form class="gdd-hsearch-form" action="<?= url('/category/all') ?>" method="get" role="search" autocomplete="off">
+          <span class="gdd-hsearch-icon">🔍</span>
+          <input type="search" name="q" id="gddHSearchInput"
+                 placeholder=""
+                 value="<?= e($_GET['q'] ?? '') ?>"
+                 aria-label="Search gifts" aria-autocomplete="list" aria-controls="gddHSearchDrop">
+          <button type="submit" aria-label="Search">→</button>
+        </form>
+
+        <!-- category dropdown shown on focus -->
+        <div class="gdd-hsearch-drop" id="gddHSearchDrop" role="listbox" aria-label="Browse categories">
+          <p class="gdd-hsearch-drop-label">Browse by category</p>
+          <div class="gdd-hsearch-cats">
+            <a href="<?= url('/category/all') ?>" class="gdd-hsearch-cat">
+              <span class="gdd-hsearch-cat-icon">🎁</span>
+              <span>All Gifts</span>
+            </a>
+            <?php foreach ($__navCats as $__hcat):
+              $__himg = $__hcat['image'] ?? '';
+            ?>
+            <a href="<?= e(url('/category/' . $__hcat['slug'])) ?>" class="gdd-hsearch-cat">
+              <span class="gdd-hsearch-cat-icon">
+                <?php if ($__himg): ?>
+                  <img src="<?= e(asset($__himg)) ?>" alt="" loading="lazy">
+                <?php else: ?>
+                  <?= $__hcat['slug'] === 'video-photo-gifts' ? '🎬' : '🎀' ?>
+                <?php endif; ?>
+              </span>
+              <span><?= e($__hcat['name']) ?></span>
+            </a>
+            <?php endforeach; ?>
+          </div>
+        </div>
+      </div>
 
       <div class="gdd-actions">
         <button class="gdd-burger" id="gddBurgerBtn" aria-label="Open menu">☰</button>
