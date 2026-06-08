@@ -135,6 +135,9 @@ class AdminRouter
             case $path === '/design/save':
                 (new AdminDesignController())->save();
                 break;
+            case $path === '/design/layout/save':
+                (new AdminDesignController())->saveLayout();
+                break;
 
             // ---- Notification settings ----
             case $path === '/notifications':

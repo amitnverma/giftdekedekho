@@ -166,6 +166,7 @@ foreach (($categories ?? []) as $cat) {
         <span class="admin-tab" data-tab="newsletter">Newsletter</span>
         <span class="admin-tab" data-tab="footer">Footer &amp; Social</span>
         <span class="admin-tab" data-tab="about">About Us</span>
+        <span class="admin-tab" data-tab="layout">📐 Page Layout</span>
     </div>
 
     <!-- Branding -->
@@ -1247,6 +1248,99 @@ foreach (($categories ?? []) as $cat) {
                 }
             })();
             </script>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         PAGE LAYOUT — drag-and-drop section order
+         ============================================================ -->
+    <div class="admin-tab-pane" data-pane="layout">
+        <div class="admin-card">
+            <h3 style="margin:0 0 6px">Page Layout</h3>
+            <p style="margin:0 0 20px;color:#6b7280;font-size:14px">Drag the sections below to reorder them on the homepage. Sections that are toggled off in their own tabs will still be hidden even if they appear here.</p>
+
+            <?php
+            $_layoutDefault = [
+                'hero_banner'               => 'Hero Banner',
+                'marquee_strip'             => 'Marquee Strip',
+                'why_choose_us'             => 'Why Choose Us',
+                'shop_by_category'          => 'Shop by Category',
+                'how_it_works'              => 'How It Works',
+                'featured_products_section' => 'Featured Products',
+                'signature_feature'         => 'Signature Feature / QR',
+                'trust_badges'              => 'Trust Badges',
+                'testimonials_section'      => 'Testimonials',
+                'instagram_gallery'         => 'Instagram Gallery',
+                'newsletter'                => 'Newsletter / CTA',
+            ];
+            // Build ordered list: saved order first, then any not yet saved
+            $_layoutOrdered = [];
+            foreach (($savedSectionOrder ?? []) as $_lk) {
+                if (isset($_layoutDefault[$_lk])) {
+                    $_layoutOrdered[$_lk] = $_layoutDefault[$_lk];
+                }
+            }
+            foreach ($_layoutDefault as $_lk => $_lv) {
+                if (!isset($_layoutOrdered[$_lk])) $_layoutOrdered[$_lk] = $_lv;
+            }
+            ?>
+
+            <form method="post" action="<?= url('/admin/design/layout/save') ?>" id="layoutForm">
+                <?= csrfField() ?>
+                <ul id="layoutSortable" style="list-style:none;margin:0 0 24px;padding:0;display:flex;flex-direction:column;gap:8px">
+                    <?php foreach ($_layoutOrdered as $_lk => $_lv): ?>
+                    <li data-key="<?= e($_lk) ?>"
+                        style="display:flex;align-items:center;gap:12px;background:#f8f9fb;border:1px solid #e5e7eb;border-radius:10px;padding:12px 16px;cursor:grab;user-select:none">
+                        <span style="color:#9ca3af;font-size:18px;line-height:1">⠿</span>
+                        <span style="font-weight:600;font-size:14px;flex:1"><?= e($_lv) ?></span>
+                        <input type="hidden" name="section_order[]" value="<?= e($_lk) ?>">
+                    </li>
+                    <?php endforeach; ?>
+                </ul>
+                <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+                    <button type="submit" class="admin-btn admin-btn-primary">Save Layout</button>
+                    <button type="button" id="layoutResetBtn" class="admin-btn" style="background:#f3f4f6;color:#374151">Reset to Default</button>
+                </div>
+            </form>
+
+            <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.3/Sortable.min.js"></script>
+            <script>
+            (function () {
+                var list = document.getElementById('layoutSortable');
+                if (!list || typeof Sortable === 'undefined') return;
+
+                Sortable.create(list, {
+                    animation: 150,
+                    handle: 'li',
+                    ghostClass: 'gdd-layout-ghost',
+                    onEnd: function () {
+                        // Re-sync hidden input values to current DOM order
+                        list.querySelectorAll('li').forEach(function (li) {
+                            li.querySelector('input[type=hidden]').value = li.dataset.key;
+                        });
+                    }
+                });
+
+                // Reset to default order
+                var defaultOrder = <?= json_encode(array_keys($_layoutDefault)) ?>;
+                document.getElementById('layoutResetBtn').addEventListener('click', function () {
+                    var items = {};
+                    list.querySelectorAll('li').forEach(function (li) { items[li.dataset.key] = li; });
+                    defaultOrder.forEach(function (key) {
+                        if (items[key]) list.appendChild(items[key]);
+                    });
+                    // Re-sync hidden inputs
+                    list.querySelectorAll('li').forEach(function (li) {
+                        li.querySelector('input[type=hidden]').value = li.dataset.key;
+                    });
+                });
+            })();
+            </script>
+            <style>
+            .gdd-layout-ghost { opacity: .4; background: #e0e7ff !important; border-color: #6366f1 !important; }
+            #layoutSortable li:active { cursor: grabbing; }
+            #layoutSortable li:hover { border-color: #6366f1; background: #f5f3ff; }
+            </style>
         </div>
     </div>
 </div>

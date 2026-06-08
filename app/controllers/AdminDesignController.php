@@ -11,11 +11,15 @@ class AdminDesignController extends BaseController
             ->query('SELECT slug, name, image FROM categories WHERE is_active = 1 ORDER BY sort_order, name')
             ->fetchAll();
 
+        $rawOrder = $settings->get('homepage_section_order', '');
+        $savedOrder = $rawOrder ? (json_decode($rawOrder, true) ?: []) : [];
+
         $this->viewAdmin('admin/design_index', [
-            'metaTitle'  => 'Design Editor',
-            'settings'   => $settings->getAll(),
-            'sections'   => $this->loadSections(),
-            'categories' => $categories,
+            'metaTitle'    => 'Design Editor',
+            'settings'     => $settings->getAll(),
+            'sections'     => $this->loadSections(),
+            'categories'   => $categories,
+            'savedSectionOrder' => $savedOrder,
         ]);
     }
 
@@ -378,6 +382,31 @@ class AdminDesignController extends BaseController
 
         flash('success', 'Design changes saved successfully.');
         redirect('/admin/design');
+    }
+
+    public function saveLayout(): void
+    {
+        $this->requireAdmin();
+        $this->requireCsrf();
+
+        $allowed = [
+            'hero_banner', 'marquee_strip', 'why_choose_us', 'shop_by_category',
+            'how_it_works', 'featured_products_section', 'signature_feature',
+            'trust_badges', 'testimonials_section', 'instagram_gallery', 'newsletter',
+        ];
+
+        $raw = (array)($_POST['section_order'] ?? []);
+        $order = array_values(array_intersect($raw, $allowed));
+
+        // Append any allowed section not included (safety net so nothing is lost)
+        foreach ($allowed as $key) {
+            if (!in_array($key, $order, true)) $order[] = $key;
+        }
+
+        (new Settings())->set('homepage_section_order', json_encode($order));
+
+        flash('success', 'Page layout saved.');
+        redirect('/admin/design?tab=layout');
     }
 
     /** Normalises the posted style[...] appearance block into a clean array. */

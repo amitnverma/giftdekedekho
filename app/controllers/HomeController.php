@@ -10,6 +10,9 @@ class HomeController extends BaseController
         $featured = (new Product())->featured(8);
         $wishlistIds = isLoggedIn() ? (new Wishlist())->userIdsForProduct(currentUserId()) : [];
 
+        $rawOrder = $settings->get('homepage_section_order', '');
+        $sectionOrder = $rawOrder ? (json_decode($rawOrder, true) ?: []) : [];
+
         $this->view('home', [
             'metaTitle' => $settings->get('site_name', SITE_NAME) . ' — ' . $settings->get('site_tagline', 'Personalized Gifts for Every Occasion'),
             'metaDescription' => $settings->get('site_tagline', ''),
@@ -17,6 +20,7 @@ class HomeController extends BaseController
             'categories' => $categories,
             'featured' => $featured,
             'wishlistIds' => $wishlistIds,
+            'sectionOrder' => $sectionOrder,
         ]);
     }
 

@@ -18,17 +18,28 @@
     // Tabs
     document.querySelectorAll('.admin-tabs').forEach(function (tabBar) {
         var tabs = tabBar.querySelectorAll('.admin-tab');
+        var container = tabBar.closest('[data-tab-container]') || tabBar.parentElement;
+
+        function activateTab(target) {
+            tabs.forEach(function (t) { t.classList.remove('active'); });
+            container.querySelectorAll('.admin-tab-pane').forEach(function (pane) {
+                pane.classList.toggle('active', pane.getAttribute('data-pane') === target);
+            });
+            var matchedTab = tabBar.querySelector('[data-tab="' + target + '"]');
+            if (matchedTab) matchedTab.classList.add('active');
+        }
+
         tabs.forEach(function (tab) {
             tab.addEventListener('click', function () {
-                var target = tab.getAttribute('data-tab');
-                var container = tabBar.closest('[data-tab-container]') || tabBar.parentElement;
-                tabs.forEach(function (t) { t.classList.remove('active'); });
-                tab.classList.add('active');
-                container.querySelectorAll('.admin-tab-pane').forEach(function (pane) {
-                    pane.classList.toggle('active', pane.getAttribute('data-pane') === target);
-                });
+                activateTab(tab.getAttribute('data-tab'));
             });
         });
+
+        // Activate tab from ?tab= query param
+        var qTab = new URLSearchParams(window.location.search).get('tab');
+        if (qTab && tabBar.querySelector('[data-tab="' + qTab + '"]')) {
+            activateTab(qTab);
+        }
     });
 
     // Confirm dialogs for destructive actions
