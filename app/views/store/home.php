@@ -6,6 +6,11 @@ $testimonials = $sections['testimonials_section'] ?? [];
 $badges = $sections['trust_badges'] ?? [];
 $igGallery = $sections['instagram_gallery'] ?? [];
 $sigFeature = $sections['signature_feature'] ?? [];
+$marqueeSection = $sections['marquee_strip'] ?? [];
+$catSection = $sections['shop_by_category'] ?? [];
+$whyChoose  = $sections['why_choose_us'] ?? [];
+$howItWorks = $sections['how_it_works'] ?? [];
+$newsletter = $sections['newsletter'] ?? [];
 
 $heroHeadline = $hero['headline'] ?? '';
 $heroSub = $hero['subheadline'] ?? 'Photo frames, engraved keepsakes, custom mugs & video-message gifts — designed by you, crafted by us, delivered with love anywhere in India.';
@@ -87,33 +92,61 @@ $heroRightPhoto = !empty($hero['transform_right_photo']) ? asset($hero['transfor
 </section>
 <?php endif; ?>
 
+<?php
+$_mActive  = !isset($marqueeSection['is_active']) || !empty($marqueeSection['is_active']);
+$_mText    = $marqueeSection['text']       ?? '🎁 PERSONALISED PHOTO FRAMES <em>•</em> ENGRAVED JEWELLERY <em>•</em> CUSTOM MUGS &amp; CUSHIONS <em>•</em> VIDEO &amp; PHOTO QR GIFTS <em>•</em> SAME-DAY DISPATCH <em>•</em> COD AVAILABLE <em>•</em>';
+$_mBg      = $marqueeSection['bg_color']   ?? '';
+$_mColor   = $marqueeSection['text_color'] ?? '';
+$_mSize    = $marqueeSection['font_size']  ?? '14';
+$_mWeight  = $marqueeSection['font_weight']?? '700';
+$_mSpeed   = $marqueeSection['speed']      ?? '26';
+$_mStyle   = '';
+if ($_mBg)    $_mStyle .= "background:{$_mBg};";
+if ($_mColor) $_mStyle .= "color:{$_mColor};";
+?>
+<?php if ($_mActive): ?>
 <!-- Scrolling marquee strip -->
-<div class="gdd-marquee" aria-hidden="true">
-  <div class="gdd-marquee-track">
+<div class="gdd-marquee" aria-hidden="true" <?= $_mStyle ? 'style="' . e($_mStyle) . '"' : '' ?>>
+  <div class="gdd-marquee-track" style="animation-duration:<?= (int)$_mSpeed ?>s;font-size:<?= (int)$_mSize ?>px;font-weight:<?= e($_mWeight) ?>;">
     <?php for ($i = 0; $i < 2; $i++): ?>
-      <span>🎁 PERSONALISED PHOTO FRAMES <em>•</em> ENGRAVED JEWELLERY <em>•</em> CUSTOM MUGS &amp; CUSHIONS <em>•</em> VIDEO &amp; PHOTO QR GIFTS <em>•</em> SAME-DAY DISPATCH <em>•</em> COD AVAILABLE <em>•</em></span>
+      <span><?= $_mText ?></span>
     <?php endfor; ?>
   </div>
 </div>
+<?php endif; ?>
 
 <!-- =========================================================
-     WHY CHOOSE US — USP cards
+     WHY CHOOSE US — USP cards (admin-managed)
      ========================================================= -->
-<section class="section">
+<?php
+$_wcActive = !isset($whyChoose['is_active']) || !empty($whyChoose['is_active']);
+$_wcStyle  = $whyChoose['style'] ?? [];
+$_wcItems  = $whyChoose['items'] ?? [
+    ['icon' => '🎨', 'title' => 'Fully Personalised', 'desc' => 'Add names, photos, dates & messages with our live preview customiser.'],
+    ['icon' => '📦', 'title' => 'Pan-India Delivery', 'desc' => 'Reliable doorstep delivery across India with real-time order tracking.'],
+    ['icon' => '💳', 'title' => 'Secure Payments',    'desc' => 'Razorpay, PayPal, Stripe & Cash on Delivery — pay your way, safely.'],
+    ['icon' => '💬', 'title' => 'Friendly Support',   'desc' => 'Real humans ready to help with design tweaks, tracking & returns.'],
+];
+$_wcCardTitleColor = $whyChoose['card_title_color'] ?? '#1d1d1f';
+$_wcCardTextColor  = $whyChoose['card_text_color']  ?? '#6b7280';
+$_wcCardAlign      = $whyChoose['card_align']       ?? 'left';
+?>
+<?php if ($_wcActive): ?>
+<section class="section" style="<?= sectionBgStyle($_wcStyle) ?>">
   <div class="container">
-    <div class="section-heading reveal">
-      <span class="gdd-kicker">Why GiftDekeDekho</span>
-      <h2>Crafted with care, delivered with a smile</h2>
-      <p>Every order is handmade-to-order — no two gifts are exactly alike</p>
-    </div>
+    <?php renderSectionHeading($_wcStyle, $whyChoose['kicker'] ?? 'Why GiftDekeDekho', $whyChoose['heading'] ?? 'Crafted with care, delivered with a smile', $whyChoose['subtext'] ?? 'Every order is handmade-to-order — no two gifts are exactly alike'); ?>
     <div class="gdd-usp-grid reveal-stagger reveal">
-      <div class="gdd-usp-card"><div class="ico">🎨</div><h4>Fully Personalised</h4><p>Add names, photos, dates &amp; messages with our live preview customiser.</p></div>
-      <div class="gdd-usp-card"><div class="ico">📦</div><h4>Pan-India Delivery</h4><p>Reliable doorstep delivery across India with real-time order tracking.</p></div>
-      <div class="gdd-usp-card"><div class="ico">💳</div><h4>Secure Payments</h4><p>Razorpay, PayPal, Stripe &amp; Cash on Delivery — pay your way, safely.</p></div>
-      <div class="gdd-usp-card"><div class="ico">💬</div><h4>Friendly Support</h4><p>Real humans ready to help with design tweaks, tracking &amp; returns.</p></div>
+      <?php foreach ($_wcItems as $u): ?>
+      <div class="gdd-usp-card" style="text-align:<?= e($_wcCardAlign) ?>">
+        <div class="ico"><?= e($u['icon'] ?? '✨') ?></div>
+        <h4 style="color:<?= e($_wcCardTitleColor) ?>"><?= e($u['title'] ?? '') ?></h4>
+        <p style="color:<?= e($_wcCardTextColor) ?>"><?= e($u['desc'] ?? '') ?></p>
+      </div>
+      <?php endforeach; ?>
     </div>
   </div>
 </section>
+<?php endif; ?>
 
 <!-- =========================================================
      SHOP BY CATEGORY
@@ -121,53 +154,104 @@ $heroRightPhoto = !empty($hero['transform_right_photo']) ? asset($hero['transfor
      Admin → Catalog → Categories. Use bright, square (800×840)
      lifestyle/product shots per category.
      ========================================================= -->
-<section class="section" style="background:var(--color-bg-alt)">
+<?php
+$_csActive    = !isset($catSection['is_active']) || !empty($catSection['is_active']);
+// Backwards-compat: older saves stored bg_color/heading_align at top level
+$_csStyle     = $catSection['style'] ?? [];
+if (!isset($_csStyle['bg_color']) && isset($catSection['bg_color'])) {
+    $_csStyle['bg_color'] = $catSection['bg_color'] === 'var(--color-bg-alt)' ? '#f8f9fb' : $catSection['bg_color'];
+}
+if (!isset($_csStyle['align']) && isset($catSection['heading_align'])) {
+    $_csStyle['align'] = $catSection['heading_align'];
+}
+if (empty($_csStyle['bg_color'])) $_csStyle['bg_color'] = '#f8f9fb';
+$_csHeading   = $catSection['heading']  ?? 'Shop by Category';
+$_csSubtext   = $catSection['subtext']  ?? 'Find the perfect personalised gift for every occasion';
+$_csKicker    = $catSection['kicker']   ?? 'Browse';
+$_csNameAlign = $catSection['name_align']   ?? 'left';
+$_csNameColor = $catSection['name_color']   ?? '#ffffff';
+$_csNameSize  = $catSection['name_size']    ?? '15';
+$_csNameWeight= $catSection['name_weight']  ?? '700';
+$_csOverlay   = $catSection['overlay_color']?? '#000000';
+$_csOrder     = $catSection['category_order']?? [];
+// Re-order $categories to match admin-defined order
+$_catMap = [];
+foreach ($categories as $c) { $_catMap[$c['slug']] = $c; }
+$_orderedCats = [];
+foreach ($_csOrder as $slug) {
+    if (isset($_catMap[$slug])) { $_orderedCats[] = $_catMap[$slug]; unset($_catMap[$slug]); }
+}
+// append any not in order list at the end
+foreach ($_catMap as $c) { $_orderedCats[] = $c; }
+// Build overlay gradient from chosen colour
+$_csOverlayRgb = sscanf($_csOverlay, "#%02x%02x%02x");
+$_csOverlayCss = $_csOverlayRgb
+    ? sprintf('linear-gradient(0deg, rgba(%d,%d,%d,.62) 0%%, rgba(%d,%d,%d,0) 55%%)', $_csOverlayRgb[0], $_csOverlayRgb[1], $_csOverlayRgb[2], $_csOverlayRgb[0], $_csOverlayRgb[1], $_csOverlayRgb[2])
+    : '';
+// Map alignment to flex justify-content (overlay is display:flex)
+$_csJustify = ['left' => 'flex-start', 'center' => 'center', 'right' => 'flex-end'][$_csNameAlign] ?? 'flex-start';
+?>
+<?php if ($_csActive): ?>
+<section class="section" style="<?= sectionBgStyle($_csStyle) ?>">
   <div class="container">
-    <div class="section-heading reveal">
-      <span class="gdd-kicker">Browse</span>
-      <h2>Shop by Category</h2>
-      <p>Find the perfect personalised gift for every occasion</p>
-    </div>
+    <?php renderSectionHeading($_csStyle, $_csKicker, $_csHeading, $_csSubtext); ?>
     <div class="gdd-cat-grid reveal-stagger reveal">
-      <?php foreach ($categories as $cat): ?>
+      <?php foreach ($_orderedCats as $cat): ?>
         <a class="gdd-cat-card" href="<?= url('/category/' . $cat['slug']) ?>">
           <img src="<?= e(asset($cat['image'] ?: '/images/GDKD logo.png')) ?>" alt="<?= e($cat['name']) ?>" loading="lazy">
-          <div class="overlay"><span><?= e($cat['name']) ?></span></div>
+          <div class="overlay" style="justify-content:<?= e($_csJustify) ?><?= $_csOverlayCss ? ';background:' . e($_csOverlayCss) : '' ?>">
+            <span style="color:<?= e($_csNameColor) ?>;font-size:<?= (int)$_csNameSize ?>px;font-weight:<?= e($_csNameWeight) ?>"><?= e($cat['name']) ?></span>
+          </div>
         </a>
       <?php endforeach; ?>
     </div>
   </div>
 </section>
+<?php endif; ?>
 
 <!-- =========================================================
-     HOW IT WORKS
+     HOW IT WORKS (admin-managed)
      ========================================================= -->
-<section class="section">
+<?php
+$_hwActive = !isset($howItWorks['is_active']) || !empty($howItWorks['is_active']);
+$_hwStyle  = $howItWorks['style'] ?? [];
+$_hwItems  = $howItWorks['items'] ?? [
+    ['title' => 'Pick a Gift',         'desc' => 'Browse frames, mugs, jewellery, cushions & more.'],
+    ['title' => 'Personalise It',      'desc' => 'Add photos, names, engravings or a video message.'],
+    ['title' => 'We Craft & Pack',     'desc' => 'Our artisans make it by hand and pack it with care.'],
+    ['title' => 'You Receive & Smile', 'desc' => 'Track your order and get it delivered to your door.'],
+];
+$_hwTitleColor = $howItWorks['card_title_color'] ?? '#1d1d1f';
+$_hwTextColor  = $howItWorks['card_text_color']  ?? '#6b7280';
+?>
+<?php if ($_hwActive): ?>
+<section class="section" style="<?= sectionBgStyle($_hwStyle) ?>">
   <div class="container">
-    <div class="section-heading reveal">
-      <span class="gdd-kicker">Simple Process</span>
-      <h2>From idea to doorstep in 4 easy steps</h2>
-    </div>
+    <?php renderSectionHeading($_hwStyle, $howItWorks['kicker'] ?? 'Simple Process', $howItWorks['heading'] ?? 'From idea to doorstep in 4 easy steps', $howItWorks['subtext'] ?? ''); ?>
     <div class="gdd-steps reveal-stagger reveal">
-      <div class="gdd-step"><div class="num"></div><h4>Pick a Gift</h4><p>Browse frames, mugs, jewellery, cushions &amp; more.</p></div>
-      <div class="gdd-step"><div class="num"></div><h4>Personalise It</h4><p>Add photos, names, engravings or a video message.</p></div>
-      <div class="gdd-step"><div class="num"></div><h4>We Craft &amp; Pack</h4><p>Our artisans make it by hand and pack it with care.</p></div>
-      <div class="gdd-step"><div class="num"></div><h4>You Receive &amp; Smile</h4><p>Track your order and get it delivered to your door.</p></div>
+      <?php foreach ($_hwItems as $s): ?>
+      <div class="gdd-step">
+        <div class="num"></div>
+        <h4 style="color:<?= e($_hwTitleColor) ?>"><?= e($s['title'] ?? '') ?></h4>
+        <p style="color:<?= e($_hwTextColor) ?>"><?= e($s['desc'] ?? '') ?></p>
+      </div>
+      <?php endforeach; ?>
     </div>
   </div>
 </section>
+<?php endif; ?>
 
 <!-- =========================================================
      FEATURED PRODUCTS
      ========================================================= -->
+<?php
+$_ftStyle = $featuredSection['style'] ?? [];
+if (empty($_ftStyle['bg_color'])) $_ftStyle['bg_color'] = '#f8f9fb';
+?>
 <?php if (!empty($featured) && (!isset($featuredSection['is_active']) || !empty($featuredSection['is_active']))): ?>
-<section class="section" style="background:var(--color-bg-alt)">
+<section class="section" style="<?= sectionBgStyle($_ftStyle) ?>">
   <div class="container">
-    <div class="section-heading reveal">
-      <span class="gdd-kicker">Trending Now</span>
-      <h2><?= e($featuredSection['heading'] ?? 'Featured Gifts') ?></h2>
-      <p>Hand-picked favourites our customers love</p>
-    </div>
+    <?php renderSectionHeading($_ftStyle, $featuredSection['kicker'] ?? 'Trending Now', $featuredSection['heading'] ?? 'Featured Gifts', $featuredSection['subtext'] ?? 'Hand-picked favourites our customers love'); ?>
     <div class="product-grid reveal-stagger reveal">
       <?php foreach ($featured as $p): ?>
         <?php renderRaw('store/partials/product_card', ['p' => $p, 'inWishlist' => in_array($p['id'], $wishlistIds)]); ?>
@@ -197,14 +281,22 @@ $heroRightPhoto = !empty($hero['transform_right_photo']) ? asset($hero['transfor
     'Your personal message plays instantly — straight from the heart',
   ];
   $sigImage = !empty($sigFeature['image']) ? asset($sigFeature['image']) : '';
+  $sigStyle = $sigFeature['style'] ?? [];
+  $sigKickerStyle = !empty($sigStyle['kicker_color'])  ? 'color:' . e($sigStyle['kicker_color']) . ';'  : '';
+  $sigHeadStyle = '';
+  if (!empty($sigStyle['heading_color'])) $sigHeadStyle .= 'color:' . e($sigStyle['heading_color']) . ';';
+  if (!empty($sigStyle['heading_size']))  $sigHeadStyle .= 'font-size:' . (int)$sigStyle['heading_size'] . 'px;';
+  $sigDescStyle = '';
+  if (!empty($sigStyle['subtext_color'])) $sigDescStyle .= 'color:' . e($sigStyle['subtext_color']) . ';';
+  if (!empty($sigStyle['subtext_size']))  $sigDescStyle .= 'font-size:' . (int)$sigStyle['subtext_size'] . 'px;';
 ?>
-<section class="section">
+<section class="section" style="<?= sectionBgStyle($sigStyle) ?>">
   <div class="container">
     <div class="gdd-spotlight reveal">
       <div>
-        <span class="gdd-kicker"><?= e($sigKicker) ?></span>
-        <h2><?= e($sigHeading) ?></h2>
-        <p><?= e($sigDesc) ?></p>
+        <span class="gdd-kicker"<?= $sigKickerStyle ? ' style="' . $sigKickerStyle . '"' : '' ?>><?= e($sigKicker) ?></span>
+        <h2<?= $sigHeadStyle ? ' style="' . $sigHeadStyle . '"' : '' ?>><?= e($sigHeading) ?></h2>
+        <p<?= $sigDescStyle ? ' style="' . $sigDescStyle . '"' : '' ?>><?= e($sigDesc) ?></p>
         <?php if (!empty($sigSteps)): ?>
         <ul class="feat-list">
           <?php foreach ($sigSteps as $idx => $step): ?>
@@ -229,8 +321,12 @@ $heroRightPhoto = !empty($hero['transform_right_photo']) ? asset($hero['transfor
 <!-- =========================================================
      TRUST BADGES (admin-managed, optional)
      ========================================================= -->
+<?php
+$_tbStyle = $badges['style'] ?? [];
+if (empty($_tbStyle['bg_color'])) $_tbStyle['bg_color'] = '#f8f9fb';
+?>
 <?php if (!empty($badges['is_active']) && !empty($badges['items'])): ?>
-<section class="section" style="background:var(--color-bg-alt)">
+<section class="section" style="<?= sectionBgStyle($_tbStyle) ?>">
   <div class="container">
     <div class="gdd-trust-row reveal-stagger reveal">
       <?php foreach ($badges['items'] as $b): ?>
@@ -247,13 +343,11 @@ $heroRightPhoto = !empty($hero['transform_right_photo']) ? asset($hero['transfor
 <!-- =========================================================
      TESTIMONIALS
      ========================================================= -->
+<?php $_teStyle = $testimonials['style'] ?? []; ?>
 <?php if (!empty($testimonials['is_active']) || !empty($testimonials['items'])): ?>
-<section class="section">
+<section class="section" style="<?= sectionBgStyle($_teStyle) ?>">
   <div class="container">
-    <div class="section-heading reveal">
-      <span class="gdd-kicker">Loved By Many</span>
-      <h2><?= e($testimonials['heading'] ?? 'What Our Customers Say') ?></h2>
-    </div>
+    <?php renderSectionHeading($_teStyle, $testimonials['kicker'] ?? 'Loved By Many', $testimonials['heading'] ?? 'What Our Customers Say', ''); ?>
     <div class="gdd-testi-grid reveal-stagger reveal">
       <?php
         $testiItems = $testimonials['items'] ?? [
@@ -281,22 +375,19 @@ $heroRightPhoto = !empty($hero['transform_right_photo']) ? asset($hero['transfor
 </section>
 <?php endif; ?>
 
+<?php
+$_igStyle = $igGallery['style'] ?? [];
+if (empty($_igStyle['bg_color'])) $_igStyle['bg_color'] = '#f8f9fb';
+?>
 <?php if (!isset($igGallery['is_active']) || !empty($igGallery['is_active'])): ?>
-<section class="section" style="background:var(--color-bg-alt)">
+<section class="section" style="<?= sectionBgStyle($_igStyle) ?>">
   <div class="container">
-    <div class="section-heading reveal">
-      <?php if (!empty($igGallery['kicker'])): ?>
-        <span class="gdd-kicker"><?= e($igGallery['kicker']) ?></span>
-      <?php else: ?>
-        <span class="gdd-kicker">#GiftDekeDekhoMoments</span>
-      <?php endif; ?>
-      <h2><?= e($igGallery['heading'] ?? 'Real gifts, real smiles') ?></h2>
-      <?php if (!empty($igGallery['subtext'])): ?>
-        <p><?= e($igGallery['subtext']) ?></p>
-      <?php else: ?>
-        <p>Tag <strong>@giftdekedekho</strong> on Instagram for a chance to be featured here</p>
-      <?php endif; ?>
-    </div>
+    <?php renderSectionHeading(
+        $_igStyle,
+        $igGallery['kicker'] ?? '#GiftDekeDekhoMoments',
+        $igGallery['heading'] ?? 'Real gifts, real smiles',
+        $igGallery['subtext'] ?? 'Tag @giftdekedekho on Instagram for a chance to be featured here'
+    ); ?>
     <?php
       $igItems = $igGallery['items'] ?? [];
       $hasPhotos = !empty(array_filter(array_column($igItems, 'image')));
@@ -326,20 +417,31 @@ $heroRightPhoto = !empty($hero['transform_right_photo']) ? asset($hero['transfor
 <?php endif; ?>
 
 <!-- =========================================================
-     NEWSLETTER / CTA
+     NEWSLETTER / CTA (admin-managed)
      ========================================================= -->
+<?php
+$_nlActive = !isset($newsletter['is_active']) || !empty($newsletter['is_active']);
+$_nlHeading = $newsletter['heading'] ?? 'Get 10% off your first customised gift 🎉';
+$_nlDesc    = $newsletter['description'] ?? 'Subscribe for festive offers, new design drops, and gifting inspiration — straight to your inbox.';
+$_nlBtn     = $newsletter['button_text'] ?? 'Subscribe';
+$_nlHColor  = $newsletter['heading_color'] ?? '#ffffff';
+$_nlTColor  = $newsletter['text_color'] ?? '#ffffff';
+$_nlBg      = trim((string)($newsletter['bg_color'] ?? ''));
+?>
+<?php if ($_nlActive): ?>
 <section class="section">
   <div class="container">
-    <div class="gdd-newsletter reveal">
+    <div class="gdd-newsletter reveal"<?= $_nlBg ? ' style="background:' . e($_nlBg) . '"' : '' ?>>
       <div>
-        <h3>Get 10% off your first customised gift 🎉</h3>
-        <p>Subscribe for festive offers, new design drops, and gifting inspiration — straight to your inbox.</p>
+        <h3 style="color:<?= e($_nlHColor) ?>"><?= e($_nlHeading) ?></h3>
+        <p style="color:<?= e($_nlTColor) ?>"><?= e($_nlDesc) ?></p>
       </div>
       <form id="gddNewsletterForm">
         <input type="email" id="gddNewsletterEmail" placeholder="you@example.com" required>
-        <button type="submit" class="btn btn-primary">Subscribe</button>
+        <button type="submit" class="btn btn-primary"><?= e($_nlBtn) ?></button>
       </form>
     </div>
     <p id="gddNewsletterMsg" style="text-align:center;margin-top:14px;font-size:14px;font-weight:600"></p>
   </div>
 </section>
+<?php endif; ?>

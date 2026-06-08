@@ -185,3 +185,69 @@ function starRating(float $rating): string
     }
     return $html;
 }
+
+/**
+ * Factory defaults for a section "appearance" style block.
+ * Centralised so the admin form and the storefront renderer agree.
+ */
+function sectionStyleDefaults(): array
+{
+    return [
+        'align'         => 'center',
+        'kicker_color'  => '#e63946',
+        'heading_color' => '#1d1d1f',
+        'heading_size'  => '',   // blank = responsive CSS default
+        'subtext_color' => '#6b7280',
+        'subtext_size'  => '',   // blank = CSS default
+        'bg_color'      => '',   // blank = section's natural background
+    ];
+}
+
+/**
+ * Builds an inline style attribute string from a style array,
+ * applying only the keys that have been customised.
+ */
+function sectionBgStyle(array $style): string
+{
+    $bg = trim((string)($style['bg_color'] ?? ''));
+    return $bg !== '' ? 'background:' . e($bg) . ';' : '';
+}
+
+/**
+ * Renders a standard section heading (kicker + h2 + subtext) with
+ * admin-controlled colour, size and alignment applied inline.
+ *
+ * @param array  $style    The section's 'style' sub-array.
+ * @param string $kicker   Kicker / eyebrow text (blank to hide).
+ * @param string $heading  Main heading text.
+ * @param string $subtext  Sub-paragraph (blank to hide). May contain safe HTML if $rawSub=true.
+ * @param bool   $rawSub   When true, $subtext is emitted without escaping.
+ */
+function renderSectionHeading(array $style, string $kicker, string $heading, string $subtext = '', bool $rawSub = false): void
+{
+    $d = sectionStyleDefaults();
+    $align        = $style['align']         ?? $d['align'];
+    $kickerColor  = trim((string)($style['kicker_color']  ?? ''));
+    $headingColor = trim((string)($style['heading_color'] ?? ''));
+    $headingSize  = trim((string)($style['heading_size']  ?? ''));
+    $subColor     = trim((string)($style['subtext_color'] ?? ''));
+    $subSize      = trim((string)($style['subtext_size']  ?? ''));
+
+    $kickerStyle  = $kickerColor !== '' ? 'color:' . e($kickerColor) . ';' : '';
+    $hStyle = '';
+    if ($headingColor !== '') $hStyle .= 'color:' . e($headingColor) . ';';
+    if ($headingSize  !== '') $hStyle .= 'font-size:' . (int)$headingSize . 'px;';
+    $pStyle = '';
+    if ($subColor !== '') $pStyle .= 'color:' . e($subColor) . ';';
+    if ($subSize  !== '') $pStyle .= 'font-size:' . (int)$subSize . 'px;';
+
+    echo '<div class="section-heading reveal" style="text-align:' . e($align) . '">';
+    if ($kicker !== '') {
+        echo '<span class="gdd-kicker"' . ($kickerStyle ? ' style="' . $kickerStyle . '"' : '') . '>' . e($kicker) . '</span>';
+    }
+    echo '<h2' . ($hStyle ? ' style="' . $hStyle . '"' : '') . '>' . e($heading) . '</h2>';
+    if ($subtext !== '') {
+        echo '<p' . ($pStyle ? ' style="' . $pStyle . '"' : '') . '>' . ($rawSub ? $subtext : e($subtext)) . '</p>';
+    }
+    echo '</div>';
+}

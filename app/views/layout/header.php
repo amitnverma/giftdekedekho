@@ -2,8 +2,13 @@
 $__settings = new Settings();
 $__siteName = $__settings->get('site_name', SITE_NAME);
 $__logo = $__settings->get('logo_path', '/images/GDKD logo.png');
-$__primary = $__settings->get('primary_color', '#e63946');
-$__accent = $__settings->get('accent_color', '#457b9d');
+$__primary    = $__settings->get('primary_color',  '#e63946');
+$__accent     = $__settings->get('accent_color',   '#457b9d');
+$__colorText  = $__settings->get('color_text',     '#1d1d1f');
+$__colorMuted = $__settings->get('color_muted',    '#6b7280');
+$__colorBg    = $__settings->get('color_bg',       '#ffffff');
+$__colorBgAlt = $__settings->get('color_bg_alt',   '#f8f9fb');
+$__colorBorder= $__settings->get('color_border',   '#e5e7eb');
 $__cart = new Cart();
 $__cartCount = 0;
 foreach ($__cart->items() as $__ci) { $__cartCount += (int)$__ci['quantity']; }
@@ -49,7 +54,15 @@ $__searchPhrases     = array_values(array_filter(array_map('trim', explode("\n",
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500;1,9..144,600&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="<?= asset('public/css/main.css') ?>?v=<?= filemtime(BASE_PATH . '/public/css/main.css') ?>">
-<style>:root{ --color-primary: <?= e($__primary) ?>; --color-accent: <?= e($__accent) ?>; }</style>
+<style>:root{
+  --color-primary:<?= e($__primary) ?>;
+  --color-accent:<?= e($__accent) ?>;
+  --color-text:<?= e($__colorText) ?>;
+  --color-muted:<?= e($__colorMuted) ?>;
+  --color-bg:<?= e($__colorBg) ?>;
+  --color-bg-alt:<?= e($__colorBgAlt) ?>;
+  --color-border:<?= e($__colorBorder) ?>;
+}</style>
 <meta name="csrf-token" content="<?= e(csrfToken()) ?>">
 <script>window.GDD_BASE_URL = <?= json_encode(rtrim(SITE_URL, '/')) ?>;
 window.GDD_SEARCH_PHRASES = <?= json_encode($__searchPhrases, JSON_UNESCAPED_UNICODE) ?>;</script>

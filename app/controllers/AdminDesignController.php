@@ -8,7 +8,7 @@ class AdminDesignController extends BaseController
         $settings = new Settings();
 
         $categories = Database::getInstance()
-            ->query('SELECT slug, name, image FROM categories WHERE is_active = 1 ORDER BY name')
+            ->query('SELECT slug, name, image FROM categories WHERE is_active = 1 ORDER BY sort_order, name')
             ->fetchAll();
 
         $this->viewAdmin('admin/design_index', [
@@ -26,6 +26,9 @@ class AdminDesignController extends BaseController
         $settings = new Settings();
 
         $section = (string)$this->input('section', '');
+
+        // Standard appearance/style block, posted as style[...] by designAppearancePanel()
+        $style = $this->collectStyle();
 
         switch ($section) {
             case 'branding':
@@ -81,8 +84,11 @@ class AdminDesignController extends BaseController
 
             case 'featured_products_section':
                 $this->saveSection('featured_products_section', [
-                    'heading' => trim((string)$this->input('heading')),
+                    'heading'  => trim((string)$this->input('heading')),
+                    'kicker'   => trim((string)$this->input('kicker', 'Trending Now')),
+                    'subtext'  => trim((string)$this->input('subtext', 'Hand-picked favourites our customers love')),
                     'is_active' => $this->input('is_active') ? true : false,
+                    'style'    => $style,
                 ]);
                 break;
 
@@ -108,6 +114,7 @@ class AdminDesignController extends BaseController
                     'steps'       => $steps,
                     'image'       => $sigImage,
                     'is_active'   => $this->input('is_active') ? true : false,
+                    'style'       => $style,
                 ]);
                 break;
 
@@ -124,6 +131,7 @@ class AdminDesignController extends BaseController
                 $this->saveSection('trust_badges', [
                     'is_active' => $this->input('is_active') ? true : false,
                     'items' => $items,
+                    'style' => $style,
                 ]);
                 break;
 
@@ -175,8 +183,10 @@ class AdminDesignController extends BaseController
                 }
                 $this->saveSection('testimonials_section', [
                     'heading' => trim((string)$this->input('heading')),
+                    'kicker'  => trim((string)$this->input('kicker', 'Loved By Many')),
                     'is_active' => $this->input('is_active') ? true : false,
                     'items' => $items,
+                    'style' => $style,
                 ]);
                 break;
 
@@ -213,6 +223,7 @@ class AdminDesignController extends BaseController
                     'subtext'   => trim((string)$this->input('subtext', '')),
                     'is_active' => $this->input('is_active') ? true : false,
                     'items'     => $items,
+                    'style'     => $style,
                 ]);
                 break;
 
@@ -259,10 +270,136 @@ class AdminDesignController extends BaseController
             case 'about_us':
                 $settings->set('about_us_text', (string)$this->input('about_us_text', ''));
                 break;
+
+            case 'page_theme':
+                $settings->setMany([
+                    'primary_color'  => trim((string)$this->input('primary_color', '#e63946')),
+                    'accent_color'   => trim((string)$this->input('accent_color',  '#457b9d')),
+                    'color_text'     => trim((string)$this->input('color_text',    '#1d1d1f')),
+                    'color_muted'    => trim((string)$this->input('color_muted',   '#6b7280')),
+                    'color_bg'       => trim((string)$this->input('color_bg',      '#ffffff')),
+                    'color_bg_alt'   => trim((string)$this->input('color_bg_alt',  '#f8f9fb')),
+                    'color_border'   => trim((string)$this->input('color_border',  '#e5e7eb')),
+                ]);
+                break;
+
+            case 'marquee_strip':
+                $this->saveSection('marquee_strip', [
+                    'text'        => trim((string)$this->input('text')),
+                    'bg_color'    => trim((string)$this->input('bg_color',    '')),
+                    'text_color'  => trim((string)$this->input('text_color',  '')),
+                    'font_size'   => trim((string)$this->input('font_size',   '14')),
+                    'font_weight' => trim((string)$this->input('font_weight', '700')),
+                    'speed'       => trim((string)$this->input('speed',       '26')),
+                    'is_active'   => $this->input('is_active') ? true : false,
+                ]);
+                break;
+
+            case 'shop_by_category':
+                $orderSlugs = array_values(array_filter(array_map('trim', (array)($_POST['cat_order'] ?? []))));
+                $this->saveSection('shop_by_category', [
+                    'is_active'      => $this->input('is_active') ? true : false,
+                    'heading'        => trim((string)$this->input('heading',        'Shop by Category')),
+                    'subtext'        => trim((string)$this->input('subtext',        'Find the perfect personalised gift for every occasion')),
+                    'kicker'         => trim((string)$this->input('kicker',         'Browse')),
+                    'style'          => $style,
+                    // Card-label specific styling
+                    'name_align'     => in_array($this->input('name_align', 'left'), ['left','center','right'], true) ? $this->input('name_align', 'left') : 'left',
+                    'name_color'     => trim((string)$this->input('name_color',  '#ffffff')),
+                    'name_size'      => trim((string)$this->input('name_size',   '15')),
+                    'name_weight'    => trim((string)$this->input('name_weight', '700')),
+                    'overlay_color'  => trim((string)$this->input('overlay_color', '#000000')),
+                    'category_order' => $orderSlugs,
+                ]);
+                break;
+
+            case 'why_choose_us':
+                $icons  = (array)($_POST['usp_icon'] ?? []);
+                $titles = (array)($_POST['usp_title'] ?? []);
+                $descs  = (array)($_POST['usp_desc'] ?? []);
+                $items = [];
+                foreach ($titles as $i => $title) {
+                    $title = trim((string)$title);
+                    if ($title === '') continue;
+                    $items[] = [
+                        'icon'  => trim((string)($icons[$i] ?? '')),
+                        'title' => $title,
+                        'desc'  => trim((string)($descs[$i] ?? '')),
+                    ];
+                }
+                $this->saveSection('why_choose_us', [
+                    'is_active' => $this->input('is_active') ? true : false,
+                    'kicker'    => trim((string)$this->input('kicker',  'Why GiftDekeDekho')),
+                    'heading'   => trim((string)$this->input('heading', 'Crafted with care, delivered with a smile')),
+                    'subtext'   => trim((string)$this->input('subtext', 'Every order is handmade-to-order — no two gifts are exactly alike')),
+                    'card_title_color' => trim((string)$this->input('card_title_color', '#1d1d1f')),
+                    'card_text_color'  => trim((string)$this->input('card_text_color',  '#6b7280')),
+                    'card_align'       => in_array($this->input('card_align', 'left'), ['left','center','right'], true) ? $this->input('card_align', 'left') : 'left',
+                    'items'     => $items,
+                    'style'     => $style,
+                ]);
+                break;
+
+            case 'how_it_works':
+                $titles = (array)($_POST['step_title'] ?? []);
+                $descs  = (array)($_POST['step_desc'] ?? []);
+                $items = [];
+                foreach ($titles as $i => $title) {
+                    $title = trim((string)$title);
+                    if ($title === '') continue;
+                    $items[] = ['title' => $title, 'desc' => trim((string)($descs[$i] ?? ''))];
+                }
+                $this->saveSection('how_it_works', [
+                    'is_active' => $this->input('is_active') ? true : false,
+                    'kicker'    => trim((string)$this->input('kicker',  'Simple Process')),
+                    'heading'   => trim((string)$this->input('heading', 'From idea to doorstep in 4 easy steps')),
+                    'subtext'   => trim((string)$this->input('subtext', '')),
+                    'card_title_color' => trim((string)$this->input('card_title_color', '#1d1d1f')),
+                    'card_text_color'  => trim((string)$this->input('card_text_color',  '#6b7280')),
+                    'items'     => $items,
+                    'style'     => $style,
+                ]);
+                break;
+
+            case 'newsletter':
+                $this->saveSection('newsletter', [
+                    'is_active'   => $this->input('is_active') ? true : false,
+                    'heading'     => trim((string)$this->input('heading', 'Get 10% off your first customised gift 🎉')),
+                    'description' => trim((string)$this->input('description', 'Subscribe for festive offers, new design drops, and gifting inspiration — straight to your inbox.')),
+                    'button_text' => trim((string)$this->input('button_text', 'Subscribe')),
+                    'heading_color' => trim((string)$this->input('heading_color', '#ffffff')),
+                    'text_color'    => trim((string)$this->input('text_color',    '#ffffff')),
+                    'bg_color'      => trim((string)$this->input('bg_color',      '')),
+                ]);
+                break;
         }
 
         flash('success', 'Design changes saved successfully.');
         redirect('/admin/design');
+    }
+
+    /** Normalises the posted style[...] appearance block into a clean array. */
+    private function collectStyle(): array
+    {
+        $raw = (array)($_POST['style'] ?? []);
+        $hex = function ($v, $fallback = '') {
+            $v = trim((string)$v);
+            return preg_match('/^#[0-9a-fA-F]{6}$/', $v) ? strtolower($v) : $fallback;
+        };
+        $num = function ($v) {
+            $v = trim((string)$v);
+            return ($v !== '' && is_numeric($v)) ? (string)(int)$v : '';
+        };
+        $align = in_array($raw['align'] ?? '', ['left', 'center', 'right'], true) ? $raw['align'] : 'center';
+        return [
+            'align'         => $align,
+            'kicker_color'  => $hex($raw['kicker_color']  ?? '', '#e63946'),
+            'heading_color' => $hex($raw['heading_color'] ?? '', '#1d1d1f'),
+            'heading_size'  => $num($raw['heading_size']  ?? ''),
+            'subtext_color' => $hex($raw['subtext_color'] ?? '', '#6b7280'),
+            'subtext_size'  => $num($raw['subtext_size']  ?? ''),
+            'bg_color'      => $hex($raw['bg_color']      ?? '', ''),
+        ];
     }
 
     private function sectionContent(string $key): array
@@ -369,6 +506,68 @@ class AdminDesignController extends BaseController
                 'show_all_gifts' => true,
                 'max_items'      => 8,
                 'items'          => [],
+            ],
+            'marquee_strip' => [
+                'text'        => '🎁 PERSONALISED PHOTO FRAMES <em>•</em> ENGRAVED JEWELLERY <em>•</em> CUSTOM MUGS &amp; CUSHIONS <em>•</em> VIDEO &amp; PHOTO QR GIFTS <em>•</em> SAME-DAY DISPATCH <em>•</em> COD AVAILABLE <em>•</em>',
+                'bg_color'    => '',
+                'text_color'  => '',
+                'font_size'   => '14',
+                'font_weight' => '700',
+                'speed'       => '26',
+                'is_active'   => true,
+            ],
+            'shop_by_category' => [
+                'is_active'      => true,
+                'heading'        => 'Shop by Category',
+                'subtext'        => 'Find the perfect personalised gift for every occasion',
+                'kicker'         => 'Browse',
+                'style'          => array_merge(sectionStyleDefaults(), ['bg_color' => '#f8f9fb']),
+                'name_align'     => 'left',
+                'name_color'     => '#ffffff',
+                'name_size'      => '15',
+                'name_weight'    => '700',
+                'overlay_color'  => '#000000',
+                'category_order' => [],
+            ],
+            'why_choose_us' => [
+                'is_active' => true,
+                'kicker'    => 'Why GiftDekeDekho',
+                'heading'   => 'Crafted with care, delivered with a smile',
+                'subtext'   => 'Every order is handmade-to-order — no two gifts are exactly alike',
+                'card_title_color' => '#1d1d1f',
+                'card_text_color'  => '#6b7280',
+                'card_align'       => 'left',
+                'style'     => sectionStyleDefaults(),
+                'items'     => [
+                    ['icon' => '🎨', 'title' => 'Fully Personalised', 'desc' => 'Add names, photos, dates & messages with our live preview customiser.'],
+                    ['icon' => '📦', 'title' => 'Pan-India Delivery', 'desc' => 'Reliable doorstep delivery across India with real-time order tracking.'],
+                    ['icon' => '💳', 'title' => 'Secure Payments',    'desc' => 'Razorpay, PayPal, Stripe & Cash on Delivery — pay your way, safely.'],
+                    ['icon' => '💬', 'title' => 'Friendly Support',   'desc' => 'Real humans ready to help with design tweaks, tracking & returns.'],
+                ],
+            ],
+            'how_it_works' => [
+                'is_active' => true,
+                'kicker'    => 'Simple Process',
+                'heading'   => 'From idea to doorstep in 4 easy steps',
+                'subtext'   => '',
+                'card_title_color' => '#1d1d1f',
+                'card_text_color'  => '#6b7280',
+                'style'     => sectionStyleDefaults(),
+                'items'     => [
+                    ['title' => 'Pick a Gift',          'desc' => 'Browse frames, mugs, jewellery, cushions & more.'],
+                    ['title' => 'Personalise It',       'desc' => 'Add photos, names, engravings or a video message.'],
+                    ['title' => 'We Craft & Pack',      'desc' => 'Our artisans make it by hand and pack it with care.'],
+                    ['title' => 'You Receive & Smile',  'desc' => 'Track your order and get it delivered to your door.'],
+                ],
+            ],
+            'newsletter' => [
+                'is_active'     => true,
+                'heading'       => 'Get 10% off your first customised gift 🎉',
+                'description'   => 'Subscribe for festive offers, new design drops, and gifting inspiration — straight to your inbox.',
+                'button_text'   => 'Subscribe',
+                'heading_color' => '#ffffff',
+                'text_color'    => '#ffffff',
+                'bg_color'      => '',
             ],
         ];
     }

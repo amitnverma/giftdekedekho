@@ -1,4 +1,114 @@
 <?php
+/**
+ * Renders a production-quality colour-picker widget:
+ * visible swatch + hex text input + hidden native picker + reset-to-default button.
+ *
+ * @param string $name      form field name
+ * @param string $label     visible label
+ * @param string $hint      small descriptive text below label
+ * @param string $current   currently saved hex value (from DB / settings)
+ * @param string $default   factory-default hex value
+ * @param string $id        unique HTML id prefix (auto-generated from $name if omitted)
+ */
+function designColorPicker(string $name, string $label, string $hint, string $current, string $default, string $id = ''): void {
+    if ($id === '') $id = 'cp_' . preg_replace('/[^a-z0-9]/i', '_', $name) . '_' . substr(md5($name . $default), 0, 6);
+    // Ensure current is a valid 6-digit hex; fall back to default
+    if (!preg_match('/^#[0-9a-fA-F]{6}$/', $current)) $current = $default;
+    $esc_cur = htmlspecialchars($current, ENT_QUOTES);
+    $esc_def = htmlspecialchars($default, ENT_QUOTES);
+    $esc_lbl = htmlspecialchars($label, ENT_QUOTES);
+    $esc_hnt = htmlspecialchars($hint,  ENT_QUOTES);
+    $esc_nm  = htmlspecialchars($name,  ENT_QUOTES);
+    echo <<<HTML
+<div class="gdd-color-widget">
+  <div class="gdd-color-widget-header">
+    <div>
+      <div class="gdd-color-widget-label">{$esc_lbl}</div>
+      <div class="gdd-color-widget-hint">{$esc_hnt}</div>
+    </div>
+    <button type="button" class="gdd-color-reset"
+      onclick="(function(){
+        document.getElementById('{$id}_inp').value='{$esc_def}';
+        document.getElementById('{$id}_hex').value='{$esc_def}';
+        document.getElementById('{$id}_sw').style.background='{$esc_def}';
+      })()"
+      title="Reset to default: {$esc_def}">&#x21BA; Reset</button>
+  </div>
+  <div class="gdd-color-widget-body">
+    <div id="{$id}_sw" class="gdd-color-swatch"
+         style="background:{$esc_cur}"
+         onclick="document.getElementById('{$id}_inp').click()"
+         title="Click to open colour picker"></div>
+    <input type="color" id="{$id}_inp" name="{$esc_nm}" value="{$esc_cur}"
+           style="position:absolute;opacity:0;width:0;height:0;pointer-events:none"
+           oninput="document.getElementById('{$id}_hex').value=this.value;document.getElementById('{$id}_sw').style.background=this.value;">
+    <div class="gdd-color-inputs">
+      <input type="text" id="{$id}_hex" class="gdd-color-hex"
+             value="{$esc_cur}" maxlength="7" placeholder="#rrggbb"
+             oninput="var v=this.value;if(/^#[0-9a-fA-F]{6}$/.test(v)){document.getElementById('{$id}_inp').value=v;document.getElementById('{$id}_sw').style.background=v;}"
+             onblur="if(!/^#[0-9a-fA-F]{6}$/.test(this.value)){this.value=document.getElementById('{$id}_inp').value;}">
+      <div class="gdd-color-default-label">Default: <code>{$esc_def}</code></div>
+    </div>
+  </div>
+</div>
+HTML;
+}
+
+/** Alignment dropdown with default marker. */
+function designAlignSelect(string $name, string $label, string $current, string $default = 'center'): void {
+    $opts = ['left' => 'Left', 'center' => 'Centre', 'right' => 'Right'];
+    echo '<label>' . htmlspecialchars($label) . ' <span class="admin-label-hint">Default: ' . ucfirst($default === 'center' ? 'Centre' : $default) . '</span>';
+    echo '<select name="' . htmlspecialchars($name) . '">';
+    foreach ($opts as $v => $l) {
+        $lbl = $l . ($v === $default ? ' (default)' : '');
+        echo '<option value="' . $v . '"' . (($current ?: $default) === $v ? ' selected' : '') . '>' . $lbl . '</option>';
+    }
+    echo '</select></label>';
+}
+
+/** Numeric font-size field; blank = responsive CSS default. */
+function designNumberField(string $name, string $label, string $hint, $current, string $placeholder = '', int $min = 8, int $max = 80): void {
+    echo '<label>' . htmlspecialchars($label) . ' <span class="admin-label-hint">' . htmlspecialchars($hint) . '</span>';
+    echo '<input type="number" name="' . htmlspecialchars($name) . '" value="' . htmlspecialchars((string)$current) . '" min="' . $min . '" max="' . $max . '"'
+        . ($placeholder ? ' placeholder="' . htmlspecialchars($placeholder) . '"' : '') . '></label>';
+}
+
+/**
+ * Renders the standard "Appearance & Styling" panel for a section heading:
+ * alignment, kicker colour, heading colour + size, subtext colour + size,
+ * and (optionally) section background — all field names are prefixed so a
+ * single form can carry the whole style[] group.
+ */
+function designAppearancePanel(array $style, bool $withBg = true, bool $withSubtext = true): void {
+    $d = sectionStyleDefaults();
+    $align = $style['align'] ?? $d['align'];
+    echo '<div class="gdd-appearance">';
+    echo '<h4 class="gdd-appearance-title">🎨 Appearance &amp; Styling</h4>';
+    echo '<div class="admin-form-row" style="align-items:stretch">';
+    designAlignSelect('style[align]', 'Heading Alignment', $align, 'center');
+    designColorPicker('style[kicker_color]', 'Kicker / Eyebrow Color', 'Small label above the heading', $style['kicker_color'] ?? $d['kicker_color'], $d['kicker_color']);
+    echo '</div>';
+    echo '<div class="admin-form-row" style="align-items:stretch">';
+    designColorPicker('style[heading_color]', 'Heading Color', 'Main section title colour', $style['heading_color'] ?? $d['heading_color'], $d['heading_color']);
+    designNumberField('style[heading_size]', 'Heading Font Size', 'Pixels — leave blank for responsive default (~28–40px)', $style['heading_size'] ?? '', 'auto', 14, 72);
+    echo '</div>';
+    if ($withSubtext) {
+        echo '<div class="admin-form-row" style="align-items:stretch">';
+        designColorPicker('style[subtext_color]', 'Subtext Color', 'Paragraph below the heading', $style['subtext_color'] ?? $d['subtext_color'], $d['subtext_color']);
+        designNumberField('style[subtext_size]', 'Subtext Font Size', 'Pixels — leave blank for default (~16px)', $style['subtext_size'] ?? '', 'auto', 11, 32);
+        echo '</div>';
+    }
+    if ($withBg) {
+        echo '<div class="admin-form-row" style="align-items:stretch">';
+        $bg = $style['bg_color'] ?? '';
+        if ($bg === 'var(--color-bg-alt)') $bg = '#f8f9fb';
+        designColorPicker('style[bg_color]', 'Section Background', 'Background colour for this whole section', $bg ?: '#ffffff', '#ffffff');
+        echo '<div style="flex:1"></div>';
+        echo '</div>';
+    }
+    echo '</div>';
+}
+
 $hero = $sections['hero_banner'] ?? [];
 $promo = $sections['promo_strip'] ?? [];
 $featuredSection = $sections['featured_products_section'] ?? [];
@@ -7,6 +117,11 @@ $testimonials = $sections['testimonials_section'] ?? ['items' => []];
 $topbarButtons = $sections['topbar_buttons'] ?? ['items' => []];
 $igGallery = $sections['instagram_gallery'] ?? ['items' => []];
 $sigFeature = $sections['signature_feature'] ?? [];
+$marqueeSection = $sections['marquee_strip'] ?? [];
+$catSection = $sections['shop_by_category'] ?? [];
+$whyChoose = $sections['why_choose_us'] ?? [];
+$howItWorks = $sections['how_it_works'] ?? [];
+$newsletter = $sections['newsletter'] ?? [];
 
 // Build URL datalist options: static pages + all active categories
 $urlOptions = [
@@ -34,15 +149,21 @@ foreach (($categories ?? []) as $cat) {
 <div data-tab-container>
     <div class="admin-tabs">
         <span class="admin-tab active" data-tab="branding">Branding</span>
+        <span class="admin-tab" data-tab="theme">Page Theme</span>
         <span class="admin-tab" data-tab="hero">Hero Banner</span>
         <span class="admin-tab" data-tab="topbar">Topbar Buttons</span>
         <span class="admin-tab" data-tab="catnav">Category Nav Bar</span>
+        <span class="admin-tab" data-tab="marquee">Marquee Strip</span>
+        <span class="admin-tab" data-tab="why">Why Choose Us</span>
+        <span class="admin-tab" data-tab="shopcat">Shop by Category</span>
+        <span class="admin-tab" data-tab="howitworks">How It Works</span>
         <span class="admin-tab" data-tab="promo">Promo Strip</span>
         <span class="admin-tab" data-tab="featured">Featured Section</span>
         <span class="admin-tab" data-tab="signature">Signature Feature</span>
         <span class="admin-tab" data-tab="badges">Trust Badges</span>
         <span class="admin-tab" data-tab="testimonials">Testimonials</span>
         <span class="admin-tab" data-tab="instagram">Instagram Gallery</span>
+        <span class="admin-tab" data-tab="newsletter">Newsletter</span>
         <span class="admin-tab" data-tab="footer">Footer &amp; Social</span>
         <span class="admin-tab" data-tab="about">About Us</span>
     </div>
@@ -61,13 +182,9 @@ foreach (($categories ?? []) as $cat) {
                         <input type="text" name="site_tagline" value="<?= e($settings['site_tagline'] ?? '') ?>">
                     </label>
                 </div>
-                <div class="admin-form-row">
-                    <label>Primary Color
-                        <input type="color" name="primary_color" value="<?= e($settings['primary_color'] ?? '#e63946') ?>">
-                    </label>
-                    <label>Accent Color
-                        <input type="color" name="accent_color" value="<?= e($settings['accent_color'] ?? '#457b9d') ?>">
-                    </label>
+                <div class="admin-form-row" style="align-items:stretch">
+                    <?php designColorPicker('primary_color', 'Primary Color', 'Buttons, links, highlights, prices', $settings['primary_color'] ?? '#e63946', '#e63946') ?>
+                    <?php designColorPicker('accent_color',  'Accent Color',  'Secondary actions, hover states',   $settings['accent_color']  ?? '#457b9d', '#457b9d') ?>
                 </div>
                 <label>Search Bar Placeholder Texts <small style="font-weight:400;color:#888">(one per line — they cycle with a typing animation)</small>
                     <textarea name="search_placeholders" rows="5" placeholder="Search personalised gifts…&#10;Try &quot;photo frame&quot; or &quot;mug&quot;…&#10;Birthday gifts for her…&#10;Anniversary surprises…"><?= e($settings['search_placeholders'] ?? "Search personalised gifts…\nTry \"photo frame\" or \"mug\"…\nBirthday gifts for her…\nAnniversary surprises…\nCustom name gifts…") ?></textarea>
@@ -78,6 +195,87 @@ foreach (($categories ?? []) as $cat) {
                 </label>
                 <img id="logoPreview" src="<?= asset($settings['logo_path'] ?? '/images/GDKD logo.png') ?>" style="height:50px;margin-bottom:14px;">
                 <button type="submit" class="admin-btn admin-btn-primary">Save Branding</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Page Theme -->
+    <div class="admin-tab-pane" data-pane="theme">
+        <div class="admin-card">
+            <p style="color:#888;margin-bottom:20px">Control the full site colour palette. Changes apply globally to every page and component. Use <strong>Reset</strong> on any swatch to restore its factory default.</p>
+            <?php
+            $themeDefaults = [
+                'primary_color' => ['default' => '#e63946', 'label' => 'Primary Color',               'hint' => 'Buttons, links, highlights, prices'],
+                'accent_color'  => ['default' => '#457b9d', 'label' => 'Accent Color',                'hint' => 'Secondary actions, hover states'],
+                'color_text'    => ['default' => '#1d1d1f', 'label' => 'Body Text Color',             'hint' => 'Main readable text across all pages'],
+                'color_muted'   => ['default' => '#6b7280', 'label' => 'Muted / Secondary Text',      'hint' => 'Descriptions, placeholders, metadata'],
+                'color_bg'      => ['default' => '#ffffff', 'label' => 'Page Background',             'hint' => 'Main site background colour'],
+                'color_bg_alt'  => ['default' => '#f8f9fb', 'label' => 'Alternate Section Background','hint' => 'Alternating section backgrounds, cards'],
+                'color_border'  => ['default' => '#e5e7eb', 'label' => 'Border / Divider Color',      'hint' => 'Card borders, input outlines, dividers'],
+            ];
+            ?>
+            <form method="post" action="<?= url('/admin/design/save') ?>" class="admin-form" id="themeForm">
+                <?= csrfField() ?>
+                <input type="hidden" name="section" value="page_theme">
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px">
+                <?php foreach ($themeDefaults as $key => $meta):
+                    $current = $settings[$key] ?? $meta['default'];
+                ?>
+                <div class="gdd-theme-row" style="background:#f8f9fb;border:1px solid #e5e7eb;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                        <div>
+                            <div style="font-weight:600;font-size:14px"><?= e($meta['label']) ?></div>
+                            <div style="font-size:12px;color:#888;margin-top:1px"><?= e($meta['hint']) ?></div>
+                        </div>
+                        <button type="button"
+                            onclick="document.getElementById('inp_<?= $key ?>').value='<?= $meta['default'] ?>';document.getElementById('hex_<?= $key ?>').value='<?= $meta['default'] ?>';document.getElementById('swatch_<?= $key ?>').style.background='<?= $meta['default'] ?>'"
+                            style="font-size:11px;padding:3px 9px;border:1px solid #d1d5db;border-radius:6px;background:#fff;color:#666;cursor:pointer;white-space:nowrap;flex-shrink:0"
+                            title="Reset to factory default: <?= $meta['default'] ?>">
+                            ↺ Reset
+                        </button>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px">
+                        <!-- Large visible colour swatch that opens the picker -->
+                        <div id="swatch_<?= $key ?>"
+                             style="width:44px;height:44px;border-radius:8px;border:2px solid #d1d5db;cursor:pointer;flex-shrink:0;background:<?= e($current) ?>"
+                             onclick="document.getElementById('inp_<?= $key ?>').click()"
+                             title="Click to pick colour"></div>
+                        <!-- Hidden native colour picker -->
+                        <input type="color" id="inp_<?= $key ?>" name="<?= $key ?>"
+                               value="<?= e($current) ?>"
+                               style="position:absolute;opacity:0;width:0;height:0;pointer-events:none"
+                               oninput="document.getElementById('hex_<?= $key ?>').value=this.value;document.getElementById('swatch_<?= $key ?>').style.background=this.value">
+                        <!-- Editable hex text box -->
+                        <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+                            <input type="text" id="hex_<?= $key ?>"
+                                   value="<?= e($current) ?>"
+                                   maxlength="7"
+                                   placeholder="#rrggbb"
+                                   style="font-family:monospace;font-size:14px;padding:7px 10px;border:1px solid #d1d5db;border-radius:7px;width:100%;box-sizing:border-box"
+                                   oninput="var v=this.value;if(/^#[0-9a-fA-F]{6}$/.test(v)){document.getElementById('inp_<?= $key ?>').value=v;document.getElementById('swatch_<?= $key ?>').style.background=v;}"
+                                   onblur="var v=this.value;if(!/^#[0-9a-fA-F]{6}$/.test(v)){this.value=document.getElementById('inp_<?= $key ?>').value;}">
+                            <div style="font-size:11px;color:#aaa">Default: <code><?= $meta['default'] ?></code></div>
+                        </div>
+                    </div>
+                </div>
+                <?php endforeach; ?>
+                </div>
+
+                <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                    <button type="submit" class="admin-btn admin-btn-primary">Save Theme</button>
+                    <button type="button" class="admin-btn" style="background:#fff;border:1px solid #d1d5db;color:#555"
+                        onclick="if(confirm('Reset ALL colours to factory defaults?')){
+                            <?php foreach ($themeDefaults as $key => $meta): ?>
+                            document.getElementById('inp_<?= $key ?>').value='<?= $meta['default'] ?>';
+                            document.getElementById('hex_<?= $key ?>').value='<?= $meta['default'] ?>';
+                            document.getElementById('swatch_<?= $key ?>').style.background='<?= $meta['default'] ?>';
+                            <?php endforeach; ?>
+                        }">
+                        ↺ Reset All to Defaults
+                    </button>
+                </div>
+                <p style="font-size:12px;color:#aaa;margin-top:10px">Note: Primary &amp; Accent Color are also editable under the Branding tab — changes here sync automatically.</p>
             </form>
         </div>
     </div>
@@ -416,6 +614,273 @@ foreach (($categories ?? []) as $cat) {
         </div>
     </div>
 
+    <!-- Marquee Strip -->
+    <div class="admin-tab-pane" data-pane="marquee">
+        <div class="admin-card">
+            <form method="post" action="<?= url('/admin/design/save') ?>" class="admin-form">
+                <?= csrfField() ?>
+                <input type="hidden" name="section" value="marquee_strip">
+                <label class="admin-checkbox">
+                    <input type="checkbox" name="is_active" value="1" <?= !empty($marqueeSection['is_active']) ? 'checked' : '' ?>>
+                    Show scrolling marquee strip
+                </label>
+                <label>Marquee Text <small style="font-weight:400;color:#888">HTML allowed: use <code>&lt;em&gt;•&lt;/em&gt;</code> for styled dots</small>
+                    <textarea name="text" rows="3"><?= htmlspecialchars($marqueeSection['text'] ?? '🎁 PERSONALISED PHOTO FRAMES <em>•</em> ENGRAVED JEWELLERY <em>•</em> CUSTOM MUGS &amp; CUSHIONS <em>•</em> VIDEO &amp; PHOTO QR GIFTS <em>•</em> SAME-DAY DISPATCH <em>•</em> COD AVAILABLE <em>•</em>') ?></textarea>
+                </label>
+                <div class="admin-form-row" style="align-items:stretch">
+                    <?php designColorPicker('bg_color',   'Background Color', 'Strip background — default is near-black (#1d1d1f)', $marqueeSection['bg_color']   ?: '#1d1d1f', '#1d1d1f') ?>
+                    <?php designColorPicker('text_color', 'Text Color',       'Strip text — default is white (#ffffff)',             $marqueeSection['text_color'] ?: '#ffffff', '#ffffff') ?>
+                </div>
+                <div class="admin-form-row">
+                    <label>Font Size (px)
+                        <input type="number" name="font_size" value="<?= e($marqueeSection['font_size'] ?? '14') ?>" min="10" max="32" step="1">
+                        <span class="admin-label-hint">Default: 14 px</span>
+                    </label>
+                    <label>Font Weight
+                        <select name="font_weight">
+                            <?php foreach (['400' => 'Normal (400)', '500' => 'Medium (500)', '600' => 'Semi-Bold (600)', '700' => 'Bold (700) — default', '800' => 'Extra-Bold (800)'] as $val => $lbl): ?>
+                                <option value="<?= $val ?>" <?= ($marqueeSection['font_weight'] ?? '700') === $val ? 'selected' : '' ?>><?= $lbl ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </label>
+                    <label>Scroll Speed <span class="admin-label-hint">Seconds per full loop — lower = faster. Default: 26 s</span>
+                        <input type="number" name="speed" value="<?= e($marqueeSection['speed'] ?? '26') ?>" min="5" max="120" step="1">
+                    </label>
+                </div>
+                <button type="submit" class="admin-btn admin-btn-primary">Save Marquee Strip</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Why Choose Us -->
+    <div class="admin-tab-pane" data-pane="why">
+        <div class="admin-card">
+            <form method="post" action="<?= url('/admin/design/save') ?>" class="admin-form">
+                <?= csrfField() ?>
+                <input type="hidden" name="section" value="why_choose_us">
+                <label class="admin-checkbox">
+                    <input type="checkbox" name="is_active" value="1" <?= (!isset($whyChoose['is_active']) || !empty($whyChoose['is_active'])) ? 'checked' : '' ?>>
+                    Show "Why Choose Us" section on homepage
+                </label>
+
+                <h4 class="gdd-section-subtitle">Section Content</h4>
+                <div class="admin-form-row">
+                    <label>Kicker
+                        <input type="text" name="kicker" value="<?= e($whyChoose['kicker'] ?? 'Why GiftDekeDekho') ?>">
+                    </label>
+                    <label>Heading
+                        <input type="text" name="heading" value="<?= e($whyChoose['heading'] ?? 'Crafted with care, delivered with a smile') ?>">
+                    </label>
+                </div>
+                <label>Subtext
+                    <input type="text" name="subtext" value="<?= e($whyChoose['subtext'] ?? 'Every order is handmade-to-order — no two gifts are exactly alike') ?>">
+                </label>
+
+                <?php designAppearancePanel($whyChoose['style'] ?? []); ?>
+
+                <h4 class="gdd-section-subtitle">Card Styling</h4>
+                <div class="admin-form-row" style="align-items:stretch">
+                    <?php designAlignSelect('card_align', 'Card Text Alignment', $whyChoose['card_align'] ?? 'left', 'left'); ?>
+                    <?php designColorPicker('card_title_color', 'Card Title Color', 'The bold heading on each card', $whyChoose['card_title_color'] ?? '#1d1d1f', '#1d1d1f'); ?>
+                    <?php designColorPicker('card_text_color', 'Card Text Color', 'The description text on each card', $whyChoose['card_text_color'] ?? '#6b7280', '#6b7280'); ?>
+                </div>
+
+                <h4 class="gdd-section-subtitle">Cards</h4>
+                <div id="uspRepeater">
+                    <?php foreach (($whyChoose['items'] ?? []) as $u): ?>
+                        <div class="admin-option-row">
+                            <div class="admin-form-row">
+                                <label>Icon (emoji)<input type="text" name="usp_icon[]" value="<?= e($u['icon'] ?? '') ?>" style="max-width:90px"></label>
+                                <label>Title<input type="text" name="usp_title[]" value="<?= e($u['title'] ?? '') ?>"></label>
+                            </div>
+                            <label>Description<input type="text" name="usp_desc[]" value="<?= e($u['desc'] ?? '') ?>"></label>
+                            <button type="button" class="admin-btn admin-btn-sm admin-btn-danger" data-repeater-remove>Remove</button>
+                        </div>
+                    <?php endforeach; ?>
+                    <div class="admin-option-row" data-repeater-template style="display:none;">
+                        <div class="admin-form-row">
+                            <label>Icon (emoji)<input type="text" name="usp_icon[__INDEX__]" style="max-width:90px"></label>
+                            <label>Title<input type="text" name="usp_title[__INDEX__]"></label>
+                        </div>
+                        <label>Description<input type="text" name="usp_desc[__INDEX__]"></label>
+                        <button type="button" class="admin-btn admin-btn-sm admin-btn-danger" data-repeater-remove>Remove</button>
+                    </div>
+                </div>
+                <button type="button" class="admin-btn" data-repeater-add="#uspRepeater">+ Add Card</button>
+                <div class="admin-mt"><button type="submit" class="admin-btn admin-btn-primary">Save Why Choose Us</button></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Shop by Category -->
+    <div class="admin-tab-pane" data-pane="shopcat">
+        <div class="admin-card">
+            <form method="post" action="<?= url('/admin/design/save') ?>" class="admin-form" id="shopByCatForm">
+                <?= csrfField() ?>
+                <input type="hidden" name="section" value="shop_by_category">
+                <label class="admin-checkbox">
+                    <input type="checkbox" name="is_active" value="1" <?= !empty($catSection['is_active']) ? 'checked' : '' ?>>
+                    Show "Shop by Category" section
+                </label>
+
+                <h4 class="gdd-section-subtitle">Section Content</h4>
+                <div class="admin-form-row">
+                    <label>Kicker (small label above heading)
+                        <input type="text" name="kicker" value="<?= e($catSection['kicker'] ?? 'Browse') ?>">
+                    </label>
+                    <label>Heading
+                        <input type="text" name="heading" value="<?= e($catSection['heading'] ?? 'Shop by Category') ?>">
+                    </label>
+                </div>
+                <label>Subtext
+                    <input type="text" name="subtext" value="<?= e($catSection['subtext'] ?? 'Find the perfect personalised gift for every occasion') ?>">
+                </label>
+
+                <?php
+                // Backwards-compat: migrate legacy top-level style keys into the style block
+                $catStyle = $catSection['style'] ?? [];
+                if (!isset($catStyle['bg_color']) && isset($catSection['bg_color'])) {
+                    $catStyle['bg_color'] = $catSection['bg_color'] === 'var(--color-bg-alt)' ? '#f8f9fb' : $catSection['bg_color'];
+                }
+                if (!isset($catStyle['align']) && isset($catSection['heading_align'])) {
+                    $catStyle['align'] = $catSection['heading_align'];
+                }
+                if (empty($catStyle['bg_color'])) $catStyle['bg_color'] = '#f8f9fb';
+                designAppearancePanel($catStyle);
+                ?>
+
+                <h4 class="gdd-section-subtitle">Category Card Labels</h4>
+                <div class="admin-form-row" style="align-items:stretch">
+                    <?php designAlignSelect('name_align', 'Label Text Alignment', $catSection['name_align'] ?? 'left', 'left'); ?>
+                    <?php designColorPicker('name_color', 'Label Text Color', 'Category name on card overlay — default white', $catSection['name_color'] ?? '#ffffff', '#ffffff') ?>
+                </div>
+                <div class="admin-form-row" style="align-items:stretch">
+                    <?php designNumberField('name_size', 'Label Font Size', 'Pixels — default 15', $catSection['name_size'] ?? '15', '15', 10, 28); ?>
+                    <label>Label Font Weight <span class="admin-label-hint">Default: Bold (700)</span>
+                        <select name="name_weight">
+                            <?php foreach (['400' => 'Normal (400)', '500' => 'Medium (500)', '600' => 'Semi-Bold (600)', '700' => 'Bold (700) — default', '800' => 'Extra-Bold (800)'] as $val => $lbl): ?>
+                                <option value="<?= $val ?>" <?= ($catSection['name_weight'] ?? '700') === $val ? 'selected' : '' ?>><?= $lbl ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </label>
+                    <?php designColorPicker('overlay_color', 'Card Overlay Color', 'Gradient shade behind the label — default black', $catSection['overlay_color'] ?? '#000000', '#000000') ?>
+                </div>
+
+                <h4 class="gdd-section-subtitle">Category Display Order</h4>
+                <p style="color:#888;font-size:13px;margin-bottom:12px">Drag to reorder. All active categories appear; hidden ones are listed last.</p>
+                <div id="catSortList" style="display:flex;flex-direction:column;gap:6px;max-width:480px">
+                    <?php
+                    // Build ordered list: admin-defined order first, then remaining
+                    $adminOrder = $catSection['category_order'] ?? [];
+                    $catMap = [];
+                    foreach (($categories ?? []) as $c) { $catMap[$c['slug']] = $c; }
+                    $orderedForAdmin = [];
+                    foreach ($adminOrder as $slug) {
+                        if (isset($catMap[$slug])) { $orderedForAdmin[] = $catMap[$slug]; unset($catMap[$slug]); }
+                    }
+                    foreach ($catMap as $c) { $orderedForAdmin[] = $c; }
+                    ?>
+                    <?php foreach ($orderedForAdmin as $c): ?>
+                    <div class="cat-sort-item" data-slug="<?= e($c['slug']) ?>" style="display:flex;align-items:center;gap:10px;background:#f5f5f7;border:1px solid #e5e7eb;border-radius:8px;padding:8px 12px;cursor:grab;user-select:none">
+                        <span style="color:#aaa;font-size:18px">⠿</span>
+                        <img src="<?= e(asset($c['image'] ?: '/images/GDKD logo.png')) ?>" style="width:32px;height:32px;border-radius:6px;object-fit:cover">
+                        <span style="flex:1;font-weight:500"><?= e($c['name']) ?></span>
+                        <input type="hidden" name="cat_order[]" value="<?= e($c['slug']) ?>">
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+                <script>
+                (function() {
+                    var list = document.getElementById('catSortList');
+                    if (!list) return;
+                    var dragging = null;
+                    list.addEventListener('dragstart', function(e) {
+                        dragging = e.target.closest('.cat-sort-item');
+                        if (dragging) { dragging.style.opacity = '.4'; e.dataTransfer.effectAllowed = 'move'; }
+                    });
+                    list.addEventListener('dragend', function() {
+                        if (dragging) dragging.style.opacity = '';
+                        dragging = null;
+                        // Re-sync hidden inputs to current DOM order
+                        list.querySelectorAll('.cat-sort-item').forEach(function(item) {
+                            item.querySelector('input[name="cat_order[]"]').value = item.dataset.slug;
+                        });
+                    });
+                    list.addEventListener('dragover', function(e) {
+                        e.preventDefault();
+                        var target = e.target.closest('.cat-sort-item');
+                        if (target && target !== dragging) {
+                            var rect = target.getBoundingClientRect();
+                            var after = e.clientY > rect.top + rect.height / 2;
+                            list.insertBefore(dragging, after ? target.nextSibling : target);
+                        }
+                    });
+                    list.querySelectorAll('.cat-sort-item').forEach(function(item) {
+                        item.setAttribute('draggable', 'true');
+                    });
+                })();
+                </script>
+
+                <div style="margin-top:20px">
+                    <button type="submit" class="admin-btn admin-btn-primary">Save Shop by Category</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- How It Works -->
+    <div class="admin-tab-pane" data-pane="howitworks">
+        <div class="admin-card">
+            <form method="post" action="<?= url('/admin/design/save') ?>" class="admin-form">
+                <?= csrfField() ?>
+                <input type="hidden" name="section" value="how_it_works">
+                <label class="admin-checkbox">
+                    <input type="checkbox" name="is_active" value="1" <?= (!isset($howItWorks['is_active']) || !empty($howItWorks['is_active'])) ? 'checked' : '' ?>>
+                    Show "How It Works" section on homepage
+                </label>
+
+                <h4 class="gdd-section-subtitle">Section Content</h4>
+                <div class="admin-form-row">
+                    <label>Kicker
+                        <input type="text" name="kicker" value="<?= e($howItWorks['kicker'] ?? 'Simple Process') ?>">
+                    </label>
+                    <label>Heading
+                        <input type="text" name="heading" value="<?= e($howItWorks['heading'] ?? 'From idea to doorstep in 4 easy steps') ?>">
+                    </label>
+                </div>
+                <label>Subtext <span class="admin-label-hint">Leave blank to hide</span>
+                    <input type="text" name="subtext" value="<?= e($howItWorks['subtext'] ?? '') ?>">
+                </label>
+
+                <?php designAppearancePanel($howItWorks['style'] ?? []); ?>
+
+                <h4 class="gdd-section-subtitle">Step Card Styling</h4>
+                <div class="admin-form-row" style="align-items:stretch">
+                    <?php designColorPicker('card_title_color', 'Step Title Color', 'The bold title on each step', $howItWorks['card_title_color'] ?? '#1d1d1f', '#1d1d1f'); ?>
+                    <?php designColorPicker('card_text_color', 'Step Text Color', 'The description on each step', $howItWorks['card_text_color'] ?? '#6b7280', '#6b7280'); ?>
+                </div>
+
+                <h4 class="gdd-section-subtitle">Steps</h4>
+                <div id="stepRepeater">
+                    <?php foreach (($howItWorks['items'] ?? []) as $s): ?>
+                        <div class="admin-option-row">
+                            <label>Step Title<input type="text" name="step_title[]" value="<?= e($s['title'] ?? '') ?>"></label>
+                            <label>Step Description<input type="text" name="step_desc[]" value="<?= e($s['desc'] ?? '') ?>"></label>
+                            <button type="button" class="admin-btn admin-btn-sm admin-btn-danger" data-repeater-remove>Remove</button>
+                        </div>
+                    <?php endforeach; ?>
+                    <div class="admin-option-row" data-repeater-template style="display:none;">
+                        <label>Step Title<input type="text" name="step_title[__INDEX__]"></label>
+                        <label>Step Description<input type="text" name="step_desc[__INDEX__]"></label>
+                        <button type="button" class="admin-btn admin-btn-sm admin-btn-danger" data-repeater-remove>Remove</button>
+                    </div>
+                </div>
+                <button type="button" class="admin-btn" data-repeater-add="#stepRepeater">+ Add Step</button>
+                <div class="admin-mt"><button type="submit" class="admin-btn admin-btn-primary">Save How It Works</button></div>
+            </form>
+        </div>
+    </div>
+
     <!-- Promo strip -->
     <div class="admin-tab-pane" data-pane="promo">
         <div class="admin-card">
@@ -440,14 +905,24 @@ foreach (($categories ?? []) as $cat) {
             <form method="post" action="<?= url('/admin/design/save') ?>" class="admin-form">
                 <?= csrfField() ?>
                 <input type="hidden" name="section" value="featured_products_section">
-                <label>Section Heading
-                    <input type="text" name="heading" value="<?= e($featuredSection['heading'] ?? 'Featured Gifts') ?>">
-                </label>
                 <label class="admin-checkbox">
                     <input type="checkbox" name="is_active" value="1" <?= !empty($featuredSection['is_active']) ? 'checked' : '' ?>>
                     Show featured products on homepage
                 </label>
-                <button type="submit" class="admin-btn admin-btn-primary">Save</button>
+                <h4 class="gdd-section-subtitle">Section Content</h4>
+                <div class="admin-form-row">
+                    <label>Kicker
+                        <input type="text" name="kicker" value="<?= e($featuredSection['kicker'] ?? 'Trending Now') ?>">
+                    </label>
+                    <label>Heading
+                        <input type="text" name="heading" value="<?= e($featuredSection['heading'] ?? 'Featured Gifts') ?>">
+                    </label>
+                </div>
+                <label>Subtext
+                    <input type="text" name="subtext" value="<?= e($featuredSection['subtext'] ?? 'Hand-picked favourites our customers love') ?>">
+                </label>
+                <?php designAppearancePanel($featuredSection['style'] ?? ['bg_color' => '#f8f9fb']); ?>
+                <button type="submit" class="admin-btn admin-btn-primary">Save Featured Section</button>
             </form>
         </div>
     </div>
@@ -501,6 +976,7 @@ foreach (($categories ?? []) as $cat) {
                     <p style="font-size:12px;color:#888;margin:4px 0 14px">No image uploaded — the animated phone/QR graphic will be shown instead.</p>
                 <?php endif; ?>
                 <input type="hidden" name="sig_image_existing" value="<?= e($sigFeature['image'] ?? '') ?>">
+                <?php designAppearancePanel($sigFeature['style'] ?? [], true, true); ?>
                 <label class="admin-checkbox">
                     <input type="checkbox" name="is_active" value="1" <?= (!isset($sigFeature['is_active']) || !empty($sigFeature['is_active'])) ? 'checked' : '' ?>>
                     Show Signature Feature section on homepage
@@ -547,6 +1023,7 @@ foreach (($categories ?? []) as $cat) {
                     </div>
                 </div>
                 <button type="button" class="admin-btn" data-repeater-add="#badgesRepeater">+ Add Badge</button>
+                <?php designAppearancePanel($badges['style'] ?? ['bg_color' => '#f8f9fb'], true, false); ?>
                 <div class="admin-mt"><button type="submit" class="admin-btn admin-btn-primary">Save Trust Badges</button></div>
             </form>
         </div>
@@ -558,13 +1035,19 @@ foreach (($categories ?? []) as $cat) {
             <form method="post" action="<?= url('/admin/design/save') ?>" class="admin-form">
                 <?= csrfField() ?>
                 <input type="hidden" name="section" value="testimonials_section">
-                <label>Section Heading
-                    <input type="text" name="heading" value="<?= e($testimonials['heading'] ?? 'What Our Customers Say') ?>">
-                </label>
                 <label class="admin-checkbox">
                     <input type="checkbox" name="is_active" value="1" <?= !empty($testimonials['is_active']) ? 'checked' : '' ?>>
                     Show testimonials
                 </label>
+                <div class="admin-form-row">
+                    <label>Kicker
+                        <input type="text" name="kicker" value="<?= e($testimonials['kicker'] ?? 'Loved By Many') ?>">
+                    </label>
+                    <label>Section Heading
+                        <input type="text" name="heading" value="<?= e($testimonials['heading'] ?? 'What Our Customers Say') ?>">
+                    </label>
+                </div>
+                <?php designAppearancePanel($testimonials['style'] ?? [], true, false); ?>
                 <div id="testiRepeater">
                     <?php foreach (($testimonials['items'] ?? []) as $t): ?>
                         <div class="admin-option-row">
@@ -618,6 +1101,8 @@ foreach (($categories ?? []) as $cat) {
                     <input type="checkbox" name="is_active" value="1" <?= (!isset($igGallery['is_active']) || !empty($igGallery['is_active'])) ? 'checked' : '' ?>> Show this section on homepage
                 </label>
 
+                <?php designAppearancePanel($igGallery['style'] ?? ['bg_color' => '#f8f9fb']); ?>
+
                 <hr style="margin:1.5rem 0">
                 <p style="font-weight:600;margin-bottom:.75rem">Gallery Photos (up to 6 — square images work best)</p>
 
@@ -642,6 +1127,55 @@ foreach (($categories ?? []) as $cat) {
                 <?php endfor; ?>
 
                 <button type="submit" class="admin-btn admin-btn-primary admin-mt">Save Gallery</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Newsletter -->
+    <div class="admin-tab-pane" data-pane="newsletter">
+        <div class="admin-card">
+            <form method="post" action="<?= url('/admin/design/save') ?>" class="admin-form">
+                <?= csrfField() ?>
+                <input type="hidden" name="section" value="newsletter">
+                <label class="admin-checkbox">
+                    <input type="checkbox" name="is_active" value="1" <?= (!isset($newsletter['is_active']) || !empty($newsletter['is_active'])) ? 'checked' : '' ?>>
+                    Show newsletter / CTA section on homepage
+                </label>
+
+                <h4 class="gdd-section-subtitle">Content</h4>
+                <label>Heading
+                    <input type="text" name="heading" value="<?= e($newsletter['heading'] ?? 'Get 10% off your first customised gift 🎉') ?>">
+                </label>
+                <label>Description
+                    <textarea name="description" rows="2"><?= e($newsletter['description'] ?? 'Subscribe for festive offers, new design drops, and gifting inspiration — straight to your inbox.') ?></textarea>
+                </label>
+                <label>Button Text
+                    <input type="text" name="button_text" value="<?= e($newsletter['button_text'] ?? 'Subscribe') ?>">
+                </label>
+
+                <h4 class="gdd-section-subtitle">Styling</h4>
+                <div class="admin-form-row" style="align-items:stretch">
+                    <?php designColorPicker('heading_color', 'Heading Color', 'Default white (sits on coloured panel)', $newsletter['heading_color'] ?? '#ffffff', '#ffffff'); ?>
+                    <?php designColorPicker('text_color', 'Description Text Color', 'Default white', $newsletter['text_color'] ?? '#ffffff', '#ffffff'); ?>
+                    <?php
+                    $nlBg = trim((string)($newsletter['bg_color'] ?? ''));
+                    designColorPicker('bg_color', 'Panel Background', 'Solid colour — only used if gradient is off', $nlBg ?: '#e63946', '#e63946');
+                    ?>
+                </div>
+                <label class="admin-checkbox" style="margin-top:4px">
+                    <input type="checkbox" id="nlGradient" <?= $nlBg === '' ? 'checked' : '' ?>>
+                    Use the theme gradient for the panel background (default)
+                </label>
+                <p class="admin-help">When ticked, the panel keeps the brand gradient and the solid colour above is ignored.</p>
+                <script>
+                document.querySelector('[name="section"][value="newsletter"]').closest('form').addEventListener('submit', function() {
+                    if (document.getElementById('nlGradient').checked) {
+                        // Disable so the field is omitted entirely → server stores empty (gradient)
+                        this.querySelector('[name="bg_color"]').disabled = true;
+                    }
+                });
+                </script>
+                <div class="admin-mt"><button type="submit" class="admin-btn admin-btn-primary">Save Newsletter</button></div>
             </form>
         </div>
     </div>
