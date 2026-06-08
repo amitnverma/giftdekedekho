@@ -144,6 +144,42 @@ class AdminDesignController extends BaseController
                 ]);
                 break;
 
+            case 'instagram_gallery':
+                $existingIg = $this->sectionContent('instagram_gallery');
+                $existingItems = $existingIg['items'] ?? [];
+                $files = $_FILES['ig_image'] ?? null;
+                $captions = (array)($_POST['ig_caption'] ?? []);
+                $links    = (array)($_POST['ig_link'] ?? []);
+                $existingImages = (array)($_POST['ig_existing'] ?? []);
+                $items = [];
+                for ($i = 0; $i < 6; $i++) {
+                    $image = trim((string)($existingImages[$i] ?? ($existingItems[$i]['image'] ?? '')));
+                    if ($files && isset($files['name'][$i]) && $files['error'][$i] === UPLOAD_ERR_OK) {
+                        $singleFile = [
+                            'name'     => $files['name'][$i],
+                            'type'     => $files['type'][$i],
+                            'tmp_name' => $files['tmp_name'][$i],
+                            'error'    => $files['error'][$i],
+                            'size'     => $files['size'][$i],
+                        ];
+                        $up = $this->handleImageUpload($singleFile, 'gallery', 'ig_' . $i);
+                        if ($up) $image = $up;
+                    }
+                    $items[] = [
+                        'image'   => $image,
+                        'caption' => trim((string)($captions[$i] ?? '')),
+                        'link'    => trim((string)($links[$i] ?? '')),
+                    ];
+                }
+                $this->saveSection('instagram_gallery', [
+                    'kicker'    => trim((string)$this->input('kicker', '#GiftDekeDekhoMoments')),
+                    'heading'   => trim((string)$this->input('heading', 'Real gifts, real smiles')),
+                    'subtext'   => trim((string)$this->input('subtext', '')),
+                    'is_active' => $this->input('is_active') ? true : false,
+                    'items'     => $items,
+                ]);
+                break;
+
             case 'footer':
                 $settings->setMany([
                     'footer_copyright' => trim((string)$this->input('footer_copyright')),

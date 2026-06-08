@@ -5,6 +5,7 @@ $featuredSection = $sections['featured_products_section'] ?? [];
 $badges = $sections['trust_badges'] ?? ['items' => []];
 $testimonials = $sections['testimonials_section'] ?? ['items' => []];
 $topbarButtons = $sections['topbar_buttons'] ?? ['items' => []];
+$igGallery = $sections['instagram_gallery'] ?? ['items' => []];
 ?>
 <div data-tab-container>
     <div class="admin-tabs">
@@ -15,6 +16,7 @@ $topbarButtons = $sections['topbar_buttons'] ?? ['items' => []];
         <span class="admin-tab" data-tab="featured">Featured Section</span>
         <span class="admin-tab" data-tab="badges">Trust Badges</span>
         <span class="admin-tab" data-tab="testimonials">Testimonials</span>
+        <span class="admin-tab" data-tab="instagram">Instagram Gallery</span>
         <span class="admin-tab" data-tab="footer">Footer &amp; Social</span>
         <span class="admin-tab" data-tab="about">About Us</span>
     </div>
@@ -293,6 +295,54 @@ $topbarButtons = $sections['topbar_buttons'] ?? ['items' => []];
     </div>
 
     <!-- Footer -->
+    <!-- ── Instagram / UGC Gallery ── -->
+    <div class="admin-tab-pane" data-pane="instagram">
+        <div class="admin-card">
+            <form method="post" action="<?= url('/admin/design/save') ?>" class="admin-form" enctype="multipart/form-data">
+                <?= csrfField() ?>
+                <input type="hidden" name="section" value="instagram_gallery">
+
+                <label>Section Hashtag / Kicker
+                    <input type="text" name="kicker" value="<?= e($igGallery['kicker'] ?? '#GiftDekeDekhoMoments') ?>">
+                </label>
+                <label>Section Heading
+                    <input type="text" name="heading" value="<?= e($igGallery['heading'] ?? 'Real gifts, real smiles') ?>">
+                </label>
+                <label>Sub-text
+                    <input type="text" name="subtext" value="<?= e($igGallery['subtext'] ?? 'Tag @giftdekedekho on Instagram for a chance to be featured here') ?>">
+                </label>
+                <label class="admin-toggle-label">
+                    <input type="checkbox" name="is_active" value="1" <?= (!isset($igGallery['is_active']) || !empty($igGallery['is_active'])) ? 'checked' : '' ?>> Show this section on homepage
+                </label>
+
+                <hr style="margin:1.5rem 0">
+                <p style="font-weight:600;margin-bottom:.75rem">Gallery Photos (up to 6 — square images work best)</p>
+
+                <?php
+                $igItems = $igGallery['items'] ?? [];
+                for ($i = 0; $i < 6; $i++):
+                    $item = $igItems[$i] ?? [];
+                    $existing = $item['image'] ?? '';
+                    $caption  = $item['caption'] ?? '';
+                    $link     = $item['link'] ?? '';
+                ?>
+                <div class="admin-card" style="padding:1rem;margin-bottom:1rem;background:#f8f8f8">
+                    <p style="font-weight:600;margin-bottom:.5rem">Photo <?= $i + 1 ?></p>
+                    <?php if (!empty($existing)): ?>
+                        <img src="<?= e($existing) ?>" style="height:90px;width:90px;object-fit:cover;border-radius:6px;margin-bottom:.5rem" onerror="this.style.display='none'">
+                    <?php endif; ?>
+                    <input type="hidden" name="ig_existing[<?= $i ?>]" value="<?= e($existing) ?>">
+                    <label>Upload Image <input type="file" name="ig_image[<?= $i ?>]" accept="image/*"></label>
+                    <label>Caption <input type="text" name="ig_caption[<?= $i ?>]" value="<?= e($caption) ?>" placeholder="e.g. @username"></label>
+                    <label>Link (optional) <input type="text" name="ig_link[<?= $i ?>]" value="<?= e($link) ?>" placeholder="https://instagram.com/p/..."></label>
+                </div>
+                <?php endfor; ?>
+
+                <button type="submit" class="admin-btn admin-btn-primary admin-mt">Save Gallery</button>
+            </form>
+        </div>
+    </div>
+
     <div class="admin-tab-pane" data-pane="footer">
         <div class="admin-card">
             <form method="post" action="<?= url('/admin/design/save') ?>" class="admin-form">

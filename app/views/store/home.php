@@ -4,6 +4,7 @@ $promo = $sections['promo_strip'] ?? [];
 $featuredSection = $sections['featured_products_section'] ?? [];
 $testimonials = $sections['testimonials_section'] ?? [];
 $badges = $sections['trust_badges'] ?? [];
+$igGallery = $sections['instagram_gallery'] ?? [];
 
 $heroHeadline = $hero['headline'] ?? '';
 $heroSub = $hero['subheadline'] ?? 'Photo frames, engraved keepsakes, custom mugs & video-message gifts — designed by you, crafted by us, delivered with love anywhere in India.';
@@ -254,29 +255,49 @@ $heroRightPhoto = !empty($hero['transform_right_photo']) ? asset($hero['transfor
   </div>
 </section>
 
-<!-- =========================================================
-     #UNWRAPPED GALLERY — UGC / Instagram-style strip
-     PLACEHOLDER: 6 square (500×500) real customer-unboxing photos
-     or styled product shots — drop files into /images/ and update
-     the src attributes below, or wire up an Instagram feed API later.
-     ========================================================= -->
+<?php if (!isset($igGallery['is_active']) || !empty($igGallery['is_active'])): ?>
 <section class="section" style="background:var(--color-bg-alt)">
   <div class="container">
     <div class="section-heading reveal">
-      <span class="gdd-kicker">#GiftDekeDekhoMoments</span>
-      <h2>Real gifts, real smiles</h2>
-      <p>Tag <strong>@giftdekedekho</strong> on Instagram for a chance to be featured here</p>
+      <?php if (!empty($igGallery['kicker'])): ?>
+        <span class="gdd-kicker"><?= e($igGallery['kicker']) ?></span>
+      <?php else: ?>
+        <span class="gdd-kicker">#GiftDekeDekhoMoments</span>
+      <?php endif; ?>
+      <h2><?= e($igGallery['heading'] ?? 'Real gifts, real smiles') ?></h2>
+      <?php if (!empty($igGallery['subtext'])): ?>
+        <p><?= e($igGallery['subtext']) ?></p>
+      <?php else: ?>
+        <p>Tag <strong>@giftdekedekho</strong> on Instagram for a chance to be featured here</p>
+      <?php endif; ?>
     </div>
+    <?php
+      $igItems = $igGallery['items'] ?? [];
+      $hasPhotos = !empty(array_filter(array_column($igItems, 'image')));
+    ?>
     <div class="gdd-gallery-grid reveal-stagger reveal">
-      <?php for ($i = 1; $i <= 6; $i++): ?>
-        <a href="#" title="Customer moment #<?= $i ?> — placeholder, replace with a real UGC photo">
-          <img src="<?= e(asset('/images/GDKD logo.png')) ?>" alt="Customer moment placeholder <?= $i ?>" loading="lazy" style="object-fit:contain;background:#fff;padding:30px">
-          <span class="tag">📷 Placeholder #<?= $i ?></span>
-        </a>
-      <?php endfor; ?>
+      <?php if ($hasPhotos): ?>
+        <?php foreach ($igItems as $idx => $item):
+          if (empty($item['image'])) continue; ?>
+          <a href="<?= e(!empty($item['link']) ? $item['link'] : '#') ?>" <?= !empty($item['link']) ? 'target="_blank" rel="noopener"' : '' ?> title="<?= e($item['caption'] ?? '') ?>">
+            <img src="<?= e(asset($item['image'])) ?>" alt="<?= e($item['caption'] ?? 'Gallery photo ' . ($idx + 1)) ?>" loading="lazy">
+            <?php if (!empty($item['caption'])): ?>
+              <span class="tag">📷 <?= e($item['caption']) ?></span>
+            <?php endif; ?>
+          </a>
+        <?php endforeach; ?>
+      <?php else: ?>
+        <?php for ($i = 1; $i <= 6; $i++): ?>
+          <a href="#" title="Customer moment #<?= $i ?>">
+            <img src="<?= e(asset('/images/GDKD logo.png')) ?>" alt="Gallery placeholder <?= $i ?>" loading="lazy" style="object-fit:contain;background:#fff;padding:30px">
+            <span class="tag">📷 Placeholder #<?= $i ?></span>
+          </a>
+        <?php endfor; ?>
+      <?php endif; ?>
     </div>
   </div>
 </section>
+<?php endif; ?>
 
 <!-- =========================================================
      NEWSLETTER / CTA
