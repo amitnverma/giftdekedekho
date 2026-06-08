@@ -426,7 +426,7 @@ table.data-table th, table.data-table td { padding: 12px 14px; border-bottom: 1p
    Modern header / navigation revamp
    =================================================== */
 .gdd-topbar { background:linear-gradient(90deg,#1d1d1f,#2c2026); color:#f1ecec; font-size:13px; }
-.gdd-topbar-inner { display:flex; align-items:center; justify-content:space-between; padding:9px 20px; gap:16px; flex-wrap:wrap; }
+.gdd-topbar-inner { display:flex; align-items:center; justify-content:space-between; padding:9px 20px; gap:16px; flex-wrap:wrap; margin-left:0; margin-right:0; max-width:none; }
 .gdd-topbar-msg { font-weight:600; display:flex; align-items:center; gap:8px; }
 .gdd-topbar-links { display:flex; align-items:center; gap:6px; }
 .gdd-topbar-link {
@@ -440,7 +440,7 @@ table.data-table th, table.data-table td { padding: 12px 14px; border-bottom: 1p
 @media (max-width: 760px){ .gdd-topbar-links{ display:none; } }
 
 .gdd-header { position:sticky; top:0; z-index:200; background:rgba(255,255,255,.92); backdrop-filter:saturate(180%) blur(14px); -webkit-backdrop-filter:saturate(180%) blur(14px); border-bottom:1px solid var(--color-border); }
-.gdd-header-main { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:12px 20px; }
+.gdd-header-main { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:12px 20px; margin-left:0; margin-right:0; max-width:none; }
 .gdd-logo img { height:46px; transition:transform .25s ease; }
 .gdd-logo:hover img { transform:scale(1.05) rotate(-2deg); }
 
@@ -536,7 +536,7 @@ table.data-table th, table.data-table td { padding: 12px 14px; border-bottom: 1p
 .gdd-burger { display:none; width:44px; height:44px; border-radius:12px; border:1px solid var(--color-border); background:#fff; font-size:20px; cursor:pointer; align-items:center; justify-content:center; }
 
 .gdd-catnav { border-top:1px solid var(--color-border); background:#fff; }
-.gdd-catnav-inner { display:flex; flex-wrap:nowrap; justify-content:center; gap:4px; padding:10px 20px; }
+.gdd-catnav-inner { display:flex; flex-wrap:nowrap; justify-content:flex-start; gap:4px; padding:10px 20px; margin-left:0; margin-right:0; max-width:none; }
 .gdd-catpill {
   flex:none; display:inline-flex; align-items:center; gap:8px; padding:6px 14px 6px 6px; border-radius:50px;
   font-size:13px; font-weight:700; color:var(--color-text); white-space:nowrap; border:1px solid transparent;
@@ -681,7 +681,7 @@ table.data-table th, table.data-table td { padding: 12px 14px; border-bottom: 1p
    ========================================================== */
 .gdd-ht {
   display:grid;
-  grid-template-columns:1fr 1fr;
+  grid-template-columns:5fr 7fr;
   min-height:460px;
   overflow:hidden;
   position:relative;
@@ -690,12 +690,12 @@ table.data-table th, table.data-table td { padding: 12px 14px; border-bottom: 1p
 
 /* ── Left text column ── */
 .gdd-ht-text {
-  display:flex; align-items:center; justify-content:flex-end;
-  padding:44px 44px 44px 20px;
+  display:flex; align-items:center; justify-content:flex-start;
+  padding:44px 32px 44px 48px;
   position:relative; z-index:2;
 }
 .gdd-ht-text-inner {
-  width:100%; max-width:520px;
+  width:100%; max-width:460px;
 }
 
 .gdd-ht-eyebrow {
