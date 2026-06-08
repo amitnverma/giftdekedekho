@@ -5,6 +5,7 @@ $featuredSection = $sections['featured_products_section'] ?? [];
 $testimonials = $sections['testimonials_section'] ?? [];
 $badges = $sections['trust_badges'] ?? [];
 $igGallery = $sections['instagram_gallery'] ?? [];
+$sigFeature = $sections['signature_feature'] ?? [];
 
 $heroHeadline = $hero['headline'] ?? '';
 $heroSub = $hero['subheadline'] ?? 'Photo frames, engraved keepsakes, custom mugs & video-message gifts — designed by you, crafted by us, delivered with love anywhere in India.';
@@ -176,31 +177,50 @@ $heroRightPhoto = !empty($hero['transform_right_photo']) ? asset($hero['transfor
 <?php endif; ?>
 
 <!-- =========================================================
-     VIDEO & PHOTO QR — flagship feature spotlight
-     PLACEHOLDER: replace the phone "QR" mock with a real photo of the
-     printed QR sticker on packaging / a phone scanning it (900×1000).
+     VIDEO & PHOTO QR — flagship feature spotlight (admin-managed)
      ========================================================= -->
+<?php if (!isset($sigFeature['is_active']) || !empty($sigFeature['is_active'])): ?>
+<?php
+  $sigKicker = $sigFeature['kicker'] ?? 'Signature Feature';
+  $sigHeading = $sigFeature['heading'] ?? 'Turn any gift into a Video &amp; Photo Memory';
+  $sigDesc = $sigFeature['description'] ?? 'Attach a scannable QR code to your gift — recipients scan it with any phone camera to unlock a private video or photo message from you. No app required.';
+  $sigCtaText = $sigFeature['cta_text'] ?? 'Explore Video &amp; Photo Gifts →';
+  $sigCtaUrl = $sigFeature['cta_url'] ?? '/category/video-photo-gifts';
+  $sigSteps = $sigFeature['steps'] ?? [
+    'Upload your video/photo message while placing the order',
+    'We generate a unique, secure QR code for your gift',
+    'Recipient scans the QR printed on the packaging',
+    'Your personal message plays instantly — straight from the heart',
+  ];
+  $sigImage = !empty($sigFeature['image']) ? asset($sigFeature['image']) : '';
+?>
 <section class="section">
   <div class="container">
     <div class="gdd-spotlight reveal">
       <div>
-        <span class="gdd-kicker">Signature Feature</span>
-        <h2>Turn any gift into a Video &amp; Photo Memory</h2>
-        <p>Attach a scannable QR code to your gift — recipients scan it with any phone camera to unlock a private video or photo message from you. No app required.</p>
+        <span class="gdd-kicker"><?= e($sigKicker) ?></span>
+        <h2><?= e($sigHeading) ?></h2>
+        <p><?= e($sigDesc) ?></p>
+        <?php if (!empty($sigSteps)): ?>
         <ul class="feat-list">
-          <li><i>1</i> Upload your video/photo message while placing the order</li>
-          <li><i>2</i> We generate a unique, secure QR code for your gift</li>
-          <li><i>3</i> Recipient scans the QR printed on the packaging</li>
-          <li><i>4</i> Your personal message plays instantly — straight from the heart</li>
+          <?php foreach ($sigSteps as $idx => $step): ?>
+          <li><i><?= $idx + 1 ?></i> <?= e($step) ?></li>
+          <?php endforeach; ?>
         </ul>
-        <a href="<?= url('/category/video-photo-gifts') ?>" class="btn btn-primary">Explore Video &amp; Photo Gifts →</a>
+        <?php endif; ?>
+        <a href="<?= url($sigCtaUrl) ?>" class="btn btn-primary"><?= e($sigCtaText) ?></a>
       </div>
       <div class="gdd-spotlight-art">
-        <div class="gdd-phone"><div class="qr"></div></div>
+        <?php if ($sigImage): ?>
+          <img src="<?= e($sigImage) ?>" alt="<?= e($sigHeading) ?>" style="width:100%;max-width:340px;border-radius:20px;object-fit:cover">
+        <?php else: ?>
+          <div class="gdd-phone"><div class="qr"></div></div>
+        <?php endif; ?>
       </div>
     </div>
   </div>
 </section>
+<?php endif; ?>
 
 <!-- =========================================================
      TRUST BADGES (admin-managed, optional)

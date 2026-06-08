@@ -6,6 +6,7 @@ $badges = $sections['trust_badges'] ?? ['items' => []];
 $testimonials = $sections['testimonials_section'] ?? ['items' => []];
 $topbarButtons = $sections['topbar_buttons'] ?? ['items' => []];
 $igGallery = $sections['instagram_gallery'] ?? ['items' => []];
+$sigFeature = $sections['signature_feature'] ?? [];
 ?>
 <div data-tab-container>
     <div class="admin-tabs">
@@ -14,6 +15,7 @@ $igGallery = $sections['instagram_gallery'] ?? ['items' => []];
         <span class="admin-tab" data-tab="topbar">Topbar Buttons</span>
         <span class="admin-tab" data-tab="promo">Promo Strip</span>
         <span class="admin-tab" data-tab="featured">Featured Section</span>
+        <span class="admin-tab" data-tab="signature">Signature Feature</span>
         <span class="admin-tab" data-tab="badges">Trust Badges</span>
         <span class="admin-tab" data-tab="testimonials">Testimonials</span>
         <span class="admin-tab" data-tab="instagram">Instagram Gallery</span>
@@ -203,6 +205,62 @@ $igGallery = $sections['instagram_gallery'] ?? ['items' => []];
                     Show featured products on homepage
                 </label>
                 <button type="submit" class="admin-btn admin-btn-primary">Save</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Signature Feature -->
+    <div class="admin-tab-pane" data-pane="signature">
+        <div class="admin-card">
+            <form method="post" action="<?= url('/admin/design/save') ?>" enctype="multipart/form-data" class="admin-form">
+                <?= csrfField() ?>
+                <input type="hidden" name="section" value="signature_feature">
+                <label>Kicker Label <small style="font-weight:400;color:#888">(e.g. "Signature Feature")</small>
+                    <input type="text" name="kicker" value="<?= e($sigFeature['kicker'] ?? 'Signature Feature') ?>">
+                </label>
+                <label>Heading
+                    <input type="text" name="heading" value="<?= e($sigFeature['heading'] ?? 'Turn any gift into a Video &amp; Photo Memory') ?>">
+                </label>
+                <label>Description
+                    <textarea name="description" rows="3"><?= e($sigFeature['description'] ?? 'Attach a scannable QR code to your gift — recipients scan it with any phone camera to unlock a private video or photo message from you. No app required.') ?></textarea>
+                </label>
+                <label>CTA Button Text
+                    <input type="text" name="cta_text" value="<?= e($sigFeature['cta_text'] ?? 'Explore Video &amp; Photo Gifts →') ?>">
+                </label>
+                <label>CTA Button Link
+                    <input type="text" name="cta_url" value="<?= e($sigFeature['cta_url'] ?? '/category/video-photo-gifts') ?>">
+                </label>
+                <hr class="admin-hr">
+                <p style="font-weight:600;margin-bottom:.5rem">How It Works — Steps (up to 4)</p>
+                <?php
+                $defaultSteps = [
+                    'Upload your video/photo message while placing the order',
+                    'We generate a unique, secure QR code for your gift',
+                    'Recipient scans the QR printed on the packaging',
+                    'Your personal message plays instantly — straight from the heart',
+                ];
+                $steps = $sigFeature['steps'] ?? $defaultSteps;
+                for ($i = 0; $i < 4; $i++):
+                ?>
+                <label>Step <?= $i + 1 ?>
+                    <input type="text" name="steps[]" value="<?= e($steps[$i] ?? '') ?>">
+                </label>
+                <?php endfor; ?>
+                <hr class="admin-hr">
+                <label>Right-side Image <small style="font-weight:400;color:#888">(optional — replaces the phone/QR mock; use a portrait image ~600×700 px)</small>
+                    <input type="file" name="sig_image" accept="image/*" data-image-preview="#sigImgPreview">
+                </label>
+                <?php if (!empty($sigFeature['image'])): ?>
+                    <img id="sigImgPreview" src="<?= e(asset($sigFeature['image'])) ?>" style="height:120px;border-radius:8px;margin-bottom:14px;object-fit:cover">
+                <?php else: ?>
+                    <img id="sigImgPreview" src="" style="display:none;height:120px;border-radius:8px;margin-bottom:14px;object-fit:cover">
+                <?php endif; ?>
+                <input type="hidden" name="sig_image_existing" value="<?= e($sigFeature['image'] ?? '') ?>">
+                <label class="admin-checkbox">
+                    <input type="checkbox" name="is_active" value="1" <?= (!isset($sigFeature['is_active']) || !empty($sigFeature['is_active'])) ? 'checked' : '' ?>>
+                    Show Signature Feature section on homepage
+                </label>
+                <button type="submit" class="admin-btn admin-btn-primary">Save Signature Feature</button>
             </form>
         </div>
     </div>

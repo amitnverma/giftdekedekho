@@ -81,6 +81,31 @@ class AdminDesignController extends BaseController
                 ]);
                 break;
 
+            case 'signature_feature':
+                $existingSig = $this->sectionContent('signature_feature');
+                $sigImage = trim((string)($_POST['sig_image_existing'] ?? ($existingSig['image'] ?? '')));
+                if (!empty($_FILES['sig_image']['name']) && $_FILES['sig_image']['error'] === UPLOAD_ERR_OK) {
+                    $up = $this->handleImageUpload($_FILES['sig_image'], 'sections', 'signature');
+                    if ($up) $sigImage = $up;
+                }
+                $rawSteps = (array)($_POST['steps'] ?? []);
+                $steps = [];
+                foreach ($rawSteps as $s) {
+                    $s = trim((string)$s);
+                    if ($s !== '') $steps[] = $s;
+                }
+                $this->saveSection('signature_feature', [
+                    'kicker'      => trim((string)$this->input('kicker', 'Signature Feature')),
+                    'heading'     => trim((string)$this->input('heading')),
+                    'description' => trim((string)$this->input('description')),
+                    'cta_text'    => trim((string)$this->input('cta_text')),
+                    'cta_url'     => trim((string)$this->input('cta_url')),
+                    'steps'       => $steps,
+                    'image'       => $sigImage,
+                    'is_active'   => $this->input('is_active') ? true : false,
+                ]);
+                break;
+
             case 'trust_badges':
                 $items = [];
                 $icons = (array)($_POST['badge_icon'] ?? []);
