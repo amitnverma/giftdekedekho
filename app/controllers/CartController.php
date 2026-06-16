@@ -62,6 +62,54 @@ class CartController extends BaseController
             $entry = $rawCustom[$opt['id']] ?? null;
             $type = $opt['option_type'];
 
+            // Choice options (with sub-options) — selectable value, per-choice price,
+            // and an optional image upload tied to the chosen choice.
+            $subOpts = !empty($opt['sub_options']) ? (json_decode($opt['sub_options'], true) ?: []) : [];
+            if (!empty($subOpts)) {
+                $chosen = trim((string)($entry['value'] ?? ''));
+                if ($chosen === '') {
+                    if ($opt['is_required']) {
+                        flash('error', 'Please choose an option for "' . $opt['label'] . '".');
+                        redirect('/product/' . $product['slug']);
+                    }
+                    continue;
+                }
+                // Find the matching choice to resolve its price + image requirement.
+                $match = null;
+                foreach ($subOpts as $so) {
+                    $soLabel = is_string($so) ? $so : ($so['label'] ?? '');
+                    if ($soLabel === $chosen) { $match = is_string($so) ? ['label' => $so, 'price' => 0, 'image' => false] : $so; break; }
+                }
+                if ($match === null) {
+                    flash('error', 'Invalid choice selected for "' . $opt['label'] . '".');
+                    redirect('/product/' . $product['slug']);
+                }
+                $extra = (float)$opt['extra_charge'] + (float)($match['price'] ?? 0);
+                $custEntry = [
+                    'option_id' => (int)$opt['id'],
+                    'option_type' => $type,
+                    'label' => $opt['label'],
+                    'value' => strip_tags($chosen),
+                    'extra_charge' => $extra,
+                ];
+                if (!empty($match['image'])) {
+                    if (!empty($_FILES['customization']['name'][$opt['id']]['file'])) {
+                        $uploaded = $this->handlePhotoUpload($opt['id']);
+                        if ($uploaded) {
+                            $custEntry['image'] = $uploaded;
+                        } elseif ($opt['is_required']) {
+                            flash('error', 'Please upload a valid image (JPG/PNG, max 5MB) for "' . $opt['label'] . '".');
+                            redirect('/product/' . $product['slug']);
+                        }
+                    } elseif ($opt['is_required']) {
+                        flash('error', 'Please upload an image for "' . $opt['label'] . '".');
+                        redirect('/product/' . $product['slug']);
+                    }
+                }
+                $customization[] = $custEntry;
+                continue;
+            }
+
             if ($type === 'photo_upload') {
                 if (!empty($_FILES['customization']['name'][$opt['id']]['file'])) {
                     $uploaded = $this->handlePhotoUpload($opt['id']);

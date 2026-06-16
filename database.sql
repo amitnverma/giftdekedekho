@@ -114,11 +114,12 @@ CREATE TABLE IF NOT EXISTS `product_images` (
 CREATE TABLE IF NOT EXISTS `product_customization_options` (
   `id`           INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `product_id`   INT UNSIGNED NOT NULL,
-  `option_type`  ENUM('text_engraving','photo_upload','gift_wrap','message_card','video_photo') NOT NULL,
+  `option_type`  VARCHAR(80) NOT NULL,
   `label`        VARCHAR(120) NOT NULL,
   `is_required`  TINYINT(1) NOT NULL DEFAULT 0,
   `extra_charge` DECIMAL(8,2) NOT NULL DEFAULT 0.00,
   `char_limit`   INT DEFAULT NULL,
+  `sub_options`  TEXT DEFAULT NULL,
   `sort_order`   INT NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`),
   KEY `idx_pco_product` (`product_id`),

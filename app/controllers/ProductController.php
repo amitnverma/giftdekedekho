@@ -23,7 +23,7 @@ class ProductController extends BaseController
         $this->view('product', [
             'metaTitle' => $product['meta_title'] ?: ($product['name'] . ' | ' . SITE_NAME),
             'metaDescription' => $product['meta_description'] ?: $product['short_description'],
-            'ogImage' => !empty($images) ? asset($images[0]['image_path']) : null,
+            'ogImage' => !empty($images) ? productImage($images[0]['image_path']) : null,
             'product' => $product,
             'images' => $images,
             'options' => $options,

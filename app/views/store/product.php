@@ -5,7 +5,7 @@ $hasDiscount = $product['sale_price'] !== null && (float)$product['sale_price'] 
 $stock = (int)$product['stock_qty'];
 $stockClass = $stock <= 0 ? 'stock-out' : ($stock <= 5 ? 'stock-low' : 'stock-in');
 $stockLabel = $stock <= 0 ? 'Out of Stock' : ($stock <= 5 ? "Only {$stock} left in stock!" : 'In Stock');
-$primaryImg = !empty($images) ? $images[0]['image_path'] : '/images/GDKD logo.png';
+$primaryImg = !empty($images) ? productImage($images[0]['image_path']) : asset('/images/GDKD logo.png');
 $whatsappNum = (new Settings())->get('whatsapp_number', '');
 $shareUrl = url('/product/' . $product['slug']);
 ?>
@@ -24,7 +24,7 @@ $shareUrl = url('/product/' . $product['slug']);
       <?php if (count($images) > 1): ?>
       <div class="gallery-thumbs">
         <?php foreach ($images as $i => $img): ?>
-          <img src="<?= e(asset($img['image_path'])) ?>" data-full="<?= e(asset($img['image_path'])) ?>" class="<?= $i === 0 ? 'active' : '' ?>" alt="">
+          <img src="<?= e(productImage($img['image_path'])) ?>" data-full="<?= e(productImage($img['image_path'])) ?>" class="<?= $i === 0 ? 'active' : '' ?>" alt="">
         <?php endforeach; ?>
       </div>
       <?php endif; ?>
@@ -65,9 +65,35 @@ $shareUrl = url('/product/' . $product['slug']);
                 <?php endif; ?>
               </label>
 
-              <?php $fieldName = 'customization[' . $opt['id'] . ']'; $inputId = 'opt_' . $opt['id']; ?>
+              <?php
+                $fieldName = 'customization[' . $opt['id'] . ']';
+                $inputId = 'opt_' . $opt['id'];
+                $rawSub = !empty($opt['sub_options']) ? (is_string($opt['sub_options']) ? (json_decode($opt['sub_options'], true) ?: []) : $opt['sub_options']) : [];
+                // Normalise to objects: {label, price, image}. Tolerate legacy plain strings.
+                $subOpts = [];
+                foreach ($rawSub as $so) {
+                    if (is_string($so)) { $subOpts[] = ['label' => $so, 'price' => 0, 'image' => false]; }
+                    else { $subOpts[] = ['label' => $so['label'] ?? '', 'price' => (float)($so['price'] ?? 0), 'image' => !empty($so['image'])]; }
+                }
+                $baseExtra = (float)$opt['extra_charge'];
+              ?>
 
-              <?php if ($opt['option_type'] === 'text_engraving'): ?>
+              <?php if (!empty($subOpts)): ?>
+                <select name="<?= $fieldName ?>[value]" id="<?= $inputId ?>" class="suboption-select" data-extra="0" data-image-input="img_<?= $opt['id'] ?>" <?= $opt['is_required'] ? 'required' : '' ?>>
+                  <?php if (!$opt['is_required']): ?><option value="" data-extra="0" data-image="0">— choose an option —</option><?php endif; ?>
+                  <?php foreach ($subOpts as $so):
+                        if ($so['label'] === '') continue;
+                        $choiceExtra = $baseExtra + (float)$so['price'];
+                        $labelText = $so['label'] . ($choiceExtra > 0 ? ' (+' . formatPrice($choiceExtra) . ')' : '');
+                  ?>
+                    <option value="<?= e($so['label']) ?>" data-extra="<?= $choiceExtra ?>" data-image="<?= $so['image'] ? '1' : '0' ?>"><?= e($labelText) ?></option>
+                  <?php endforeach; ?>
+                </select>
+                <div id="img_<?= $opt['id'] ?>" class="suboption-image-wrap" style="display:none;margin-top:8px">
+                  <input type="file" name="<?= $fieldName ?>[file]" class="suboption-image-input" accept="image/jpeg,image/png">
+                  <small style="color:var(--color-muted)">Upload your image for this choice — JPG or PNG, max 5MB</small>
+                </div>
+              <?php elseif ($opt['option_type'] === 'text_engraving'): ?>
                 <input type="text" id="<?= $inputId ?>" name="<?= $fieldName ?>[value]" maxlength="<?= (int)($opt['char_limit'] ?: 100) ?>"
                        data-char-limit="<?= (int)($opt['char_limit'] ?: 100) ?>" <?= $opt['extra_charge'] > 0 ? 'data-extra="' . (float)$opt['extra_charge'] . '"' : '' ?>
                        placeholder="Type your engraving text…" <?= $opt['is_required'] ? 'required' : '' ?>>
@@ -98,6 +124,8 @@ $shareUrl = url('/product/' . $product['slug']);
                   We will print a special photo embedded with a QR code. When anyone scans it with a regular phone camera,
                   it instantly plays your personal video. Our team will contact you after order confirmation to collect your video.
                 </p>
+              <?php else: ?>
+                <input type="text" id="<?= $inputId ?>" name="<?= $fieldName ?>[value]" <?= $opt['extra_charge'] > 0 ? 'data-extra="' . (float)$opt['extra_charge'] . '"' : '' ?> placeholder="Enter your choice…" <?= $opt['is_required'] ? 'required' : '' ?>>
               <?php endif; ?>
               <input type="hidden" name="<?= $fieldName ?>[type]" value="<?= e($opt['option_type']) ?>">
               <input type="hidden" name="<?= $fieldName ?>[label]" value="<?= e($opt['label']) ?>">

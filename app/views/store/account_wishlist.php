@@ -10,7 +10,7 @@
           $price = $item['sale_price'] !== null ? (float)$item['sale_price'] : (float)$item['base_price']; ?>
           <div class="product-card">
             <a href="<?= url('/product/' . $item['slug']) ?>">
-              <div class="thumb-wrap"><img src="<?= e(asset($item['thumbnail'] ?: '/images/GDKD logo.png')) ?>" alt="<?= e($item['name']) ?>" loading="lazy"></div>
+              <div class="thumb-wrap"><img src="<?= e(productImage($item['thumbnail'] ?? null)) ?>" alt="<?= e($item['name']) ?>" loading="lazy"></div>
             </a>
             <div class="info">
               <a href="<?= url('/product/' . $item['slug']) ?>"><h3><?= e($item['name']) ?></h3></a>

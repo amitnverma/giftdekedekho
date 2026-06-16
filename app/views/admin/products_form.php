@@ -81,7 +81,7 @@
             <div class="admin-image-grid">
                 <?php foreach ($images as $img): ?>
                     <label class="admin-image-item" style="cursor:pointer;">
-                        <img src="<?= asset('uploads/' . $img['image_path']) ?>" alt="">
+                        <img src="<?= e(productImage($img['image_path'])) ?>" alt="">
                         <input type="radio" name="primary_image_id" value="<?= (int)$img['id'] ?>" <?= $img['is_primary'] ? 'checked' : '' ?> style="position:absolute;top:6px;left:6px;">
                         <?php if ($img['is_primary']): ?><span class="admin-image-primary-tag">Primary</span><?php endif; ?>
                         <button type="button" class="admin-image-remove" data-confirm="Remove this image?" onclick="event.preventDefault(); gddRemoveImage(<?= (int)$img['id'] ?>, this)">&times;</button>
@@ -108,11 +108,7 @@
                 <div class="admin-option-row">
                     <div class="admin-form-row">
                         <label>Option Type
-                            <select name="option_type[]">
-                                <?php foreach (['text_engraving' => 'Text Engraving', 'photo_upload' => 'Photo Upload', 'gift_wrap' => 'Gift Wrap', 'message_card' => 'Message Card', 'video_photo' => 'Video / Photo QR'] as $val => $label): ?>
-                                    <option value="<?= $val ?>" <?= $opt['option_type'] === $val ? 'selected' : '' ?>><?= $label ?></option>
-                                <?php endforeach; ?>
-                            </select>
+                            <input type="text" name="option_type[]" value="<?= e($opt['option_type']) ?>" list="optionTypeList" placeholder="e.g. text_engraving">
                         </label>
                         <label>Label
                             <input type="text" name="option_label[]" value="<?= e($opt['label']) ?>" placeholder="e.g. Engrave a name">
@@ -123,6 +119,12 @@
                         <label>Character Limit <span class="admin-label-hint">(text options only)</span>
                             <input type="number" min="0" name="option_char_limit[]" value="<?= e($opt['char_limit'] ?? '') ?>">
                         </label>
+                    </div>
+                    <div class="suboption-editor" data-suboption-editor>
+                        <label>Choices <span class="admin-label-hint">Optional — add selectable choices (e.g. Gold / Silver). Each can carry its own extra charge and optionally ask the customer for an image upload.</span></label>
+                        <input type="hidden" name="option_sub_options[]" class="suboption-json" value="<?= e(is_string($opt['sub_options'] ?? null) ? $opt['sub_options'] : '') ?>">
+                        <div class="suboption-rows"></div>
+                        <button type="button" class="admin-btn admin-btn-sm" data-add-suboption>+ Add Choice</button>
                     </div>
                     <label class="admin-checkbox">
                         <input type="checkbox" name="option_required[]" value="1" <?= !empty($opt['is_required']) ? 'checked' : '' ?>>
@@ -135,13 +137,7 @@
             <div class="admin-option-row" data-repeater-template style="display:none;">
                 <div class="admin-form-row">
                     <label>Option Type
-                        <select name="option_type[__INDEX__]">
-                            <option value="text_engraving">Text Engraving</option>
-                            <option value="photo_upload">Photo Upload</option>
-                            <option value="gift_wrap">Gift Wrap</option>
-                            <option value="message_card">Message Card</option>
-                            <option value="video_photo">Video / Photo QR</option>
-                        </select>
+                        <input type="text" name="option_type[__INDEX__]" list="optionTypeList" placeholder="e.g. text_engraving">
                     </label>
                     <label>Label
                         <input type="text" name="option_label[__INDEX__]" placeholder="e.g. Engrave a name">
@@ -153,12 +149,29 @@
                         <input type="number" min="0" name="option_char_limit[__INDEX__]">
                     </label>
                 </div>
+                <div class="suboption-editor" data-suboption-editor>
+                    <label>Choices <span class="admin-label-hint">Optional — add selectable choices (e.g. Gold / Silver). Each can carry its own extra charge and optionally ask the customer for an image upload.</span></label>
+                    <input type="hidden" name="option_sub_options[__INDEX__]" class="suboption-json" value="">
+                    <div class="suboption-rows"></div>
+                    <button type="button" class="admin-btn admin-btn-sm" data-add-suboption>+ Add Choice</button>
+                </div>
                 <label class="admin-checkbox">
                     <input type="checkbox" name="option_required[__INDEX__]" value="1">
                     Required
                 </label>
                 <button type="button" class="admin-btn admin-btn-sm admin-btn-danger" data-repeater-remove>Remove Option</button>
             </div>
+            <datalist id="optionTypeList">
+                <option value="text_engraving">Text Engraving</option>
+                <option value="photo_upload">Photo Upload</option>
+                <option value="gift_wrap">Gift Wrap</option>
+                <option value="message_card">Message Card</option>
+                <option value="video_photo">Video / Photo QR</option>
+                <option value="color_choice">Color Choice</option>
+                <option value="size_choice">Size Choice</option>
+                <option value="font_style">Font Style</option>
+                <option value="material">Material</option>
+            </datalist>
         </div>
         <button type="button" class="admin-btn admin-mt" data-repeater-add="#optionsRepeater">+ Add Customization Option</button>
     </div>
@@ -191,6 +204,93 @@
         });
     }
 })();
+
+// ---- Customization sub-option (choice) editor ----
+(function () {
+    function buildRow(choice) {
+        choice = choice || {};
+        var row = document.createElement('div');
+        row.className = 'suboption-row';
+        row.style.cssText = 'display:flex;gap:8px;align-items:center;margin:6px 0;flex-wrap:wrap';
+        row.innerHTML =
+            '<input type="text" class="so-label" placeholder="Choice label e.g. Gold" style="flex:2;min-width:140px">' +
+            '<input type="number" step="0.01" min="0" class="so-price" placeholder="Extra ₹" style="flex:1;min-width:90px">' +
+            '<label style="display:flex;align-items:center;gap:6px;font-weight:400;white-space:nowrap;margin:0">' +
+              '<input type="checkbox" class="so-image"> Ask for image upload' +
+            '</label>' +
+            '<button type="button" class="admin-btn admin-btn-sm admin-btn-danger" data-remove-suboption>&times;</button>';
+        row.querySelector('.so-label').value = choice.label || '';
+        row.querySelector('.so-price').value = (choice.price !== undefined && choice.price !== null) ? choice.price : '';
+        row.querySelector('.so-image').checked = !!choice.image;
+        return row;
+    }
+
+    function serialize(editor) {
+        var choices = [];
+        editor.querySelectorAll('.suboption-row').forEach(function (row) {
+            var label = row.querySelector('.so-label').value.trim();
+            if (!label) return;
+            choices.push({
+                label: label,
+                price: parseFloat(row.querySelector('.so-price').value) || 0,
+                image: row.querySelector('.so-image').checked
+            });
+        });
+        editor.querySelector('.suboption-json').value = choices.length ? JSON.stringify(choices) : '';
+    }
+
+    function initEditor(editor) {
+        if (editor._inited) return;
+        editor._inited = true;
+        var rowsWrap = editor.querySelector('.suboption-rows');
+        var raw = editor.querySelector('.suboption-json').value;
+        var existing = [];
+        if (raw) { try { existing = JSON.parse(raw) || []; } catch (e) { existing = []; } }
+        existing.forEach(function (c) {
+            // Tolerate legacy plain-string choices.
+            rowsWrap.appendChild(buildRow(typeof c === 'string' ? { label: c } : c));
+        });
+    }
+
+    // Init server-rendered editors.
+    document.querySelectorAll('[data-suboption-editor]').forEach(initEditor);
+
+    // Delegated handlers (cover dynamically-cloned option rows too).
+    document.addEventListener('click', function (e) {
+        var addBtn = e.target.closest('[data-add-suboption]');
+        if (addBtn) {
+            e.preventDefault();
+            var editor = addBtn.closest('[data-suboption-editor]');
+            initEditor(editor);
+            editor.querySelector('.suboption-rows').appendChild(buildRow());
+            serialize(editor);
+            return;
+        }
+        var remBtn = e.target.closest('[data-remove-suboption]');
+        if (remBtn) {
+            e.preventDefault();
+            var editor = remBtn.closest('[data-suboption-editor]');
+            remBtn.closest('.suboption-row').remove();
+            serialize(editor);
+        }
+    });
+    document.addEventListener('input', function (e) {
+        if (e.target.closest('.suboption-row')) {
+            serialize(e.target.closest('[data-suboption-editor]'));
+        }
+    });
+    document.addEventListener('change', function (e) {
+        if (e.target.closest('.suboption-row')) {
+            serialize(e.target.closest('[data-suboption-editor]'));
+        }
+    });
+    // Final safety: serialize all editors on submit.
+    var pform = document.querySelector('form.admin-form');
+    if (pform) pform.addEventListener('submit', function () {
+        document.querySelectorAll('[data-suboption-editor]').forEach(serialize);
+    });
+})();
+
 window.gddRemoveImage = function (imageId, btn) {
     if (!confirm('Remove this image?')) return;
     fetch((window.GDD_BASE_URL || '') + '/admin/products/' + imageId + '/image-delete', {

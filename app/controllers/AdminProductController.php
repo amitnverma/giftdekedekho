@@ -205,23 +205,63 @@ class AdminProductController extends BaseController
         $optRequired = (array)($_POST['option_required'] ?? []);
         $optCharges = (array)($_POST['option_charge'] ?? []);
         $optLimits = (array)($_POST['option_char_limit'] ?? []);
+        $optSubOptions = (array)($_POST['option_sub_options'] ?? []);
 
         foreach ($optTypes as $i => $type) {
             $type = trim((string)$type);
             $label = trim((string)($optLabels[$i] ?? ''));
             if ($type === '' || $label === '') continue;
+            $subOptions = $this->parseSubOptions($optSubOptions[$i] ?? '');
             $options[] = [
                 'option_type' => $type,
                 'label' => $label,
                 'is_required' => isset($optRequired[$i]) ? 1 : 0,
                 'extra_charge' => (float)($optCharges[$i] ?? 0),
                 'char_limit' => isset($optLimits[$i]) && $optLimits[$i] !== '' ? (int)$optLimits[$i] : null,
+                'sub_options' => array_values($subOptions),
             ];
         }
         $productModel->replaceCustomizationOptions($productId, $options);
 
         flash('success', $id ? 'Product updated.' : 'Product created.');
         redirect("/admin/products/{$productId}/edit");
+    }
+
+    /**
+     * Normalise the submitted sub-options for a customization option into a
+     * clean list of choices: [['label' => 'Gold', 'price' => 20.0, 'image' => true], ...].
+     * Accepts the JSON produced by the admin sub-option editor, and falls back
+     * to legacy newline-separated plain text (one label per line).
+     */
+    private function parseSubOptions($raw): array
+    {
+        if (is_array($raw)) {
+            $decoded = $raw;
+        } else {
+            $raw = trim((string)$raw);
+            if ($raw === '') return [];
+            $decoded = json_decode($raw, true);
+            if (!is_array($decoded)) {
+                // Legacy plain-text fallback (one label per line).
+                $decoded = array_map(fn($l) => ['label' => $l], array_filter(array_map('trim', explode("\n", $raw))));
+            }
+        }
+
+        $out = [];
+        foreach ($decoded as $choice) {
+            if (is_string($choice)) {
+                $label = trim($choice);
+                $price = 0.0;
+                $image = false;
+            } else {
+                $label = trim((string)($choice['label'] ?? ''));
+                $price = (float)($choice['price'] ?? 0);
+                $image = !empty($choice['image']);
+            }
+            if ($label === '') continue;
+            $out[] = ['label' => $label, 'price' => $price, 'image' => $image];
+        }
+        return $out;
     }
 
     private function handleImageUpload(array $file): ?string

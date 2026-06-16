@@ -9,7 +9,7 @@ $reviewCount = (int)($p['review_count'] ?? 0);
 <div class="product-card">
   <a href="<?= url('/product/' . $p['slug']) ?>">
     <div class="thumb-wrap">
-      <img src="<?= e(asset($p['thumbnail'] ?: '/images/GDKD logo.png')) ?>" alt="<?= e($p['name']) ?>" loading="lazy">
+      <img src="<?= e(productImage($p['thumbnail'] ?? null)) ?>" alt="<?= e($p['name']) ?>" loading="lazy">
     </div>
   </a>
   <button class="wishlist-toggle <?= $inWishlist ? 'active' : '' ?>" data-product-id="<?= (int)$p['id'] ?>" title="Add to wishlist" type="button">

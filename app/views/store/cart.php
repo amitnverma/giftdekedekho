@@ -20,7 +20,7 @@
         $lineTotal = $cartModel->lineTotal($item);
       ?>
         <div class="cart-item">
-          <img src="<?= e(asset($item['thumbnail'] ?: '/images/GDKD logo.png')) ?>" alt="<?= e($item['name']) ?>">
+          <img src="<?= e(productImage($item['thumbnail'] ?? null)) ?>" alt="<?= e($item['name']) ?>">
           <div>
             <a href="<?= url('/product/' . $item['slug']) ?>"><strong><?= e($item['name']) ?></strong></a>
             <div><?= formatPrice($price) ?> × <?= (int)$item['quantity'] ?></div>
@@ -34,6 +34,7 @@
                     <?php else: ?> "<?= e($c['value']) ?>"
                     <?php endif; ?>
                     <?php if (!empty($c['extra_charge'])): ?> (+<?= formatPrice($c['extra_charge']) ?>)<?php endif; ?>
+                    <?php if (!empty($c['image'])): ?> — <a href="<?= e(asset($c['image'])) ?>" target="_blank" rel="noopener">View uploaded image</a><?php endif; ?>
                   </div>
                 <?php endforeach; ?>
               </div>

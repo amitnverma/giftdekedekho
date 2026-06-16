@@ -235,6 +235,8 @@
   function recalcCustomTotal() {
     var total = 0;
     document.querySelectorAll('.customize-option [data-extra]').forEach(function (el) {
+      // Skip <option> elements — only the <select> itself carries the active charge.
+      if (el.tagName === 'OPTION') return;
       var extra = parseFloat(el.getAttribute('data-extra')) || 0;
       var active = false;
       if (el.type === 'checkbox') active = el.checked;
@@ -248,6 +250,30 @@
     el.addEventListener('change', recalcCustomTotal);
     el.addEventListener('input', recalcCustomTotal);
   });
+
+  // ---- Sub-option (choice) selects: per-choice price + conditional image upload ----
+  function syncSubOption(sel) {
+    var opt = sel.options[sel.selectedIndex];
+    var extra = opt ? (opt.getAttribute('data-extra') || '0') : '0';
+    sel.setAttribute('data-extra', extra);
+    var wrapId = sel.getAttribute('data-image-input');
+    var wrap = wrapId ? document.getElementById(wrapId) : null;
+    if (wrap) {
+      var needsImage = opt && opt.getAttribute('data-image') === '1';
+      wrap.style.display = needsImage ? '' : 'none';
+      var fileInput = wrap.querySelector('.suboption-image-input');
+      if (fileInput) {
+        if (needsImage && sel.hasAttribute('required')) fileInput.setAttribute('required', 'required');
+        else { fileInput.removeAttribute('required'); if (!needsImage) fileInput.value = ''; }
+      }
+    }
+    recalcCustomTotal();
+  }
+  document.querySelectorAll('.suboption-select').forEach(function (sel) {
+    sel.addEventListener('change', function () { syncSubOption(sel); });
+    syncSubOption(sel);
+  });
+
   recalcCustomTotal();
 
   // ---- Pincode checker ----

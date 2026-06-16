@@ -45,7 +45,7 @@
                         <td><input type="checkbox" name="ids[]" value="<?= (int)$p['id'] ?>" data-bulk="products"></td>
                         <td>
                             <?php if (!empty($p['thumbnail'])): ?>
-                                <img class="admin-thumb" src="<?= asset('uploads/' . $p['thumbnail']) ?>" alt="">
+                                <img class="admin-thumb" src="<?= e(productImage($p['thumbnail'])) ?>" alt="">
                             <?php else: ?><span class="admin-muted">—</span><?php endif; ?>
                         </td>
                         <td><?= e($p['name']) ?><?php if ($p['is_featured']): ?> <span class="admin-badge admin-badge-purple">Featured</span><?php endif; ?></td>

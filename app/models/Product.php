@@ -257,6 +257,7 @@ class Product extends BaseModel
         $del = $this->db->prepare('DELETE FROM product_customization_options WHERE product_id = ?');
         $del->execute([$productId]);
         foreach ($options as $i => $opt) {
+            $subOpts = !empty($opt['sub_options']) && is_array($opt['sub_options']) ? array_values($opt['sub_options']) : [];
             $this->insertInto('product_customization_options', [
                 'product_id' => $productId,
                 'option_type' => $opt['option_type'],
@@ -264,6 +265,7 @@ class Product extends BaseModel
                 'is_required' => !empty($opt['is_required']) ? 1 : 0,
                 'extra_charge' => $opt['extra_charge'] ?? 0,
                 'char_limit' => $opt['char_limit'] ?: null,
+                'sub_options' => $subOpts ? json_encode($subOpts) : null,
                 'sort_order' => $i,
             ]);
         }

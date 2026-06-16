@@ -21,6 +21,27 @@ function asset(string $path): string
     return rtrim(SITE_URL, '/') . '/' . implode('/', $segments);
 }
 
+/**
+ * Resolve a stored product image path to a public URL.
+ * Handles both legacy seed paths ("/images/foo.png", root-relative) and
+ * admin-uploaded paths ("products/prod_xxx.jpg", relative to the uploads dir).
+ */
+function productImage(?string $path): string
+{
+    if ($path === null || $path === '') {
+        return asset('/images/GDKD logo.png');
+    }
+    if (preg_match('#^https?://#i', $path)) {
+        return $path;
+    }
+    // Root-relative legacy paths (e.g. "/images/...") pass straight through.
+    if ($path[0] === '/') {
+        return asset($path);
+    }
+    // Everything else is an upload stored under the uploads directory.
+    return asset(trim(UPLOAD_URL, '/') . '/' . $path);
+}
+
 function url(string $path = ''): string
 {
     return rtrim(SITE_URL, '/') . '/' . ltrim($path, '/');
