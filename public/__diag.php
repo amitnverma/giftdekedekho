@@ -1,30 +1,45 @@
 <?php
 /**
- * TEMPORARY diagnostic — safe to delete. Reports how currency resolves on this
- * server so we can pinpoint why CURRENCY_SYMBOL is wrong. No secrets exposed.
+ * TEMPORARY diagnostic — safe to delete. Pinpoints where CURRENCY_SYMBOL
+ * is being defined as "262145". No secrets exposed (DB_PASS redacted).
  */
-require dirname(__DIR__) . '/config/config.php';
-require dirname(__DIR__) . '/app/helpers.php';
-
 header('Content-Type: text/plain');
 
-echo "CURRENCY_SYMBOL bytes: " . bin2hex(CURRENCY_SYMBOL) . "\n";
-echo "CURRENCY_SYMBOL value: " . CURRENCY_SYMBOL . "\n";
-echo "CURRENCY_CODE: " . CURRENCY_CODE . "\n";
-echo "gdd_local CURRENCY_SYMBOL set? " . (gdd_local('CURRENCY_SYMBOL') !== null ? 'YES -> ' . gdd_local('CURRENCY_SYMBOL') : 'no (using default)') . "\n";
-echo "config/local.php exists? " . (is_file(dirname(__DIR__) . '/config/local.php') ? 'yes' : 'no') . "\n";
-echo "config/config.php mtime: " . date('c', filemtime(dirname(__DIR__) . '/config/config.php')) . "\n";
-echo "config/config.php contains 262145? " . (strpos(file_get_contents(dirname(__DIR__) . '/config/config.php'), '262145') !== false ? 'YES (file on disk is corrupted)' : 'no (file on disk is clean)') . "\n";
+$root = dirname(__DIR__);
 
-if (function_exists('opcache_get_status')) {
-    $st = @opcache_get_status(false);
-    echo "opcache enabled: " . ($st && !empty($st['opcache_enabled']) ? 'YES' : 'no') . "\n";
-    $cfg = function_exists('opcache_get_configuration') ? opcache_get_configuration() : null;
-    if ($cfg) {
-        echo "opcache.validate_timestamps: " . var_export($cfg['directives']['opcache.validate_timestamps'] ?? null, true) . "\n";
-        echo "opcache.revalidate_freq: " . var_export($cfg['directives']['opcache.revalidate_freq'] ?? null, true) . "\n";
-    }
+echo "=== auto_prepend_file ===\n";
+echo "ini value: " . var_export(ini_get('auto_prepend_file'), true) . "\n";
+
+echo "\n=== before requiring anything ===\n";
+echo "CURRENCY_SYMBOL already defined? " . (defined('CURRENCY_SYMBOL') ? 'YES -> ' . CURRENCY_SYMBOL : 'no') . "\n";
+
+echo "\n=== requiring config/local.php directly ===\n";
+$localFile = $root . '/config/local.php';
+if (is_file($localFile)) {
+    $arr = require $localFile;
+    echo "local.php returned keys: " . (is_array($arr) ? implode(', ', array_keys($arr)) : '(not an array)') . "\n";
+    echo "CURRENCY_SYMBOL defined after local.php? " . (defined('CURRENCY_SYMBOL') ? 'YES -> ' . CURRENCY_SYMBOL : 'no') . "\n";
+    $raw = file_get_contents($localFile);
+    // Redact anything that looks like a password value.
+    $redacted = preg_replace("/(PASS[^=>]*[=>]+\s*['\"]).*?(['\"])/i", '$1***$2', $raw);
+    echo "--- local.php contents (passwords redacted) ---\n" . $redacted . "\n--- end ---\n";
 } else {
-    echo "opcache: functions not available\n";
+    echo "local.php does not exist\n";
 }
-echo "formatPrice(349): " . (function_exists('formatPrice') ? formatPrice(349) : 'n/a') . "\n";
+
+echo "\n=== scanning for stray CURRENCY_SYMBOL defines ===\n";
+foreach ([
+    $root . '/config/config.php',
+    $root . '/config/local.php',
+    $root . '/app/helpers.php',
+    $root . '/index.php',
+    $root . '/.user.ini',
+    $root . '/public/.user.ini',
+] as $f) {
+    if (is_file($f)) {
+        $c = file_get_contents($f);
+        $has262 = strpos($c, '262145') !== false;
+        $hasDef = stripos($c, "define('CURRENCY_SYMBOL'") !== false || stripos($c, 'define("CURRENCY_SYMBOL"') !== false;
+        echo basename($f) . ": 262145=" . ($has262 ? 'YES' : 'no') . " define=" . ($hasDef ? 'YES' : 'no') . "\n";
+    }
+}
