@@ -15,19 +15,15 @@ class Database
             //   1. config/local.php  (gitignored — per-server overrides; survives `git reset --hard`)
             //   2. environment variables
             //   3. local development defaults
-            $local = [];
-            $localFile = __DIR__ . '/local.php';
-            if (is_file($localFile)) {
-                $loaded = require $localFile;
-                if (is_array($loaded)) {
-                    $local = $loaded;
-                }
-            }
+            // gdd_local() is defined in config/config.php, which loads first.
+            $local = function_exists('gdd_local')
+                ? fn(string $k, $d) => gdd_local($k, $d)
+                : fn(string $k, $d) => $d;
 
-            $host = $local['DB_HOST'] ?? (getenv('DB_HOST') ?: 'localhost');
-            $name = $local['DB_NAME'] ?? (getenv('DB_NAME') ?: 'giftdekedekho');
-            $user = $local['DB_USER'] ?? (getenv('DB_USER') ?: 'root');
-            $pass = $local['DB_PASS'] ?? (getenv('DB_PASS') ?: '');
+            $host = $local('DB_HOST', getenv('DB_HOST') ?: 'localhost');
+            $name = $local('DB_NAME', getenv('DB_NAME') ?: 'giftdekedekho');
+            $user = $local('DB_USER', getenv('DB_USER') ?: 'root');
+            $pass = $local('DB_PASS', getenv('DB_PASS') ?: '');
             $charset = 'utf8mb4';
 
             $dsn = "mysql:host={$host};dbname={$name};charset={$charset}";

@@ -4,8 +4,27 @@
  * In production, set these via environment variables instead of committing real values.
  */
 
+// ---- Per-server overrides ----
+// config/local.php is gitignored, so it survives `git reset --hard` on deploy.
+// Put environment-specific values there (DB creds, currency, etc.) instead of
+// editing this tracked file — see config/local.example.php.
+$GLOBALS['__gdd_local'] = [];
+$__gdd_localFile = __DIR__ . '/local.php';
+if (is_file($__gdd_localFile)) {
+    $__gdd_loaded = require $__gdd_localFile;
+    if (is_array($__gdd_loaded)) {
+        $GLOBALS['__gdd_local'] = $__gdd_loaded;
+    }
+}
+if (!function_exists('gdd_local')) {
+    function gdd_local(string $key, $default = null)
+    {
+        return $GLOBALS['__gdd_local'][$key] ?? $default;
+    }
+}
+
 // ---- Environment ----
-define('ENVIRONMENT', getenv('APP_ENV') ?: 'development'); // development | production
+define('ENVIRONMENT', gdd_local('APP_ENV', getenv('APP_ENV') ?: 'development')); // development | production
 
 // ---- Site basics ----
 define('SITE_NAME', 'GiftDekeDekho');
@@ -49,8 +68,8 @@ if (!function_exists('gdd_detect_base_url')) {
     }
 }
 define('SITE_URL', gdd_detect_base_url());
-define('CURRENCY_SYMBOL', '₹');
-define('CURRENCY_CODE', 'INR');
+define('CURRENCY_SYMBOL', gdd_local('CURRENCY_SYMBOL', '₹'));
+define('CURRENCY_CODE', gdd_local('CURRENCY_CODE', 'INR'));
 
 // ---- Paths ----
 define('BASE_PATH', dirname(__DIR__));

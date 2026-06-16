@@ -12,8 +12,14 @@
  */
 
 return [
+    // Database credentials
     'DB_HOST' => 'localhost',
     'DB_NAME' => 'giftdekedekho',
     'DB_USER' => 'your_db_user',
     'DB_PASS' => 'your_db_password',
+
+    // Optional site overrides (omit any to keep the defaults below)
+    // 'APP_ENV'         => 'production',  // default: development
+    // 'CURRENCY_SYMBOL' => '₹',          // default: ₹
+    // 'CURRENCY_CODE'   => 'INR',        // default: INR
 ];
