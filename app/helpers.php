@@ -71,7 +71,7 @@ function flash(string $key, ?string $message = null)
 
 function formatPrice($amount): string
 {
-    return CURRENCY_SYMBOL . number_format((float)$amount, 2);
+    return GDD_CURRENCY_SYMBOL . number_format((float)$amount, 2);
 }
 
 function csrfToken(): string

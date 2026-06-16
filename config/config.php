@@ -68,8 +68,11 @@ if (!function_exists('gdd_detect_base_url')) {
     }
 }
 define('SITE_URL', gdd_detect_base_url());
-define('CURRENCY_SYMBOL', gdd_local('CURRENCY_SYMBOL', '₹'));
-define('CURRENCY_CODE', gdd_local('CURRENCY_CODE', 'INR'));
+// NOTE: prefixed with GDD_ to avoid a name collision with a PHP extension on
+// some servers (e.g. the MonarX security agent) that registers a global
+// CURRENCY_SYMBOL constant, which would make our define() a silent no-op.
+define('GDD_CURRENCY_SYMBOL', gdd_local('CURRENCY_SYMBOL', '₹'));
+define('GDD_CURRENCY_CODE', gdd_local('CURRENCY_CODE', 'INR'));
 
 // ---- Paths ----
 define('BASE_PATH', dirname(__DIR__));

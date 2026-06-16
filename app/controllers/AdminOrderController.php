@@ -147,20 +147,20 @@ class AdminOrderController extends BaseController
             $lineTotal = (float)$item['unit_price'] * (int)$item['quantity'];
             $pdf->Cell(90, 7, $item['product_name_snapshot'], 1);
             $pdf->Cell(25, 7, (string)$item['quantity'], 1, 0, 'C');
-            $pdf->Cell(35, 7, CURRENCY_SYMBOL . number_format((float)$item['unit_price'], 2), 1, 0, 'R');
-            $pdf->Cell(40, 7, CURRENCY_SYMBOL . number_format($lineTotal, 2), 1, 1, 'R');
+            $pdf->Cell(35, 7, GDD_CURRENCY_SYMBOL . number_format((float)$item['unit_price'], 2), 1, 0, 'R');
+            $pdf->Cell(40, 7, GDD_CURRENCY_SYMBOL . number_format($lineTotal, 2), 1, 1, 'R');
         }
 
         $pdf->Ln(2);
         $pdf->Cell(150, 7, 'Subtotal', 0, 0, 'R');
-        $pdf->Cell(40, 7, CURRENCY_SYMBOL . number_format((float)$order['subtotal'], 2), 0, 1, 'R');
+        $pdf->Cell(40, 7, GDD_CURRENCY_SYMBOL . number_format((float)$order['subtotal'], 2), 0, 1, 'R');
         $pdf->Cell(150, 7, 'Discount', 0, 0, 'R');
-        $pdf->Cell(40, 7, '- ' . CURRENCY_SYMBOL . number_format((float)$order['discount'], 2), 0, 1, 'R');
+        $pdf->Cell(40, 7, '- ' . GDD_CURRENCY_SYMBOL . number_format((float)$order['discount'], 2), 0, 1, 'R');
         $pdf->Cell(150, 7, 'Shipping', 0, 0, 'R');
-        $pdf->Cell(40, 7, CURRENCY_SYMBOL . number_format((float)$order['shipping_charge'], 2), 0, 1, 'R');
+        $pdf->Cell(40, 7, GDD_CURRENCY_SYMBOL . number_format((float)$order['shipping_charge'], 2), 0, 1, 'R');
         $pdf->SetFont('Arial', 'B', 11);
         $pdf->Cell(150, 8, 'Grand Total', 0, 0, 'R');
-        $pdf->Cell(40, 8, CURRENCY_SYMBOL . number_format((float)$order['total'], 2), 0, 1, 'R');
+        $pdf->Cell(40, 8, GDD_CURRENCY_SYMBOL . number_format((float)$order['total'], 2), 0, 1, 'R');
 
         $pdf->Ln(6);
         $pdf->SetFont('Arial', '', 9);

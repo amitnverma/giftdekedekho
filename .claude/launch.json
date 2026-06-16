@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "gdkd",
+      "runtimeExecutable": "/Applications/XAMPP/xamppfiles/bin/php",
+      "runtimeArgs": ["-S", "localhost:8765", "-t", "/Applications/XAMPP/xamppfiles/htdocs/giftdekedekho", "/Applications/XAMPP/xamppfiles/htdocs/giftdekedekho/.claude/preview-router.php"],
+      "port": 8765
+    }
+  ]
+}
