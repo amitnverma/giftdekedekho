@@ -11,10 +11,23 @@ class Database
     public static function getInstance(): PDO
     {
         if (self::$instance === null) {
-            $host = getenv('DB_HOST') ?: 'localhost';
-            $name = getenv('DB_NAME') ?: 'giftdekedekho';
-            $user = getenv('DB_USER') ?: 'root';
-            $pass = getenv('DB_PASS') ?: '';
+            // Credentials resolution order:
+            //   1. config/local.php  (gitignored — per-server overrides; survives `git reset --hard`)
+            //   2. environment variables
+            //   3. local development defaults
+            $local = [];
+            $localFile = __DIR__ . '/local.php';
+            if (is_file($localFile)) {
+                $loaded = require $localFile;
+                if (is_array($loaded)) {
+                    $local = $loaded;
+                }
+            }
+
+            $host = $local['DB_HOST'] ?? (getenv('DB_HOST') ?: 'localhost');
+            $name = $local['DB_NAME'] ?? (getenv('DB_NAME') ?: 'giftdekedekho');
+            $user = $local['DB_USER'] ?? (getenv('DB_USER') ?: 'root');
+            $pass = $local['DB_PASS'] ?? (getenv('DB_PASS') ?: '');
             $charset = 'utf8mb4';
 
             $dsn = "mysql:host={$host};dbname={$name};charset={$charset}";
