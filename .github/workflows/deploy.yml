@@ -24,20 +24,8 @@ jobs:
             git reset --hard origin/main
             echo "After:  $(git rev-parse --short HEAD)"
             git --no-pager log -1 --pretty='Deployed commit %h — %s'
-
-            # Clear PHP OPcache so updated .php files take effect immediately.
-            # Reloads whichever php-fpm service exists; never fails the deploy.
-            reloaded=""
-            for svc in $(systemctl list-units --type=service --all 2>/dev/null \
-                          | grep -oE 'php[0-9.]*-fpm\.service|php-fpm\.service' | sort -u); do
-              if sudo -n systemctl reload "$svc" 2>/dev/null || systemctl reload "$svc" 2>/dev/null; then
-                reloaded="$reloaded $svc"
-              fi
-            done
-            if [ -n "$reloaded" ]; then
-              echo "Reloaded PHP-FPM:$reloaded (OPcache cleared)"
-            else
-              echo "WARNING: could not reload php-fpm — if PHP changes don't appear, reload it manually or restart the web server."
-            fi
-
+            # Warn about any files pinned with skip-worktree/assume-unchanged —
+            # these are silently skipped by reset and can cause stale config.
+            pinned="$(git ls-files -v | grep -iE '^[a-z]' || true)"
+            if [ -n "$pinned" ]; then echo "NOTE: pinned files (not updated by deploy):"; echo "$pinned"; fi
             echo "Deployed at $(date)"
