@@ -1,13 +1,25 @@
 <?php
 // TEMPORARY diagnostic — safe to delete.
 header('Content-Type: text/plain');
-echo "CURRENCY_SYMBOL at start: " . (defined('CURRENCY_SYMBOL') ? CURRENCY_SYMBOL : '(not defined)') . "\n";
-echo "opcache.preload: " . var_export(ini_get('opcache.preload'), true) . "\n";
-echo "opcache.preload_user: " . var_export(ini_get('opcache.preload_user'), true) . "\n";
-if (function_exists('opcache_get_status')) {
-    $st = @opcache_get_status(false);
-    echo "opcache preload statistics present: " . (isset($st['preload_statistics']) ? 'YES' : 'no') . "\n";
-    if (isset($st['preload_statistics']['scripts'])) {
-        echo "preloaded scripts:\n  " . implode("\n  ", $st['preload_statistics']['scripts']) . "\n";
+
+echo "CURRENCY_SYMBOL value: " . (defined('CURRENCY_SYMBOL') ? CURRENCY_SYMBOL : '(not defined)') . "\n\n";
+
+echo "=== which category defines CURRENCY_SYMBOL ===\n";
+$all = get_defined_constants(true);
+foreach ($all as $category => $consts) {
+    if (array_key_exists('CURRENCY_SYMBOL', $consts)) {
+        echo "category: {$category}  value: " . var_export($consts['CURRENCY_SYMBOL'], true) . "\n";
+    }
+}
+
+echo "\n=== loaded extensions ===\n";
+echo implode(', ', get_loaded_extensions()) . "\n";
+
+echo "\n=== any constant whose value is 262145 ===\n";
+foreach ($all as $category => $consts) {
+    foreach ($consts as $name => $val) {
+        if ((is_int($val) || is_string($val)) && (string)$val === '262145') {
+            echo "{$category}: {$name} = {$val}\n";
+        }
     }
 }
