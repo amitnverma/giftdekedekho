@@ -548,7 +548,7 @@ table.data-table th, table.data-table td { padding: 12px 14px; border-bottom: 1p
 /* ── Category Nav Bar ─────────────────────────────────────── */
 .gdd-catnav {
   border-top:1px solid var(--color-border);
-  background:#fff;
+  background:var(--cat-bar-bg, #fff);
   position:relative; /* anchor for arrows + fades */
 }
 /* Edge fades — only shown (via JS toggles) when there's more to scroll */
@@ -557,8 +557,8 @@ table.data-table th, table.data-table td { padding: 12px 14px; border-bottom: 1p
   content:''; position:absolute; top:0; bottom:0; width:56px;
   pointer-events:none; z-index:2; opacity:0; transition:opacity .2s ease;
 }
-.gdd-catnav::before { left:0;  background:linear-gradient(to right, #fff, transparent); }
-.gdd-catnav::after  { right:0; background:linear-gradient(to left,  #fff, transparent); }
+.gdd-catnav::before { left:0;  background:linear-gradient(to right, var(--cat-bar-bg, #fff), transparent); }
+.gdd-catnav::after  { right:0; background:linear-gradient(to left,  var(--cat-bar-bg, #fff), transparent); }
 .gdd-catnav.has-left-fade::before  { opacity:1; }
 .gdd-catnav.has-right-fade::after  { opacity:1; }
 .gdd-catnav-inner {
@@ -569,14 +569,20 @@ table.data-table th, table.data-table td { padding: 12px 14px; border-bottom: 1p
   scroll-behavior:smooth;
   scrollbar-width:none;            /* arrows are the affordance; hide native bar */
 }
+/* Alignment — when content fits, honour the chosen alignment; auto margins
+   keep the start reachable when the row overflows and must scroll. */
+.gdd-catnav[data-align="center"] .gdd-catnav-inner { justify-content:flex-start; }
+.gdd-catnav[data-align="center"] .gdd-catnav-inner > :first-child { margin-left:auto; }
+.gdd-catnav[data-align="center"] .gdd-catnav-inner > :last-child  { margin-right:auto; }
+.gdd-catnav[data-align="right"]  .gdd-catnav-inner > :first-child { margin-left:auto; }
 .gdd-catnav-inner::-webkit-scrollbar { display:none; }
 /* Scroll arrow buttons */
 .gdd-catnav-arrow {
   position:absolute; top:0; bottom:0; z-index:3;
   width:44px; border:none; cursor:pointer;
   display:flex; align-items:center; justify-content:center;
-  color:var(--color-text); background:#fff;
-  box-shadow:0 0 18px 10px #fff;   /* blend into the fade */
+  color:var(--color-text); background:var(--cat-bar-bg, #fff);
+  box-shadow:0 0 18px 10px var(--cat-bar-bg, #fff);   /* blend into the fade */
 }
 .gdd-catnav-arrow[hidden] { display:none; }
 .gdd-catnav-arrow-left  { left:0;  }
@@ -585,9 +591,11 @@ table.data-table th, table.data-table td { padding: 12px 14px; border-bottom: 1p
 .gdd-catnav-arrow:hover { color:var(--color-primary); }
 .gdd-catpill {
   flex:none; display:inline-flex; align-items:center; gap:8px; padding:6px 14px 6px 6px; border-radius:50px;
-  font-size:13px; font-weight:700; color:var(--color-text); white-space:nowrap; border:1px solid transparent;
+  font-size:var(--cat-fs, 13px); letter-spacing:var(--cat-ls, 0); font-weight:700; color:var(--cat-text, var(--color-text));
+  white-space:nowrap; border:1px solid transparent;
   transition:background .2s ease, border-color .2s ease, color .2s ease, transform .2s ease;
 }
+.gdd-catpill.text-only { padding:8px 14px; }
 .gdd-catpill-icon {
   width:34px; height:34px; border-radius:50%; flex:none; overflow:hidden; display:flex; align-items:center; justify-content:center;
   background:var(--color-bg-alt); box-shadow:inset 0 0 0 1px rgba(0,0,0,.05);
@@ -595,9 +603,37 @@ table.data-table th, table.data-table td { padding: 12px 14px; border-bottom: 1p
 .gdd-catpill-icon img { width:100%; height:100%; object-fit:cover; }
 .gdd-catpill-icon .emoji { font-size:18px; line-height:1; }
 .gdd-catpill:hover { background:var(--color-bg-alt); transform:translateY(-1px); }
-.gdd-catpill.active { background:#fff0ee; color:var(--color-primary); border-color:#ffd9d2; }
-.gdd-catpill.featured { color:var(--color-primary); }
+.gdd-catpill.active { background:#fff0ee; color:var(--cat-accent, var(--color-primary)); border-color:#ffd9d2; }
+.gdd-catpill.featured { color:var(--cat-accent, var(--color-primary)); }
 .gdd-catpill.featured .gdd-catpill-icon { background:linear-gradient(135deg,#ffe1e1,#ffe9d6); }
+
+/* ── Category bar customisation (admin-driven via data-attrs on .gdd-catnav) ── */
+.gdd-catnav[data-transform="uppercase"] .gdd-catpill-label { text-transform:uppercase; letter-spacing:max(var(--cat-ls, 0px), .5px); }
+
+/* Text-only pills: flat, no chip; accent on hover */
+.gdd-catpill.text-only,
+.gdd-catpill.text-only:hover { background:transparent; border-color:transparent; transform:none; }
+.gdd-catpill.text-only:hover { color:var(--cat-accent, var(--color-primary)); }
+
+/* Active indicator styles (apply across icon + text modes) */
+.gdd-catpill-label { position:relative; }
+.gdd-catnav[data-active="underline"] .gdd-catpill,
+.gdd-catnav[data-active="bold"]      .gdd-catpill { background:transparent; border-color:transparent; }
+.gdd-catnav[data-active="underline"] .gdd-catpill:hover,
+.gdd-catnav[data-active="bold"]      .gdd-catpill:hover { background:transparent; }
+.gdd-catnav[data-active="underline"] .gdd-catpill.active,
+.gdd-catnav[data-active="bold"]      .gdd-catpill.active { background:transparent; border-color:transparent; color:var(--cat-accent, var(--color-primary)); }
+.gdd-catnav[data-active="bold"] .gdd-catpill.active { font-weight:800; }
+.gdd-catnav[data-active="underline"] .gdd-catpill.active .gdd-catpill-label::after,
+.gdd-catnav[data-active="underline"] .gdd-catpill:hover .gdd-catpill-label::after {
+  content:''; position:absolute; left:0; right:0; bottom:-5px; height:2px; border-radius:2px;
+  background:var(--cat-accent, var(--color-primary));
+}
+
+/* Thin divider line between text-only pills */
+.gdd-catnav[data-sep="line"] .gdd-catpill.text-only + .gdd-catpill.text-only {
+  border-left:1px solid var(--color-border); border-radius:0; margin-left:2px; padding-left:16px;
+}
 
 @media (max-width: 880px){
   .gdd-burger { display:flex; }

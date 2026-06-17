@@ -109,6 +109,48 @@ function designAppearancePanel(array $style, bool $withBg = true, bool $withSubt
     echo '</div>';
 }
 
+/**
+ * Optional/blankable colour field: swatch + native picker + hex text input.
+ * Leaving it blank stores '' so the storefront falls back to the theme colour.
+ * $fallback is only used to seed the picker UI, never stored automatically.
+ */
+function navColorField(string $name, string $label, string $hint, string $current, string $fallback): void {
+    $id   = 'nc_' . preg_replace('/[^a-z0-9]/i', '_', $name);
+    $cur  = preg_match('/^#[0-9a-fA-F]{6}$/', $current) ? $current : '';
+    $seed = $cur ?: $fallback;
+    $eLbl = htmlspecialchars($label, ENT_QUOTES);
+    $eHnt = htmlspecialchars($hint, ENT_QUOTES);
+    $eNm  = htmlspecialchars($name, ENT_QUOTES);
+    $eCur = htmlspecialchars($cur, ENT_QUOTES);
+    $eSeed= htmlspecialchars($seed, ENT_QUOTES);
+    $op   = $cur ? '1' : '.35';
+    echo <<<HTML
+<div class="gdd-color-widget">
+  <div class="gdd-color-widget-header">
+    <div>
+      <div class="gdd-color-widget-label">{$eLbl}</div>
+      <div class="gdd-color-widget-hint">{$eHnt}</div>
+    </div>
+    <button type="button" class="gdd-color-reset"
+      onclick="document.getElementById('{$id}_hex').value='';document.getElementById('{$id}_sw').style.background='{$eSeed}';document.getElementById('{$id}_sw').style.opacity='.4';"
+      title="Clear — inherit theme colour">&#x21BA; Theme</button>
+  </div>
+  <div class="gdd-color-widget-body">
+    <div id="{$id}_sw" class="gdd-color-swatch" style="background:{$eSeed};opacity:{$op}"
+         onclick="document.getElementById('{$id}_pick').click()" title="Click to choose a colour"></div>
+    <input type="color" id="{$id}_pick" value="{$eSeed}"
+           style="position:absolute;opacity:0;width:0;height:0;pointer-events:none"
+           oninput="document.getElementById('{$id}_hex').value=this.value;document.getElementById('{$id}_sw').style.background=this.value;document.getElementById('{$id}_sw').style.opacity='1';">
+    <div class="gdd-color-inputs">
+      <input type="text" id="{$id}_hex" name="{$eNm}" class="gdd-color-hex" value="{$eCur}" maxlength="7" placeholder="inherit"
+             oninput="var v=this.value;if(/^#[0-9a-fA-F]{6}\$/.test(v)){document.getElementById('{$id}_pick').value=v;document.getElementById('{$id}_sw').style.background=v;document.getElementById('{$id}_sw').style.opacity='1';}else if(v===''){document.getElementById('{$id}_sw').style.opacity='.4';}">
+      <div class="gdd-color-default-label">Blank = theme colour</div>
+    </div>
+  </div>
+</div>
+HTML;
+}
+
 $hero = $sections['hero_banner'] ?? [];
 $promo = $sections['promo_strip'] ?? [];
 $featuredSection = $sections['featured_products_section'] ?? [];
@@ -481,7 +523,26 @@ foreach (($categories ?? []) as $cat) {
             $showHome    = !isset($navSection['show_home'])      || !empty($navSection['show_home']);
             $showAll     = !isset($navSection['show_all_gifts']) || !empty($navSection['show_all_gifts']);
             $navActive   = !isset($navSection['is_active'])      || !empty($navSection['is_active']);
+            $showImages  = !isset($navSection['show_images'])    || !empty($navSection['show_images']);
             $navMaxItems = (int)($navSection['max_items'] ?? 0); // 0 = show all visible
+            // Bar appearance / styling
+            $navAlign      = $navSection['nav_align']        ?? 'left';
+            $navTransform  = $navSection['nav_transform']    ?? 'none';
+            $navActiveSt   = $navSection['nav_active_style']  ?? 'highlight';
+            $navSeparator  = $navSection['nav_separator']    ?? 'none';
+            $navFontSize   = (int)($navSection['nav_font_size'] ?? 0);
+            $navLetterSp   = (float)($navSection['nav_letter_spacing'] ?? 0);
+            $navTextColor  = $navSection['nav_text_color']   ?? '';
+            $navAccentCol  = $navSection['nav_accent_color'] ?? '';
+            $navBarBg      = $navSection['nav_bar_bg']       ?? '';
+            // Resolved values for the live preview
+            $pvText   = $navTextColor ?: '#1d1d1f';
+            $pvAccent = $navAccentCol ?: '#e63946';
+            $pvBarBg  = $navBarBg ?: '#ffffff';
+            $pvFs     = $navFontSize > 0 ? $navFontSize : 13;
+            $pvLs     = $navLetterSp;
+            if ($navTransform === 'uppercase' && $pvLs < 0.5) $pvLs = 0.5;
+            $pvJustify = $navAlign === 'center' ? 'center' : ($navAlign === 'right' ? 'flex-end' : 'flex-start');
 
             // If no items saved yet, use all categories as defaults (all visible)
             if (empty($savedItems)) {
@@ -501,39 +562,51 @@ foreach (($categories ?? []) as $cat) {
             }
             ?>
 
+            <?php
+            // ── Live preview: faithful mini-render of the storefront pills ──
+            $pvPad   = $showImages ? '5px 13px 5px 5px' : '7px 13px';
+            $pvTrans = $navTransform === 'uppercase' ? 'uppercase' : 'none';
+            $pvPill  = "display:inline-flex;align-items:center;gap:7px;border-radius:50px;border:1px solid transparent;white-space:nowrap;font-weight:700;font-size:{$pvFs}px;letter-spacing:{$pvLs}px;color:{$pvText};padding:{$pvPad}";
+            $pvIcon  = "width:30px;height:30px;border-radius:50%;overflow:hidden;flex:none;display:flex;align-items:center;justify-content:center;background:#f1f1f3;font-size:16px";
+            // Active-state demo styles
+            if ($navActiveSt === 'highlight') {
+                $pvActive = "background:{$pvAccent}1a;color:{$pvAccent};border-color:{$pvAccent}40";
+                $pvUnderline = '';
+            } elseif ($navActiveSt === 'underline') {
+                $pvActive = "color:{$pvAccent}";
+                $pvUnderline = "border-bottom:2px solid {$pvAccent};padding-bottom:2px";
+            } else { // bold
+                $pvActive = "color:{$pvAccent};font-weight:800";
+                $pvUnderline = '';
+            }
+            $pvSepStyle = $navSeparator === 'line' && !$showImages ? 'border-left:1px solid #e5e7eb;border-radius:0;margin-left:0' : '';
+            // Render helper
+            $renderPv = function(string $iconHtml, string $label, bool $active = false) use ($pvPill, $pvIcon, $pvActive, $pvUnderline, $pvTrans, $showImages) {
+                $style = $pvPill . ($active ? ';' . $pvActive : '');
+                echo '<span style="' . $style . '">';
+                if ($showImages && $iconHtml !== '') echo '<span style="' . $pvIcon . '">' . $iconHtml . '</span>';
+                echo '<span style="text-transform:' . $pvTrans . ';' . ($active ? $pvUnderline : '') . '">' . e($label) . '</span>';
+                echo '</span>';
+            };
+            ?>
             <!-- Live preview -->
-            <div style="background:#fff;border:1px solid #e8e8e8;border-radius:10px;padding:12px 16px;margin-bottom:20px;overflow-x:auto">
-                <p style="font-size:11px;color:#aaa;margin:0 0 10px;text-transform:uppercase;letter-spacing:.5px">↓ Live Preview — Category Nav Bar</p>
-                <div style="display:flex;gap:6px;align-items:center;flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px">
-                    <?php if ($showHome): ?>
-                    <span style="display:flex;flex-direction:column;align-items:center;gap:4px;min-width:56px">
-                        <span style="width:44px;height:44px;border-radius:50%;background:#f5f5f5;display:flex;align-items:center;justify-content:center;font-size:20px">🏠</span>
-                        <span style="font-size:11px;font-weight:600;color:#333">Home</span>
-                    </span>
-                    <?php endif; ?>
-                    <?php if ($showAll): ?>
-                    <span style="display:flex;flex-direction:column;align-items:center;gap:4px;min-width:56px">
-                        <span style="width:44px;height:44px;border-radius:50%;background:#f5f5f5;display:flex;align-items:center;justify-content:center;font-size:20px">🎁</span>
-                        <span style="font-size:11px;font-weight:600;color:#333">All Gifts</span>
-                    </span>
-                    <?php endif; ?>
-                    <?php foreach ($savedItems as $ni): if (empty($ni['visible'])) continue;
+            <div style="background:<?= e($pvBarBg) ?>;border:1px solid #e8e8e8;border-radius:10px;padding:12px 16px;margin-bottom:20px;overflow-x:auto">
+                <p style="font-size:11px;color:#aaa;margin:0 0 10px;text-transform:uppercase;letter-spacing:.5px">↓ Live Preview — Category Nav Bar <span style="text-transform:none;letter-spacing:0">(first category shown in its active state)</span></p>
+                <div style="display:flex;gap:4px;align-items:center;flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px;justify-content:<?= e($pvJustify) ?>">
+                    <?php if ($showHome) $renderPv('🏠', 'Home'); ?>
+                    <?php if ($showAll)  $renderPv('🎁', 'All Gifts'); ?>
+                    <?php $pvFirst = true; foreach ($savedItems as $ni): if (empty($ni['visible'])) continue;
                         $niCat = $catBySlug[$ni['slug']] ?? null;
                         $niImg = $niCat['image'] ?? '';
                         $niEmoji = $ni['emoji'] ?? '';
                         $niLabel = $ni['label'] ?: ($niCat['name'] ?? $ni['slug']);
-                    ?>
-                    <span style="display:flex;flex-direction:column;align-items:center;gap:4px;min-width:56px">
-                        <span style="width:44px;height:44px;border-radius:50%;overflow:hidden;border:1px solid #eee;display:flex;align-items:center;justify-content:center;background:#f5f5f5">
-                            <?php if ($niImg): ?>
-                                <img src="<?= e(asset($niImg)) ?>" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none'">
-                            <?php else: ?>
-                                <span style="font-size:20px"><?= e($niEmoji ?: '🎀') ?></span>
-                            <?php endif; ?>
-                        </span>
-                        <span style="font-size:11px;font-weight:600;color:#333;text-align:center;max-width:60px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis"><?= e($niLabel) ?></span>
-                    </span>
-                    <?php endforeach; ?>
+                        $iconHtml = $niImg
+                            ? '<img src="' . e(asset($niImg)) . '" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display=\'none\'">'
+                            : '<span>' . e($niEmoji ?: '🎀') . '</span>';
+                        if ($pvSepStyle && !$pvFirst) echo '<span style="align-self:stretch;width:1px;background:#e5e7eb;margin:6px 2px"></span>';
+                        $renderPv($iconHtml, $niLabel, $pvFirst);
+                        $pvFirst = false;
+                    endforeach; ?>
                 </div>
             </div>
 
@@ -554,12 +627,60 @@ foreach (($categories ?? []) as $cat) {
                         <input type="checkbox" name="show_all_gifts" value="1" <?= $showAll ? 'checked' : '' ?>>
                         Show "All Gifts" pill
                     </label>
+                    <label class="admin-checkbox">
+                        <input type="checkbox" name="show_images" value="1" <?= $showImages ? 'checked' : '' ?>>
+                        Show pill images/icons <small style="font-weight:400;color:#888">(uncheck for text-only pills)</small>
+                    </label>
                     <label style="display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600">
                         Max categories to show
                         <input type="number" name="max_items" value="<?= $navMaxItems ?: '' ?>" min="1" max="20" placeholder="8"
                                style="width:80px;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px">
                         <small style="font-weight:400;color:#888">Default: 8. Leave blank to show all checked items.</small>
                     </label>
+                </div>
+
+                <!-- ── Bar Appearance & Styling ── -->
+                <div class="gdd-appearance" style="margin-bottom:18px">
+                    <h4 class="gdd-appearance-title">🎨 Bar Appearance &amp; Styling</h4>
+                    <div class="admin-form-row" style="align-items:stretch">
+                        <label>Alignment <span class="admin-label-hint">Default: Left</span>
+                            <select name="nav_align">
+                                <option value="left"   <?= $navAlign === 'left'   ? 'selected' : '' ?>>Left (default)</option>
+                                <option value="center" <?= $navAlign === 'center' ? 'selected' : '' ?>>Centre</option>
+                                <option value="right"  <?= $navAlign === 'right'  ? 'selected' : '' ?>>Right</option>
+                            </select>
+                        </label>
+                        <label>Label Case <span class="admin-label-hint">Uppercase looks editorial</span>
+                            <select name="nav_transform">
+                                <option value="none"      <?= $navTransform === 'none'      ? 'selected' : '' ?>>Normal (default)</option>
+                                <option value="uppercase" <?= $navTransform === 'uppercase' ? 'selected' : '' ?>>UPPERCASE</option>
+                            </select>
+                        </label>
+                        <label>Active / Current Style <span class="admin-label-hint">How the open category is marked</span>
+                            <select name="nav_active_style">
+                                <option value="highlight" <?= $navActiveSt === 'highlight' ? 'selected' : '' ?>>Highlight pill (default)</option>
+                                <option value="underline" <?= $navActiveSt === 'underline' ? 'selected' : '' ?>>Underline</option>
+                                <option value="bold"      <?= $navActiveSt === 'bold'      ? 'selected' : '' ?>>Bold colour</option>
+                            </select>
+                        </label>
+                        <label>Separator <span class="admin-label-hint">Text-only mode</span>
+                            <select name="nav_separator">
+                                <option value="none" <?= $navSeparator === 'none' ? 'selected' : '' ?>>None (default)</option>
+                                <option value="line" <?= $navSeparator === 'line' ? 'selected' : '' ?>>Thin divider line</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div class="admin-form-row" style="align-items:stretch">
+                        <?php designNumberField('nav_font_size', 'Label Font Size', 'Pixels — blank = default (13px)', $navFontSize ?: '', '13', 10, 22); ?>
+                        <label>Letter Spacing <span class="admin-label-hint">0–4 px — blank = 0</span>
+                            <input type="number" name="nav_letter_spacing" value="<?= $navLetterSp ?: '' ?>" min="0" max="4" step="0.5" placeholder="0">
+                        </label>
+                    </div>
+                    <div class="admin-form-row" style="align-items:stretch">
+                        <?php navColorField('nav_text_color',   'Text Colour',           'Category label colour',            $navTextColor,  '#1d1d1f'); ?>
+                        <?php navColorField('nav_accent_color', 'Accent Colour',         'Hover &amp; active highlight',     $navAccentCol,  '#e63946'); ?>
+                        <?php navColorField('nav_bar_bg',       'Bar Background',         'Background behind the whole bar',  $navBarBg,      '#ffffff'); ?>
+                    </div>
                 </div>
 
                 <p style="font-weight:600;margin-bottom:8px">Category Pills <small style="font-weight:400;color:#888">— check to show, uncheck to hide. Order is preserved.</small></p>

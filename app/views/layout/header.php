@@ -188,7 +188,25 @@ $__navBarSection = ($__r = $__navBarRow->fetch()) ? (json_decode($__r['content_j
 $__navBarActive  = !isset($__navBarSection['is_active'])      || !empty($__navBarSection['is_active']);
 $__navShowHome   = !isset($__navBarSection['show_home'])      || !empty($__navBarSection['show_home']);
 $__navShowAll    = !isset($__navBarSection['show_all_gifts']) || !empty($__navBarSection['show_all_gifts']);
+$__navShowImages = !isset($__navBarSection['show_images'])    || !empty($__navBarSection['show_images']);
 $__navMaxItems   = (int)($__navBarSection['max_items'] ?? 0);
+// Bar appearance / styling
+$__navAlign     = $__navBarSection['nav_align']         ?? 'left';
+$__navTransform = $__navBarSection['nav_transform']     ?? 'none';
+$__navActiveSt  = $__navBarSection['nav_active_style']  ?? 'highlight';
+$__navSep       = $__navBarSection['nav_separator']     ?? 'none';
+$__navFs        = (int)($__navBarSection['nav_font_size'] ?? 0);
+$__navLs        = (float)($__navBarSection['nav_letter_spacing'] ?? 0);
+$__navTextCol   = $__navBarSection['nav_text_color']    ?? '';
+$__navAccent    = $__navBarSection['nav_accent_color']  ?? '';
+$__navBarBg     = $__navBarSection['nav_bar_bg']        ?? '';
+$__navVars = [];
+if ($__navFs > 0)         $__navVars[] = '--cat-fs:' . $__navFs . 'px';
+if ($__navLs > 0)         $__navVars[] = '--cat-ls:' . $__navLs . 'px';
+if ($__navTextCol !== '') $__navVars[] = '--cat-text:' . $__navTextCol;
+if ($__navAccent !== '')  $__navVars[] = '--cat-accent:' . $__navAccent;
+if ($__navBarBg !== '')   $__navVars[] = '--cat-bar-bg:' . $__navBarBg;
+$__navStyleAttr = $__navVars ? ' style="' . e(implode(';', $__navVars)) . '"' : '';
 $__navBarItems   = $__navBarSection['items'] ?? [];
 
 // If not configured yet, fall back to the top N active categories
@@ -219,20 +237,20 @@ $__catLookup = [];
 foreach ($__navCats as $__nc) { $__catLookup[$__nc['slug']] = $__nc; }
 ?>
 <?php if ($__navBarActive): ?>
-<nav class="gdd-catnav">
+<nav class="gdd-catnav" data-align="<?= e($__navAlign) ?>" data-transform="<?= e($__navTransform) ?>" data-active="<?= e($__navActiveSt) ?>" data-sep="<?= e($__navSep) ?>"<?= $__navStyleAttr ?>>
   <button type="button" class="gdd-catnav-arrow gdd-catnav-arrow-left" aria-label="Scroll left" hidden>
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
   </button>
   <div class="gdd-catnav-inner">
     <?php if ($__navShowHome): ?>
-    <a href="<?= url('/') ?>" class="gdd-catpill <?= ($__currentPath === '/' || $__currentPath === '') ? 'active' : '' ?>">
-      <span class="gdd-catpill-icon emoji">🏠</span>
+    <a href="<?= url('/') ?>" class="gdd-catpill<?= $__navShowImages ? '' : ' text-only' ?> <?= ($__currentPath === '/' || $__currentPath === '') ? 'active' : '' ?>">
+      <?php if ($__navShowImages): ?><span class="gdd-catpill-icon emoji">🏠</span><?php endif; ?>
       <span class="gdd-catpill-label">Home</span>
     </a>
     <?php endif; ?>
     <?php if ($__navShowAll): ?>
-    <a href="<?= url('/category/all') ?>" class="gdd-catpill">
-      <span class="gdd-catpill-icon emoji">🎁</span>
+    <a href="<?= url('/category/all') ?>" class="gdd-catpill<?= $__navShowImages ? '' : ' text-only' ?>">
+      <?php if ($__navShowImages): ?><span class="gdd-catpill-icon emoji">🎁</span><?php endif; ?>
       <span class="gdd-catpill-label">All Gifts</span>
     </a>
     <?php endif; ?>
@@ -246,7 +264,8 @@ foreach ($__navCats as $__nc) { $__catLookup[$__nc['slug']] = $__nc; }
       $__nbiHref  = url('/category/' . $__nbiSlug);
       $__isFeat   = $__nbiSlug === 'video-photo-gifts';
     ?>
-      <a href="<?= e($__nbiHref) ?>" class="gdd-catpill<?= $__isFeat ? ' featured' : '' ?><?= gddNavActive($__nbiHref, (string)$__currentPath) ?>">
+      <a href="<?= e($__nbiHref) ?>" class="gdd-catpill<?= $__navShowImages ? '' : ' text-only' ?><?= $__isFeat ? ' featured' : '' ?><?= gddNavActive($__nbiHref, (string)$__currentPath) ?>">
+        <?php if ($__navShowImages): ?>
         <span class="gdd-catpill-icon">
           <?php if ($__nbiImg): ?>
             <img src="<?= e(asset($__nbiImg)) ?>" alt="<?= e($__nbiLabel) ?>" loading="lazy">
@@ -254,6 +273,7 @@ foreach ($__navCats as $__nc) { $__catLookup[$__nc['slug']] = $__nc; }
             <span class="emoji"><?= e($__nbiEmoji ?: ($__isFeat ? '🎬' : '🎀')) ?></span>
           <?php endif; ?>
         </span>
+        <?php endif; ?>
         <span class="gdd-catpill-label"><?= e($__nbiLabel) ?></span>
       </a>
     <?php endforeach; ?>

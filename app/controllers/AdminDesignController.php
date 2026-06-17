@@ -262,12 +262,30 @@ class AdminDesignController extends BaseController
                     ];
                 }
                 $maxItems = (int)$this->input('max_items', 0);
+                // Appearance / styling
+                $navAlign     = in_array($this->input('nav_align'), ['left', 'center', 'right'], true) ? $this->input('nav_align') : 'left';
+                $navTransform = $this->input('nav_transform') === 'uppercase' ? 'uppercase' : 'none';
+                $navActiveSt  = in_array($this->input('nav_active_style'), ['highlight', 'underline', 'bold'], true) ? $this->input('nav_active_style') : 'highlight';
+                $navSep       = $this->input('nav_separator') === 'line' ? 'line' : 'none';
+                $navFontSize  = (int)$this->input('nav_font_size', 0);
+                $navLetterSp  = (float)$this->input('nav_letter_spacing', 0);
+                $hex = fn($v) => preg_match('/^#[0-9a-fA-F]{6}$/', trim((string)$v)) ? strtolower(trim((string)$v)) : '';
                 $this->saveSection('nav_category_bar', [
-                    'is_active'      => $this->input('is_active') ? true : false,
-                    'show_home'      => $this->input('show_home') ? true : false,
-                    'show_all_gifts' => $this->input('show_all_gifts') ? true : false,
-                    'max_items'      => $maxItems > 0 ? $maxItems : 0,
-                    'items'          => $items,
+                    'is_active'         => $this->input('is_active') ? true : false,
+                    'show_home'         => $this->input('show_home') ? true : false,
+                    'show_all_gifts'    => $this->input('show_all_gifts') ? true : false,
+                    'show_images'       => $this->input('show_images') ? true : false,
+                    'max_items'         => $maxItems > 0 ? $maxItems : 0,
+                    'nav_align'         => $navAlign,
+                    'nav_transform'     => $navTransform,
+                    'nav_active_style'  => $navActiveSt,
+                    'nav_separator'     => $navSep,
+                    'nav_font_size'     => $navFontSize > 0 ? $navFontSize : 0,
+                    'nav_letter_spacing'=> $navLetterSp > 0 ? $navLetterSp : 0,
+                    'nav_text_color'    => $hex($this->input('nav_text_color')),
+                    'nav_accent_color'  => $hex($this->input('nav_accent_color')),
+                    'nav_bar_bg'        => $hex($this->input('nav_bar_bg')),
+                    'items'             => $items,
                 ]);
                 break;
 
@@ -535,6 +553,7 @@ class AdminDesignController extends BaseController
                 'is_active'      => true,
                 'show_home'      => true,
                 'show_all_gifts' => true,
+                'show_images'    => true,
                 'max_items'      => 8,
                 'items'          => [],
             ],
