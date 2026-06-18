@@ -28,7 +28,13 @@ $addr = json_decode($order['address_snapshot_json'], true) ?: [];
           <td><?= e($item['product_name_snapshot']) ?></td>
           <td>
             <?php foreach ($custom as $c): ?>
-              <div style="font-size:13px">• <?= e($c['label']) ?>: <?= is_string($c['value'] ?? '') ? e($c['value']) : (($c['value'] ?? false) === true ? 'Yes' : '') ?></div>
+              <div style="font-size:13px;display:flex;align-items:center;gap:6px">• <?= e($c['label']) ?>:
+                <?php if (($c['option_type'] ?? '') === 'image_choice' && !empty($c['image'])): ?>
+                  <img src="<?= e(asset($c['image'])) ?>" alt="<?= e($c['value'] ?? '') ?>" style="width:26px;height:26px;object-fit:contain"><strong><?= e($c['value'] ?? '') ?></strong>
+                <?php else: ?>
+                  <?= is_string($c['value'] ?? '') ? e($c['value']) : (($c['value'] ?? false) === true ? 'Yes' : '') ?>
+                <?php endif; ?>
+              </div>
             <?php endforeach; ?>
             <?php if (!empty($item['video_photo_id'])): ?>
               <div style="margin-top:6px">

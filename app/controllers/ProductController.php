@@ -14,6 +14,14 @@ class ProductController extends BaseController
 
         $images = $productModel->images($product['id']);
         $options = $productModel->customizationOptions($product['id']);
+        // Attach the charm list to any image-choice (charm picker) options.
+        $charmModel = new CharmSet();
+        foreach ($options as &$opt) {
+            $opt['charms'] = ($opt['option_type'] === 'image_choice' && !empty($opt['image_set_id']))
+                ? $charmModel->activeCharms((int)$opt['image_set_id'])
+                : [];
+        }
+        unset($opt);
         $related = $productModel->relatedProducts($product['category_id'], $product['id']);
         $reviewModel = new Review();
         $reviews = $reviewModel->approvedForProduct($product['id']);

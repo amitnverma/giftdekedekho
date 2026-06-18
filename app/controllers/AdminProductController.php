@@ -47,6 +47,7 @@ class AdminProductController extends BaseController
             'options' => [],
             'categories' => $categoryModel->allActive(),
             'selectedCategoryIds' => [],
+            'charmSets' => (new CharmSet())->activeWithCounts(),
         ]);
     }
 
@@ -72,6 +73,7 @@ class AdminProductController extends BaseController
             'options' => $productModel->customizationOptions($id),
             'categories' => $categoryModel->allActive(),
             'selectedCategoryIds' => $productModel->categoryIds($id),
+            'charmSets' => (new CharmSet())->activeWithCounts(),
         ]);
     }
 
@@ -206,12 +208,14 @@ class AdminProductController extends BaseController
         $optCharges = (array)($_POST['option_charge'] ?? []);
         $optLimits = (array)($_POST['option_char_limit'] ?? []);
         $optSubOptions = (array)($_POST['option_sub_options'] ?? []);
+        $optImageSets = (array)($_POST['option_image_set'] ?? []);
 
         foreach ($optTypes as $i => $type) {
             $type = trim((string)$type);
             $label = trim((string)($optLabels[$i] ?? ''));
             if ($type === '' || $label === '') continue;
             $subOptions = $this->parseSubOptions($optSubOptions[$i] ?? '');
+            $imageSetId = ($type === 'image_choice' && !empty($optImageSets[$i])) ? (int)$optImageSets[$i] : null;
             $options[] = [
                 'option_type' => $type,
                 'label' => $label,
@@ -219,6 +223,7 @@ class AdminProductController extends BaseController
                 'extra_charge' => (float)($optCharges[$i] ?? 0),
                 'char_limit' => isset($optLimits[$i]) && $optLimits[$i] !== '' ? (int)$optLimits[$i] : null,
                 'sub_options' => array_values($subOptions),
+                'image_set_id' => $imageSetId,
             ];
         }
         $productModel->replaceCustomizationOptions($productId, $options);
