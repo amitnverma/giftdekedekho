@@ -177,6 +177,26 @@ h1, h2, h3, h4 { margin: 0 0 12px; line-height: 1.25; }
 .engraving-preview { margin-top: 10px; padding: 18px; background: #fff; border: 1px dashed var(--color-border); border-radius: 8px; text-align: center; font-style: italic; color: var(--color-text); min-height: 28px; }
 .crop-preview-wrap img { max-width: 100%; margin-top: 10px; border-radius: 8px; }
 
+/* Charm / image-choice picker grid */
+.charm-picker {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 10px;
+  max-height: 340px; overflow-y: auto; padding: 4px; margin-top: 4px;
+}
+.charm-card {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  border: 2px solid var(--color-border); border-radius: 10px; padding: 8px 6px; cursor: pointer;
+  background: #fff; transition: border-color .15s, box-shadow .15s; font-weight: 400; margin: 0;
+}
+.charm-card:hover { border-color: var(--color-primary); }
+.charm-card input[type=radio] { position: absolute; opacity: 0; width: 0; height: 0; }
+.charm-card img { width: 100%; height: 60px; object-fit: contain; }
+.charm-card .charm-label { font-size: 12px; text-align: center; color: var(--color-text); line-height: 1.2; }
+.charm-card .charm-label small { color: var(--color-primary); font-weight: 600; }
+.charm-card:has(input[type=radio]:checked) {
+  border-color: var(--color-primary); box-shadow: 0 0 0 2px var(--color-primary) inset;
+  background: var(--color-bg-alt, #fff);
+}
+
 /* Pincode checker */
 .pincode-check { display: flex; gap: 10px; margin: 18px 0; }
 .pincode-check input { flex: 1; padding: 11px 14px; border: 1px solid var(--color-border); border-radius: 8px; }

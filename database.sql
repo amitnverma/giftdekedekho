@@ -120,10 +120,38 @@ CREATE TABLE IF NOT EXISTS `product_customization_options` (
   `extra_charge` DECIMAL(8,2) NOT NULL DEFAULT 0.00,
   `char_limit`   INT DEFAULT NULL,
   `sub_options`  TEXT DEFAULT NULL,
+  `image_set_id` INT UNSIGNED DEFAULT NULL,
   `sort_order`   INT NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`),
   KEY `idx_pco_product` (`product_id`),
   CONSTRAINT `fk_pco_product` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------
+-- Table: charm_sets  (reusable image-choice / charm library)
+-- ----------------------------
+CREATE TABLE IF NOT EXISTS `charm_sets` (
+  `id`         INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `name`       VARCHAR(120) NOT NULL,
+  `is_active`  TINYINT(1) NOT NULL DEFAULT 1,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------
+-- Table: charms  (individual selectable images inside a set)
+-- ----------------------------
+CREATE TABLE IF NOT EXISTS `charms` (
+  `id`           INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `set_id`       INT UNSIGNED NOT NULL,
+  `label`        VARCHAR(120) NOT NULL,
+  `image_path`   VARCHAR(255) NOT NULL,
+  `extra_charge` DECIMAL(8,2) NOT NULL DEFAULT 0.00,
+  `sort_order`   INT NOT NULL DEFAULT 0,
+  `is_active`    TINYINT(1) NOT NULL DEFAULT 1,
+  PRIMARY KEY (`id`),
+  KEY `idx_charms_set` (`set_id`),
+  CONSTRAINT `fk_charms_set` FOREIGN KEY (`set_id`) REFERENCES `charm_sets` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------

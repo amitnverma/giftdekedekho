@@ -5,6 +5,7 @@ $navItems = [
     ['icon' => '📊', 'label' => 'Dashboard', 'href' => '/admin', 'match' => ['admin/dashboard', 'admin/index']],
     ['icon' => '🎁', 'label' => 'Products', 'href' => '/admin/products', 'match' => ['admin/products']],
     ['icon' => '🗂️', 'label' => 'Categories', 'href' => '/admin/categories', 'match' => ['admin/categories']],
+    ['icon' => '🔮', 'label' => 'Charm Library', 'href' => '/admin/charm-sets', 'match' => ['admin/charm_sets_index', 'admin/charm_set_form']],
     ['icon' => '📦', 'label' => 'Orders', 'href' => '/admin/orders', 'match' => ['admin/orders']],
     ['icon' => '🏷️', 'label' => 'Coupons', 'href' => '/admin/coupons', 'match' => ['admin/coupons']],
     ['icon' => '👥', 'label' => 'Customers', 'href' => '/admin/customers', 'match' => ['admin/customers']],

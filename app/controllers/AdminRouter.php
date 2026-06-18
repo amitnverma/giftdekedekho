@@ -44,6 +44,20 @@ class AdminRouter
                 (new AdminProductController())->deleteImage((int)$m[1]);
                 break;
 
+            // ---- Charm Library ----
+            case $path === '/charm-sets':
+                (new AdminCharmController())->index();
+                break;
+            case $path === '/charm-sets/create':
+                (new AdminCharmController())->create();
+                break;
+            case preg_match('#^/charm-sets/(\d+)/edit$#', $path, $m) === 1:
+                (new AdminCharmController())->edit((int)$m[1]);
+                break;
+            case preg_match('#^/charm-sets/(\d+)/delete$#', $path, $m) === 1:
+                (new AdminCharmController())->delete((int)$m[1]);
+                break;
+
             // ---- Categories ----
             case $path === '/categories':
                 (new AdminCategoryController())->index();

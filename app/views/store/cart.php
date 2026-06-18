@@ -27,6 +27,13 @@
             <?php if (!empty($custom)): ?>
               <div class="custom-summary">
                 <?php foreach ($custom as $c): ?>
+                  <?php if (($c['option_type'] ?? '') === 'image_choice'): ?>
+                  <div style="display:flex;align-items:center;gap:6px">• <?= e($c['label']) ?>:
+                    <?php if (!empty($c['image'])): ?><img src="<?= e(asset($c['image'])) ?>" alt="<?= e($c['value']) ?>" style="width:28px;height:28px;object-fit:contain;vertical-align:middle"><?php endif; ?>
+                    <strong><?= e($c['value']) ?></strong>
+                    <?php if (!empty($c['extra_charge'])): ?> (+<?= formatPrice($c['extra_charge']) ?>)<?php endif; ?>
+                  </div>
+                  <?php else: ?>
                   <div>• <?= e($c['label']) ?>:
                     <?php if (is_string($c['value']) && str_starts_with($c['value'], '/public/')): ?>
                       <a href="<?= e(asset($c['value'])) ?>" target="_blank" rel="noopener">View uploaded photo</a>
@@ -36,6 +43,7 @@
                     <?php if (!empty($c['extra_charge'])): ?> (+<?= formatPrice($c['extra_charge']) ?>)<?php endif; ?>
                     <?php if (!empty($c['image'])): ?> — <a href="<?= e(asset($c['image'])) ?>" target="_blank" rel="noopener">View uploaded image</a><?php endif; ?>
                   </div>
+                  <?php endif; ?>
                 <?php endforeach; ?>
               </div>
             <?php endif; ?>

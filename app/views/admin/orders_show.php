@@ -140,6 +140,14 @@ foreach ($order['items'] as $item) {
                                                 </a>
                                                 <a href="<?= e(asset($c['value'])) ?>" download style="font-size:11px;display:inline-block;margin-top:4px;">Download</a>
                                             </div>
+                                        <?php elseif (($c['option_type'] ?? '') === 'image_choice'): ?>
+                                            <span style="display:inline-flex;align-items:center;gap:6px;vertical-align:middle;">
+                                                <?php if (!empty($c['image'])): ?>
+                                                    <img src="<?= e(asset($c['image'])) ?>" alt="<?= e($c['value'] ?? '') ?>"
+                                                         style="width:44px;height:44px;object-fit:contain;border:1px solid #d1d5db;border-radius:4px;background:#f8fafc;">
+                                                <?php endif; ?>
+                                                <strong style="color:#b45309;"><?= e($c['value'] ?? '') ?></strong>
+                                            </span>
                                         <?php elseif (($c['option_type'] ?? '') === 'text_engraving'): ?>
                                             <span style="font-weight:700;font-family:serif;letter-spacing:1px;color:#b45309;">&ldquo;<?= e($c['value'] ?? '') ?>&rdquo;</span>
                                         <?php elseif (is_bool($c['value'] ?? null) || $c['value'] === true): ?>

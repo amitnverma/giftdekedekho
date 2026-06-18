@@ -239,7 +239,7 @@
       if (el.tagName === 'OPTION') return;
       var extra = parseFloat(el.getAttribute('data-extra')) || 0;
       var active = false;
-      if (el.type === 'checkbox') active = el.checked;
+      if (el.type === 'checkbox' || el.type === 'radio') active = el.checked;
       else active = !!el.value;
       if (active) total += extra;
     });

@@ -100,6 +100,24 @@ $shareUrl = url('/product/' . $product['slug']);
                 <div class="char-count" data-counter-for="<?= $inputId ?>">0 / <?= (int)($opt['char_limit'] ?: 100) ?></div>
                 <div class="engraving-preview" data-preview-for="<?= $inputId ?>">Your custom text preview will appear here…</div>
 
+              <?php elseif ($opt['option_type'] === 'image_choice'): ?>
+                <?php if (empty($opt['charms'])): ?>
+                  <p style="color:var(--color-muted);font-size:13px">No options available yet.</p>
+                <?php else: ?>
+                  <div class="charm-picker" id="<?= $inputId ?>">
+                    <?php foreach ($opt['charms'] as $ci => $charm):
+                          $charmExtra = $baseExtra + (float)$charm['extra_charge']; ?>
+                      <label class="charm-card">
+                        <input type="radio" name="<?= $fieldName ?>[value]" value="<?= (int)$charm['id'] ?>"
+                               data-extra="<?= $charmExtra ?>"
+                               <?= ($opt['is_required'] && $ci === 0) ? 'required' : '' ?>>
+                        <img src="<?= e(asset($charm['image_path'])) ?>" alt="<?= e($charm['label']) ?>" loading="lazy">
+                        <span class="charm-label"><?= e($charm['label']) ?><?php if ($charmExtra > 0): ?> <small>+<?= formatPrice($charmExtra) ?></small><?php endif; ?></span>
+                      </label>
+                    <?php endforeach; ?>
+                  </div>
+                <?php endif; ?>
+
               <?php elseif ($opt['option_type'] === 'photo_upload'): ?>
                 <input type="file" id="<?= $inputId ?>" class="photo-upload-input" name="<?= $fieldName ?>[file]" accept="image/jpeg,image/png" <?= $opt['is_required'] ? 'required' : '' ?>>
                 <small style="color:var(--color-muted)">JPG or PNG, max 5MB</small>

@@ -266,6 +266,7 @@ class Product extends BaseModel
                 'extra_charge' => $opt['extra_charge'] ?? 0,
                 'char_limit' => $opt['char_limit'] ?: null,
                 'sub_options' => $subOpts ? json_encode($subOpts) : null,
+                'image_set_id' => !empty($opt['image_set_id']) ? (int)$opt['image_set_id'] : null,
                 'sort_order' => $i,
             ]);
         }

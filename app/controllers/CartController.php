@@ -110,6 +110,31 @@ class CartController extends BaseController
                 continue;
             }
 
+            if ($type === 'image_choice') {
+                $charmId = (int)($entry['value'] ?? 0);
+                if ($charmId <= 0) {
+                    if ($opt['is_required']) {
+                        flash('error', 'Please choose an option for "' . $opt['label'] . '".');
+                        redirect('/product/' . $product['slug']);
+                    }
+                    continue;
+                }
+                $charm = (new CharmSet())->findCharm($charmId);
+                if (!$charm || (int)$charm['set_id'] !== (int)$opt['image_set_id'] || !$charm['is_active']) {
+                    flash('error', 'Invalid choice selected for "' . $opt['label'] . '".');
+                    redirect('/product/' . $product['slug']);
+                }
+                $customization[] = [
+                    'option_id' => (int)$opt['id'],
+                    'option_type' => $type,
+                    'label' => $opt['label'],
+                    'value' => $charm['label'],
+                    'image' => $charm['image_path'],
+                    'extra_charge' => (float)$opt['extra_charge'] + (float)$charm['extra_charge'],
+                ];
+                continue;
+            }
+
             if ($type === 'photo_upload') {
                 if (!empty($_FILES['customization']['name'][$opt['id']]['file'])) {
                     $uploaded = $this->handlePhotoUpload($opt['id']);

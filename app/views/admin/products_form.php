@@ -120,6 +120,16 @@
                             <input type="number" min="0" name="option_char_limit[]" value="<?= e($opt['char_limit'] ?? '') ?>">
                         </label>
                     </div>
+                    <div class="charmset-field">
+                        <label>Charm Set <span class="admin-label-hint">Only for the <strong>Image Choice (Charm Picker)</strong> type — customers pick one image from this set. <a href="<?= url('/admin/charm-sets') ?>" target="_blank">Manage charm library →</a></span>
+                            <select name="option_image_set[]">
+                                <option value="">— none —</option>
+                                <?php foreach (($charmSets ?? []) as $cs): ?>
+                                    <option value="<?= (int)$cs['id'] ?>" <?= (int)($opt['image_set_id'] ?? 0) === (int)$cs['id'] ? 'selected' : '' ?>><?= e($cs['name']) ?> (<?= (int)$cs['charm_count'] ?> charms)</option>
+                                <?php endforeach; ?>
+                            </select>
+                        </label>
+                    </div>
                     <div class="suboption-editor" data-suboption-editor>
                         <label>Choices <span class="admin-label-hint">Optional — add selectable choices (e.g. Gold / Silver). Each can carry its own extra charge and optionally ask the customer for an image upload.</span></label>
                         <input type="hidden" name="option_sub_options[]" class="suboption-json" value="<?= e(is_string($opt['sub_options'] ?? null) ? $opt['sub_options'] : '') ?>">
@@ -149,6 +159,16 @@
                         <input type="number" min="0" name="option_char_limit[__INDEX__]">
                     </label>
                 </div>
+                <div class="charmset-field">
+                    <label>Charm Set <span class="admin-label-hint">Only for the <strong>Image Choice (Charm Picker)</strong> type — customers pick one image from this set. <a href="<?= url('/admin/charm-sets') ?>" target="_blank">Manage charm library →</a></span>
+                        <select name="option_image_set[__INDEX__]">
+                            <option value="">— none —</option>
+                            <?php foreach (($charmSets ?? []) as $cs): ?>
+                                <option value="<?= (int)$cs['id'] ?>"><?= e($cs['name']) ?> (<?= (int)$cs['charm_count'] ?> charms)</option>
+                            <?php endforeach; ?>
+                        </select>
+                    </label>
+                </div>
                 <div class="suboption-editor" data-suboption-editor>
                     <label>Choices <span class="admin-label-hint">Optional — add selectable choices (e.g. Gold / Silver). Each can carry its own extra charge and optionally ask the customer for an image upload.</span></label>
                     <input type="hidden" name="option_sub_options[__INDEX__]" class="suboption-json" value="">
@@ -163,6 +183,7 @@
             </div>
             <datalist id="optionTypeList">
                 <option value="text_engraving">Text Engraving</option>
+                <option value="image_choice">Image Choice (Charm Picker)</option>
                 <option value="photo_upload">Photo Upload</option>
                 <option value="gift_wrap">Gift Wrap</option>
                 <option value="message_card">Message Card</option>
