@@ -312,6 +312,43 @@
     });
 })();
 
+// ---- Show the Charm Set selector only for the "image_choice" option type ----
+// (and hide the unused free-text Choices editor for it, to avoid confusion).
+(function () {
+    function syncRow(row) {
+        var typeInput = row.querySelector('[name^="option_type"]');
+        if (!typeInput) return;
+        var isImageChoice = typeInput.value.trim() === 'image_choice';
+        var charmField = row.querySelector('.charmset-field');
+        var choices = row.querySelector('[data-suboption-editor]');
+        if (charmField) charmField.style.display = isImageChoice ? '' : 'none';
+        if (choices) choices.style.display = isImageChoice ? 'none' : '';
+    }
+    function syncAll() {
+        document.querySelectorAll('.admin-option-row').forEach(function (row) {
+            if (row.hasAttribute('data-repeater-template')) return;
+            syncRow(row);
+        });
+    }
+    document.addEventListener('input', function (e) {
+        if (e.target.matches('[name^="option_type"]')) {
+            var row = e.target.closest('.admin-option-row');
+            if (row) syncRow(row);
+        }
+    });
+    document.addEventListener('change', function (e) {
+        if (e.target.matches('[name^="option_type"]')) {
+            var row = e.target.closest('.admin-option-row');
+            if (row) syncRow(row);
+        }
+    });
+    // New rows are added by the generic repeater; re-sync shortly after a click on its add button.
+    document.addEventListener('click', function (e) {
+        if (e.target.closest('[data-repeater-add]')) setTimeout(syncAll, 0);
+    });
+    syncAll();
+})();
+
 window.gddRemoveImage = function (imageId, btn) {
     if (!confirm('Remove this image?')) return;
     fetch((window.GDD_BASE_URL || '') + '/admin/products/' + imageId + '/image-delete', {
