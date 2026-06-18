@@ -323,6 +323,14 @@
         var choices = row.querySelector('[data-suboption-editor]');
         if (charmField) charmField.style.display = isImageChoice ? '' : 'none';
         if (choices) choices.style.display = isImageChoice ? 'none' : '';
+        // For image_choice, the price comes from each charm — hide the
+        // option-level Extra Charge field to avoid confusion / double-charging.
+        var chargeInput = row.querySelector('[name^="option_charge"]');
+        if (chargeInput) {
+            var chargeLabel = chargeInput.closest('label');
+            if (chargeLabel) chargeLabel.style.display = isImageChoice ? 'none' : '';
+            if (isImageChoice) chargeInput.value = '0';
+        }
     }
     function syncAll() {
         document.querySelectorAll('.admin-option-row').forEach(function (row) {

@@ -106,7 +106,8 @@ $shareUrl = url('/product/' . $product['slug']);
                 <?php else: ?>
                   <div class="charm-picker" id="<?= $inputId ?>">
                     <?php foreach ($opt['charms'] as $ci => $charm):
-                          $charmExtra = $baseExtra + (float)$charm['extra_charge']; ?>
+                          // The charm's own price is the full extra charge for that choice.
+                          $charmExtra = (float)$charm['extra_charge']; ?>
                       <label class="charm-card">
                         <input type="radio" name="<?= $fieldName ?>[value]" value="<?= (int)$charm['id'] ?>"
                                data-extra="<?= $charmExtra ?>"

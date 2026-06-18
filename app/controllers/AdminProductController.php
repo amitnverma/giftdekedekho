@@ -216,11 +216,14 @@ class AdminProductController extends BaseController
             if ($type === '' || $label === '') continue;
             $subOptions = $this->parseSubOptions($optSubOptions[$i] ?? '');
             $imageSetId = ($type === 'image_choice' && !empty($optImageSets[$i])) ? (int)$optImageSets[$i] : null;
+            // image_choice prices come from the individual charms, so the
+            // option-level base charge is always 0 to avoid double-charging.
+            $extraCharge = ($type === 'image_choice') ? 0.0 : (float)($optCharges[$i] ?? 0);
             $options[] = [
                 'option_type' => $type,
                 'label' => $label,
                 'is_required' => isset($optRequired[$i]) ? 1 : 0,
-                'extra_charge' => (float)($optCharges[$i] ?? 0),
+                'extra_charge' => $extraCharge,
                 'char_limit' => isset($optLimits[$i]) && $optLimits[$i] !== '' ? (int)$optLimits[$i] : null,
                 'sub_options' => array_values($subOptions),
                 'image_set_id' => $imageSetId,

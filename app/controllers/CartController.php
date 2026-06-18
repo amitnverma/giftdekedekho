@@ -130,7 +130,7 @@ class CartController extends BaseController
                     'label' => $opt['label'],
                     'value' => $charm['label'],
                     'image' => $charm['image_path'],
-                    'extra_charge' => (float)$opt['extra_charge'] + (float)$charm['extra_charge'],
+                    'extra_charge' => (float)$charm['extra_charge'],
                 ];
                 continue;
             }
