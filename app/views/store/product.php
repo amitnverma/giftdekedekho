@@ -129,7 +129,8 @@ $shareUrl = url('/product/' . $product['slug']);
                   <input type="checkbox" name="<?= $fieldName ?>[checked]" value="1" <?= $opt['extra_charge'] > 0 ? 'data-extra="' . (float)$opt['extra_charge'] . '"' : '' ?>>
                   Yes, add gift wrapping
                 </label>
-                <img src="<?= e(asset('/images/Gemini_Generated_Image_jnnwcqjnnwcqjnnw.png')) ?>" alt="Gift wrap preview" style="max-width:140px;margin-top:8px;border-radius:8px" loading="lazy">
+                <?php $wrapImg = !empty($opt['image_path']) ? productImage($opt['image_path']) : asset('/images/gift-box-default.svg'); ?>
+                <img src="<?= e($wrapImg) ?>" alt="Gift wrap preview" style="max-width:140px;margin-top:8px;border-radius:8px" loading="lazy">
 
               <?php elseif ($opt['option_type'] === 'message_card'): ?>
                 <textarea name="<?= $fieldName ?>[value]" rows="3" placeholder="Write your personal message…"></textarea>

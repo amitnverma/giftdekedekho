@@ -121,6 +121,7 @@ CREATE TABLE IF NOT EXISTS `product_customization_options` (
   `char_limit`   INT DEFAULT NULL,
   `sub_options`  TEXT DEFAULT NULL,
   `image_set_id` INT UNSIGNED DEFAULT NULL,
+  `image_path`   VARCHAR(255) DEFAULT NULL,
   `sort_order`   INT NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`),
   KEY `idx_pco_product` (`product_id`),

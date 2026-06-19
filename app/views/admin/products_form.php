@@ -130,6 +130,14 @@
                             </select>
                         </label>
                     </div>
+                    <div class="giftwrap-field">
+                        <label>Gift Wrap Image <span class="admin-label-hint">Only for the <strong>Gift Wrap</strong> type — shown to customers as the wrapping preview. Leave blank to use the default gift box. JPG, PNG, WebP or GIF, max 5MB.</span></label>
+                        <input type="hidden" name="option_gift_image_existing[]" value="<?= e($opt['image_path'] ?? '') ?>">
+                        <input type="file" name="option_gift_image[]" accept="image/jpeg,image/png,image/webp,image/gif">
+                        <?php if (($opt['option_type'] ?? '') === 'gift_wrap' && !empty($opt['image_path'])): ?>
+                            <img src="<?= e(productImage($opt['image_path'])) ?>" alt="Current gift wrap image" style="max-width:100px;margin-top:8px;border-radius:6px;display:block">
+                        <?php endif; ?>
+                    </div>
                     <div class="suboption-editor" data-suboption-editor>
                         <label>Choices <span class="admin-label-hint">Optional — add selectable choices (e.g. Gold / Silver). Each can carry its own extra charge and optionally ask the customer for an image upload.</span></label>
                         <input type="hidden" name="option_sub_options[]" class="suboption-json" value="<?= e(is_string($opt['sub_options'] ?? null) ? $opt['sub_options'] : '') ?>">
@@ -168,6 +176,11 @@
                             <?php endforeach; ?>
                         </select>
                     </label>
+                </div>
+                <div class="giftwrap-field">
+                    <label>Gift Wrap Image <span class="admin-label-hint">Only for the <strong>Gift Wrap</strong> type — shown to customers as the wrapping preview. Leave blank to use the default gift box. JPG, PNG, WebP or GIF, max 5MB.</span></label>
+                    <input type="hidden" name="option_gift_image_existing[__INDEX__]" value="">
+                    <input type="file" name="option_gift_image[__INDEX__]" accept="image/jpeg,image/png,image/webp,image/gif">
                 </div>
                 <div class="suboption-editor" data-suboption-editor>
                     <label>Choices <span class="admin-label-hint">Optional — add selectable choices (e.g. Gold / Silver). Each can carry its own extra charge and optionally ask the customer for an image upload.</span></label>
@@ -318,11 +331,15 @@
     function syncRow(row) {
         var typeInput = row.querySelector('[name^="option_type"]');
         if (!typeInput) return;
-        var isImageChoice = typeInput.value.trim() === 'image_choice';
+        var typeVal = typeInput.value.trim();
+        var isImageChoice = typeVal === 'image_choice';
+        var isGiftWrap = typeVal === 'gift_wrap';
         var charmField = row.querySelector('.charmset-field');
+        var giftField = row.querySelector('.giftwrap-field');
         var choices = row.querySelector('[data-suboption-editor]');
         if (charmField) charmField.style.display = isImageChoice ? '' : 'none';
-        if (choices) choices.style.display = isImageChoice ? 'none' : '';
+        if (giftField) giftField.style.display = isGiftWrap ? '' : 'none';
+        if (choices) choices.style.display = (isImageChoice || isGiftWrap) ? 'none' : '';
         // For image_choice, the price comes from each charm — hide the
         // option-level Extra Charge field to avoid confusion / double-charging.
         var chargeInput = row.querySelector('[name^="option_charge"]');

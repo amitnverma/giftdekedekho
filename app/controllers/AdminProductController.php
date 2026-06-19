@@ -209,6 +209,7 @@ class AdminProductController extends BaseController
         $optLimits = (array)($_POST['option_char_limit'] ?? []);
         $optSubOptions = (array)($_POST['option_sub_options'] ?? []);
         $optImageSets = (array)($_POST['option_image_set'] ?? []);
+        $optGiftImgExisting = (array)($_POST['option_gift_image_existing'] ?? []);
 
         foreach ($optTypes as $i => $type) {
             $type = trim((string)$type);
@@ -219,6 +220,19 @@ class AdminProductController extends BaseController
             // image_choice prices come from the individual charms, so the
             // option-level base charge is always 0 to avoid double-charging.
             $extraCharge = ($type === 'image_choice') ? 0.0 : (float)($optCharges[$i] ?? 0);
+
+            // Gift-wrap preview image: keep the existing one unless a new file
+            // was uploaded for this row. Only gift_wrap options carry an image.
+            $imagePath = null;
+            if ($type === 'gift_wrap') {
+                $imagePath = trim((string)($optGiftImgExisting[$i] ?? '')) ?: null;
+                $newGiftImg = $this->giftImageFile($i);
+                if ($newGiftImg) {
+                    $uploaded = $this->handleImageUpload($newGiftImg);
+                    if ($uploaded) $imagePath = $uploaded;
+                }
+            }
+
             $options[] = [
                 'option_type' => $type,
                 'label' => $label,
@@ -227,6 +241,7 @@ class AdminProductController extends BaseController
                 'char_limit' => isset($optLimits[$i]) && $optLimits[$i] !== '' ? (int)$optLimits[$i] : null,
                 'sub_options' => array_values($subOptions),
                 'image_set_id' => $imageSetId,
+                'image_path' => $imagePath,
             ];
         }
         $productModel->replaceCustomizationOptions($productId, $options);
@@ -270,6 +285,25 @@ class AdminProductController extends BaseController
             $out[] = ['label' => $label, 'price' => $price, 'image' => $image];
         }
         return $out;
+    }
+
+    /**
+     * Pull a single uploaded gift-wrap image out of the parallel
+     * option_gift_image[] file array for the given option-row index.
+     * Returns null when no file was provided for that row.
+     */
+    private function giftImageFile($i): ?array
+    {
+        $f = $_FILES['option_gift_image'] ?? null;
+        if (!is_array($f) || !isset($f['name'][$i])) return null;
+        if (($f['error'][$i] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) return null;
+        return [
+            'name' => $f['name'][$i],
+            'type' => $f['type'][$i],
+            'tmp_name' => $f['tmp_name'][$i],
+            'error' => $f['error'][$i],
+            'size' => $f['size'][$i],
+        ];
     }
 
     private function handleImageUpload(array $file): ?string
