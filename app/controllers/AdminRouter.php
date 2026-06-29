@@ -40,6 +40,12 @@ class AdminRouter
             case $path === '/products/bulk':
                 (new AdminProductController())->bulkAction();
                 break;
+            case $path === '/products/bulk-edit':
+                (new AdminProductController())->bulkEdit();
+                break;
+            case $path === '/products/bulk-edit-save':
+                (new AdminProductController())->bulkEditSave();
+                break;
             case preg_match('#^/products/(\d+)/image-delete$#', $path, $m) === 1:
                 (new AdminProductController())->deleteImage((int)$m[1]);
                 break;

@@ -201,6 +201,99 @@ class AdminProductController extends BaseController
         }
 
         // Customization options
+        $options = $this->collectCustomizationOptions();
+        $productModel->replaceCustomizationOptions($productId, $options);
+
+        flash('success', $id ? 'Product updated.' : 'Product created.');
+        redirect("/admin/products/{$productId}/edit");
+    }
+
+    /**
+     * Apply a shared description / details update to many products at once.
+     * Reached from the Products list via the "Bulk Edit Description / Details"
+     * button, which carries the selected product ids. Renders the bulk-edit
+     * form pre-loaded with those ids.
+     */
+    public function bulkEdit(): void
+    {
+        $this->requireAdmin();
+        $this->requireCsrf();
+
+        $ids = array_values(array_unique(array_filter(array_map('intval', (array)($_POST['ids'] ?? [])))));
+        if (empty($ids)) {
+            flash('error', 'Select at least one product to bulk edit.');
+            redirect('/admin/products');
+        }
+
+        $productModel = new Product();
+        $products = $productModel->byIds($ids);
+
+        $this->viewAdmin('admin/products_bulk_edit', [
+            'metaTitle' => 'Bulk Edit Description / Details',
+            'products' => $products,
+            'ids' => $ids,
+            'charmSets' => (new CharmSet())->activeWithCounts(),
+        ]);
+    }
+
+    /**
+     * Persist the bulk description / details update. Only the fields whose
+     * "update this" toggle was checked are written; the rest are left untouched
+     * on every selected product.
+     */
+    public function bulkEditSave(): void
+    {
+        $this->requireAdmin();
+        $this->requireCsrf();
+
+        $ids = array_values(array_unique(array_filter(array_map('intval', (array)($_POST['ids'] ?? [])))));
+        if (empty($ids)) {
+            flash('error', 'No products selected.');
+            redirect('/admin/products');
+        }
+
+        $updateShort = (bool)$this->input('update_short_description');
+        $updateFull = (bool)$this->input('update_description');
+        $updateOptions = (bool)$this->input('update_options');
+
+        if (!$updateShort && !$updateFull && !$updateOptions) {
+            flash('error', 'Tick at least one field to update.');
+            redirect('/admin/products');
+        }
+
+        $data = [];
+        if ($updateShort) {
+            $data['short_description'] = trim((string)$this->input('short_description', ''));
+        }
+        if ($updateFull) {
+            $data['description'] = (string)$this->input('description', '');
+        }
+
+        // Parse the customization options once (uploading any gift-wrap image a
+        // single time) and reuse the same set across every selected product.
+        $options = $updateOptions ? $this->collectCustomizationOptions() : null;
+
+        $productModel = new Product();
+        foreach ($ids as $pid) {
+            if (!empty($data)) {
+                $productModel->update($pid, $data);
+            }
+            if ($updateOptions) {
+                $productModel->replaceCustomizationOptions($pid, $options);
+            }
+        }
+
+        flash('success', count($ids) . ' product(s) updated.');
+        redirect('/admin/products');
+    }
+
+    /**
+     * Build the customization-option rows from the current POST request.
+     * Shared by the single-product save and the bulk-edit save so both honour
+     * the same parsing, charge and gift-wrap-image rules.
+     */
+    private function collectCustomizationOptions(): array
+    {
         $options = [];
         $optTypes = (array)($_POST['option_type'] ?? []);
         $optLabels = (array)($_POST['option_label'] ?? []);
@@ -244,10 +337,7 @@ class AdminProductController extends BaseController
                 'image_path' => $imagePath,
             ];
         }
-        $productModel->replaceCustomizationOptions($productId, $options);
-
-        flash('success', $id ? 'Product updated.' : 'Product created.');
-        redirect("/admin/products/{$productId}/edit");
+        return $options;
     }
 
     /**

@@ -200,6 +200,20 @@ class Product extends BaseModel
         return [$where, $params];
     }
 
+    /**
+     * Fetch a set of products by id (used by the bulk description/details editor)
+     * so the form can show which products will be affected.
+     */
+    public function byIds(array $ids): array
+    {
+        $ids = array_values(array_filter(array_map('intval', $ids)));
+        if (empty($ids)) return [];
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $stmt = $this->db->prepare("SELECT id, name, sku FROM products WHERE id IN ({$placeholders}) ORDER BY name ASC");
+        $stmt->execute($ids);
+        return $stmt->fetchAll();
+    }
+
     public function create(array $data): int
     {
         return $this->insertInto('products', $data);

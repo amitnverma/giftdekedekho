@@ -29,8 +29,12 @@
                 <option value="unfeature">Remove Featured</option>
                 <option value="delete">Delete</option>
             </select>
-            <button type="submit" class="admin-btn admin-btn-sm" data-confirm="Apply this action to selected products?">Apply</button>
+            <div style="display:flex;gap:8px;">
+                <button type="submit" class="admin-btn admin-btn-sm" data-confirm="Apply this action to selected products?">Apply</button>
+                <button type="submit" class="admin-btn admin-btn-sm admin-btn-primary" formaction="<?= url('/admin/products/bulk-edit') ?>" formnovalidate>Bulk Edit Description / Details</button>
+            </div>
         </div>
+        <p class="admin-help" style="margin:-6px 0 14px;">Tick the products that share a description, then use <strong>Bulk Edit Description / Details</strong> to update their short description, full description and/or customization options together.</p>
         <div class="admin-table-wrap">
             <table class="admin-table">
                 <thead>
