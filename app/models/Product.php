@@ -219,6 +219,26 @@ class Product extends BaseModel
         return $this->insertInto('products', $data);
     }
 
+    /**
+     * Build a slug from the given name that does not collide with any existing
+     * product slug (the products.slug column is UNIQUE). Appends -2, -3, … until
+     * a free slug is found. Used by the bulk-create flow where several products
+     * may share the same base name.
+     */
+    public function uniqueSlug(string $name): string
+    {
+        $base = slugify($name);
+        $slug = $base;
+        $n = 1;
+        $stmt = $this->db->prepare('SELECT 1 FROM products WHERE slug = ? LIMIT 1');
+        while (true) {
+            $stmt->execute([$slug]);
+            if (!$stmt->fetch()) return $slug;
+            $n++;
+            $slug = $base . '-' . $n;
+        }
+    }
+
     public function update(int $id, array $data): bool
     {
         return $this->updateTable('products', $id, $data);

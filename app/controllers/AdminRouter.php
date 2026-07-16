@@ -31,6 +31,9 @@ class AdminRouter
             case $path === '/products/create':
                 (new AdminProductController())->create();
                 break;
+            case $path === '/products/bulk-create':
+                (new AdminProductController())->bulkCreate();
+                break;
             case preg_match('#^/products/(\d+)/edit$#', $path, $m) === 1:
                 (new AdminProductController())->edit((int)$m[1]);
                 break;

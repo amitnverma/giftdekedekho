@@ -51,6 +51,124 @@ class AdminProductController extends BaseController
         ]);
     }
 
+    /**
+     * Bulk "one product per image" creator. The admin fills the shared attributes
+     * once (name, categories, price, description, meta, customization options) and
+     * uploads many images; each image becomes its own product on the storefront.
+     */
+    public function bulkCreate(): void
+    {
+        $this->requireAdmin();
+        $categoryModel = new Category();
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $this->requireCsrf();
+            $this->bulkSave();
+            return;
+        }
+
+        $this->viewAdmin('admin/products_bulk_create', [
+            'metaTitle' => 'Bulk Create from Images',
+            'options' => [],
+            'categories' => $categoryModel->allActive(),
+            'charmSets' => (new CharmSet())->activeWithCounts(),
+        ]);
+    }
+
+    /**
+     * Persist the bulk-create request: one product per uploaded image, all sharing
+     * the same fields, categories and customization options. Each product gets a
+     * unique slug (products.slug is UNIQUE) and an optional per-image name / SKU.
+     */
+    private function bulkSave(): void
+    {
+        $productModel = new Product();
+
+        $baseName = trim((string)$this->input('name'));
+        if ($baseName === '') {
+            flash('error', 'A base product name is required.');
+            redirect('/admin/products/bulk-create');
+        }
+
+        $categoryIds = array_values(array_filter(array_map('intval', (array)($_POST['category_ids'] ?? []))));
+        if (empty($categoryIds)) {
+            flash('error', 'Please select at least one category.');
+            redirect('/admin/products/bulk-create');
+        }
+        $primaryCategoryId = $categoryIds[0];
+
+        if (empty($_FILES['images']['name'][0])) {
+            flash('error', 'Please upload at least one image — each becomes its own product.');
+            redirect('/admin/products/bulk-create');
+        }
+
+        // Fields shared by every generated product (identical to the single-product
+        // save, minus the per-product name / slug / sku).
+        $shared = [
+            'category_id' => $primaryCategoryId,
+            'short_description' => trim((string)$this->input('short_description', '')),
+            'description' => (string)$this->input('description', ''),
+            'base_price' => (float)$this->input('base_price', 0),
+            'sale_price' => $this->input('sale_price') !== '' && $this->input('sale_price') !== null ? (float)$this->input('sale_price') : null,
+            'stock_qty' => (int)$this->input('stock_qty', 0),
+            'weight_grams' => $this->input('weight_grams') !== '' ? (int)$this->input('weight_grams') : null,
+            'is_featured' => $this->input('is_featured') ? 1 : 0,
+            'is_active' => $this->input('is_active') ? 1 : 0,
+            'meta_title' => trim((string)$this->input('meta_title', '')) ?: null,
+            'meta_description' => trim((string)$this->input('meta_description', '')) ?: null,
+        ];
+
+        $baseSku = trim((string)$this->input('sku', ''));
+
+        // Parse the customization options once (any gift-wrap image is uploaded a
+        // single time) and reuse the same set across every product.
+        $options = $this->collectCustomizationOptions();
+
+        $names = (array)($_POST['product_name'] ?? []);
+        $skus = (array)($_POST['product_sku'] ?? []);
+
+        $created = 0;
+        $count = count($_FILES['images']['name']);
+        for ($i = 0; $i < $count; $i++) {
+            if (($_FILES['images']['error'][$i] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) continue;
+
+            $seq = $created + 1;
+            $name = trim((string)($names[$i] ?? ''));
+            if ($name === '') $name = $baseName . ' ' . $seq;
+
+            $sku = trim((string)($skus[$i] ?? ''));
+            if ($sku === '') $sku = $baseSku !== '' ? ($baseSku . '-' . $seq) : null;
+
+            $file = [
+                'name' => $_FILES['images']['name'][$i],
+                'type' => $_FILES['images']['type'][$i],
+                'tmp_name' => $_FILES['images']['tmp_name'][$i],
+                'error' => $_FILES['images']['error'][$i],
+                'size' => $_FILES['images']['size'][$i],
+            ];
+            $path = $this->handleImageUpload($file);
+            if (!$path) continue; // skip files that fail validation (type/size)
+
+            $productId = $productModel->create($shared + [
+                'name' => $name,
+                'slug' => $productModel->uniqueSlug($name),
+                'sku' => $sku,
+            ]);
+            $productModel->syncCategories($productId, $categoryIds);
+            $productModel->addImage($productId, $path, 0, true);
+            $productModel->replaceCustomizationOptions($productId, $options);
+            $created++;
+        }
+
+        if ($created === 0) {
+            flash('error', 'No products were created — check the uploaded images (JPEG, PNG, WebP or GIF, up to 5MB each).');
+            redirect('/admin/products/bulk-create');
+        }
+
+        flash('success', $created . ' product(s) created.');
+        redirect('/admin/products');
+    }
+
     public function edit(int $id): void
     {
         $this->requireAdmin();

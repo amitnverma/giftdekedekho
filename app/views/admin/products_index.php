@@ -14,6 +14,7 @@
         </select>
         <button class="admin-btn" type="submit">Filter</button>
     </form>
+    <a href="<?= url('/admin/products/bulk-create') ?>" class="admin-btn">+ Bulk Create from Images</a>
     <a href="<?= url('/admin/products/create') ?>" class="admin-btn admin-btn-primary">+ Add Product</a>
 </div>
 
