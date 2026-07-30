@@ -357,6 +357,48 @@ CREATE TABLE IF NOT EXISTS `login_attempts` (
   KEY `idx_la_ip` (`ip_address`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ----------------------------
+-- Table: ar_frames  ("Living Photo" AR video frames)
+-- ----------------------------
+-- The printed photo itself is the AR trigger (MindAR image tracking) — no QR
+-- code. Not hard-linked to an order: walk-in counter sales have no order row,
+-- so `order_item_id` is nullable and `channel` records the sales channel.
+CREATE TABLE IF NOT EXISTS `ar_frames` (
+  `id`                  INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `slug`                VARCHAR(32)  NOT NULL,
+  `channel`             ENUM('online','in_store') NOT NULL DEFAULT 'online',
+  `order_item_id`       INT UNSIGNED DEFAULT NULL,
+  `customer_name`       VARCHAR(120) DEFAULT NULL,
+  `customer_phone`      VARCHAR(15)  DEFAULT NULL,
+  `photo_path`          VARCHAR(500) NOT NULL,
+  `target_path`         VARCHAR(500) DEFAULT NULL,
+  `video_type`          ENUM('youtube','upload') NOT NULL DEFAULT 'youtube',
+  `video_url`           VARCHAR(500) DEFAULT NULL,
+  `video_path`          VARCHAR(500) DEFAULT NULL,
+  `playback_mode`       ENUM('fullscreen','overlay') NOT NULL DEFAULT 'fullscreen',
+  `trackability_score`  SMALLINT UNSIGNED DEFAULT NULL,
+  `trackability_flag`   ENUM('poor','fair','good') DEFAULT NULL,
+  `trackability_json`   JSON DEFAULT NULL,
+  `verified_at`         DATETIME DEFAULT NULL,
+  `status`              ENUM('pending_setup','target_generated','verified','printed','shipped','handed_over')
+                        NOT NULL DEFAULT 'pending_setup',
+  `is_active`           TINYINT(1) NOT NULL DEFAULT 1,
+  `created_by`          INT UNSIGNED DEFAULT NULL,
+  `notes`               TEXT DEFAULT NULL,
+  `created_at`          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_arf_slug` (`slug`),
+  KEY `idx_arf_order_item` (`order_item_id`),
+  KEY `idx_arf_status`     (`status`),
+  KEY `idx_arf_channel`    (`channel`),
+  KEY `idx_arf_created`    (`created_at`),
+  CONSTRAINT `fk_arf_order_item` FOREIGN KEY (`order_item_id`)
+    REFERENCES `order_items` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_arf_created_by` FOREIGN KEY (`created_by`)
+    REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- ============================================================

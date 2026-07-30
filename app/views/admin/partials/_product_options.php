@@ -112,6 +112,7 @@
             <option value="gift_wrap">Gift Wrap</option>
             <option value="message_card">Message Card</option>
             <option value="video_photo">Video / Photo QR</option>
+            <option value="ar_frame">Living Photo AR Frame</option>
             <option value="color_choice">Color Choice</option>
             <option value="size_choice">Size Choice</option>
             <option value="font_style">Font Style</option>

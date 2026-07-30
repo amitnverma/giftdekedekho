@@ -104,6 +104,46 @@ class AdminRouter
                 (new AdminOrderController())->toggleVideoPhoto((int)$m[1]);
                 break;
 
+            // ---- AR Frames (Living Photo) ----
+            // Quick Create is matched before the numeric-id routes so the
+            // literal path can never be read as an id.
+            case $path === '/ar-frames/quick-create':
+                (new AdminArFrameController())->quickCreate();
+                break;
+            case $path === '/ar-frames':
+                (new AdminArFrameController())->index();
+                break;
+            case preg_match('#^/ar-frames/(\d+)$#', $path, $m) === 1:
+                (new AdminArFrameController())->show((int)$m[1]);
+                break;
+            case preg_match('#^/ar-frames/(\d+)/generate-target$#', $path, $m) === 1:
+                (new AdminArFrameController())->generateTarget((int)$m[1]);
+                break;
+            case preg_match('#^/ar-frames/(\d+)/live-test$#', $path, $m) === 1:
+                (new AdminArFrameController())->liveTest((int)$m[1]);
+                break;
+            case preg_match('#^/ar-frames/(\d+)/confirm-test$#', $path, $m) === 1:
+                (new AdminArFrameController())->confirmTest((int)$m[1]);
+                break;
+            case preg_match('#^/ar-frames/(\d+)/verify$#', $path, $m) === 1:
+                (new AdminArFrameController())->verify((int)$m[1]);
+                break;
+            case preg_match('#^/ar-frames/(\d+)/status$#', $path, $m) === 1:
+                (new AdminArFrameController())->updateStatus((int)$m[1]);
+                break;
+            case preg_match('#^/ar-frames/(\d+)/replace-photo$#', $path, $m) === 1:
+                (new AdminArFrameController())->replacePhoto((int)$m[1]);
+                break;
+            case preg_match('#^/ar-frames/(\d+)/details$#', $path, $m) === 1:
+                (new AdminArFrameController())->updateDetails((int)$m[1]);
+                break;
+            case preg_match('#^/ar-frames/(\d+)/photo$#', $path, $m) === 1:
+                (new AdminArFrameController())->photo((int)$m[1]);
+                break;
+            case preg_match('#^/ar-frames/(\d+)/card$#', $path, $m) === 1:
+                (new AdminArFrameController())->card((int)$m[1]);
+                break;
+
             // ---- Coupons ----
             case $path === '/coupons':
                 (new AdminCouponController())->index();

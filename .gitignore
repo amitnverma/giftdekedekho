@@ -25,6 +25,13 @@ libs/fpdf/fpdf.php
 libs/fpdf/font/
 libs/phpqrcode/qrlib.php
 
+# MindAR compiler toolchain (installed per tools/mindar-compile/README.txt —
+# contains a platform-specific native canvas binary, so it must not be committed)
+tools/mindar-compile/node_modules/
+# Local-only copy of the node binary, placed here on dev machines where the web
+# server user cannot reach the developer's nvm install.
+tools/mindar-compile/node-bin
+
 # Editor
 .idea/
 .vscode/

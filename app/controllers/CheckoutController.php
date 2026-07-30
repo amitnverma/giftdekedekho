@@ -106,7 +106,7 @@ class CheckoutController extends BaseController
         $productModel = new Product();
         foreach ($items as $item) {
             $price = $item['sale_price'] !== null ? (float)$item['sale_price'] : (float)$item['base_price'];
-            $orderModel->addItem([
+            $orderItemId = $orderModel->addItem([
                 'order_id' => $orderId,
                 'product_id' => $item['product_id'],
                 'product_name_snapshot' => $item['name'],
@@ -116,6 +116,7 @@ class CheckoutController extends BaseController
                 'customization_json' => $item['customization_json'],
             ]);
             $productModel->decrementStock((int)$item['product_id'], (int)$item['quantity']);
+            $this->createArFrames($orderItemId, $item['customization_json'] ?? null);
         }
 
         if ($coupon) {
@@ -292,6 +293,47 @@ class CheckoutController extends BaseController
             'state' => $state,
             'pincode' => $pincode,
         ];
+    }
+
+    /**
+     * Queue a Living Photo AR frame for any ar_frame customization on this line
+     * item. The row starts at 'pending_setup'; an admin generates the target and
+     * runs the live scan test from the AR Frames queue. Target generation is
+     * deliberately not done here — the customer isn't waiting, and a ~5s compile
+     * has no business sitting inside a checkout request.
+     */
+    private function createArFrames(int $orderItemId, ?string $customizationJson): void
+    {
+        if (empty($customizationJson)) {
+            return;
+        }
+
+        try {
+            $customization = json_decode($customizationJson, true);
+            if (!is_array($customization)) {
+                return;
+            }
+
+            require_once APP_PATH . '/services/ArFrameService.php';
+            $arService = new ArFrameService();
+
+            foreach ($customization as $entry) {
+                if (($entry['option_type'] ?? '') !== 'ar_frame' || empty($entry['photo'])) {
+                    continue;
+                }
+                $arService->createFrame([
+                    'channel' => 'online',
+                    'order_item_id' => $orderItemId,
+                    'photo_path' => $entry['photo'],
+                    'video_type' => 'youtube',
+                    'video_url' => $entry['value'] ?? null,
+                ]);
+            }
+        } catch (Throwable $e) {
+            // A frame can always be created by hand from the admin queue, so
+            // this must never take an otherwise-valid order down with it.
+            error_log('AR frame creation error: ' . $e->getMessage());
+        }
     }
 
     private function sendOrderNotifications(int $orderId): void

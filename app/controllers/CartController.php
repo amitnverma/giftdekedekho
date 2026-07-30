@@ -135,6 +135,55 @@ class CartController extends BaseController
                 continue;
             }
 
+            // Living Photo AR frame: needs both the photo to print and the video
+            // it should trigger, captured together so the admin queue has
+            // everything it needs without contacting the customer.
+            if ($type === 'ar_frame') {
+                require_once APP_PATH . '/services/ArFrameService.php';
+                $arService = new ArFrameService();
+
+                $rawUrl = trim((string)($entry['video_url'] ?? ''));
+                $hasPhoto = !empty($_FILES['customization']['name'][$opt['id']]['file']);
+
+                // Skip entirely when optional and left blank.
+                if (!$hasPhoto && $rawUrl === '' && !$opt['is_required']) {
+                    continue;
+                }
+
+                if (!$hasPhoto) {
+                    flash('error', 'Please upload the photo to print for "' . $opt['label'] . '".');
+                    redirect('/product/' . $product['slug']);
+                }
+
+                $videoUrl = $arService->normaliseYoutubeUrl($rawUrl);
+                if ($videoUrl === null) {
+                    flash('error', 'Please paste a valid YouTube video link for "' . $opt['label'] . '".');
+                    redirect('/product/' . $product['slug']);
+                }
+
+                $stored = $arService->storePhoto([
+                    'name' => $_FILES['customization']['name'][$opt['id']]['file'],
+                    'type' => $_FILES['customization']['type'][$opt['id']]['file'] ?? '',
+                    'tmp_name' => $_FILES['customization']['tmp_name'][$opt['id']]['file'],
+                    'error' => $_FILES['customization']['error'][$opt['id']]['file'],
+                    'size' => $_FILES['customization']['size'][$opt['id']]['file'],
+                ]);
+                if (empty($stored['ok'])) {
+                    flash('error', $stored['error']);
+                    redirect('/product/' . $product['slug']);
+                }
+
+                $customization[] = [
+                    'option_id' => (int)$opt['id'],
+                    'option_type' => $type,
+                    'label' => $opt['label'],
+                    'value' => $videoUrl,
+                    'photo' => $stored['path'],
+                    'extra_charge' => (float)$opt['extra_charge'],
+                ];
+                continue;
+            }
+
             if ($type === 'photo_upload') {
                 if (!empty($_FILES['customization']['name'][$opt['id']]['file'])) {
                     $uploaded = $this->handlePhotoUpload($opt['id']);

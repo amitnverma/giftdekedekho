@@ -57,6 +57,16 @@ try {
         exit;
     }
 
+    // Living Photo AR scanner — /scan (evergreen) and /scan/{slug} (per-frame)
+    if (($segments[0] ?? '') === 'scan') {
+        if (isset($segments[1])) {
+            (new ScanController())->show($segments[1]);
+        } else {
+            (new ScanController())->index();
+        }
+        exit;
+    }
+
     // Sitemap
     if ($path === '/sitemap.xml') {
         require BASE_PATH . '/sitemap.php';

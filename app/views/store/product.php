@@ -144,6 +144,25 @@ $shareUrl = url('/product/' . $product['slug']);
                   We will print a special photo embedded with a QR code. When anyone scans it with a regular phone camera,
                   it instantly plays your personal video. Our team will contact you after order confirmation to collect your video.
                 </p>
+
+              <?php elseif ($opt['option_type'] === 'ar_frame'): ?>
+                <p style="font-size:13px;color:var(--color-muted);margin:0 0 10px">
+                  Upload the photo we should print, and paste the YouTube link of the video it should play.
+                  Point any phone camera at the finished frame and your video starts — no app, no QR code, nothing printed on the photo.
+                </p>
+                <label style="font-weight:500;font-size:13px;display:block;margin-bottom:4px">Photo to print</label>
+                <input type="file" id="<?= $inputId ?>" class="photo-upload-input" name="<?= $fieldName ?>[file]"
+                       accept="image/jpeg,image/png" <?= $opt['is_required'] ? 'required' : '' ?>>
+                <small style="color:var(--color-muted);display:block;margin-bottom:10px">
+                  JPG or PNG, max 10MB. Sharp, detailed photos work best — very plain or blurry photos may not trigger reliably.
+                </small>
+                <div class="crop-preview-wrap" data-crop-for="<?= $inputId ?>"></div>
+                <label style="font-weight:500;font-size:13px;display:block;margin-bottom:4px">YouTube video link</label>
+                <input type="url" name="<?= $fieldName ?>[video_url]" placeholder="https://www.youtube.com/watch?v=…"
+                       <?= $opt['extra_charge'] > 0 ? 'data-extra="' . (float)$opt['extra_charge'] . '"' : '' ?>
+                       <?= $opt['is_required'] ? 'required' : '' ?>>
+                <small style="color:var(--color-muted)">Make sure the video is Public or Unlisted — Private videos will not play for the recipient.</small>
+
               <?php else: ?>
                 <input type="text" id="<?= $inputId ?>" name="<?= $fieldName ?>[value]" <?= $opt['extra_charge'] > 0 ? 'data-extra="' . (float)$opt['extra_charge'] . '"' : '' ?> placeholder="Enter your choice…" <?= $opt['is_required'] ? 'required' : '' ?>>
               <?php endif; ?>

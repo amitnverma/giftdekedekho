@@ -1,0 +1,21 @@
+{
+  "name": "gdd-mindar-compile",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Compiles customer photos into MindAR .mind image targets for the Living Photo AR frame feature. Invoked by the PHP admin panel.",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "compile": "node compile.mjs",
+    "serve": "node server.mjs"
+  },
+  "dependencies": {
+    "mind-ar": "1.2.5",
+    "three": "0.155.0"
+  },
+  "overrides": {
+    "canvas": "^3.2.0"
+  }
+}
