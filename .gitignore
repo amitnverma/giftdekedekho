@@ -10,6 +10,13 @@ public/uploads/*
 public/uploads/*/*
 !public/uploads/*/.gitkeep
 
+# AR frame storage is created at runtime by ArFrameService/ArTargetService
+# instead of being tracked. The deploy user cannot necessarily create new
+# directories under public/uploads/ (it is owned by the web server user), and a
+# tracked .gitkeep there makes `git reset --hard` fail the whole deployment.
+public/uploads/ar-photos/.gitkeep
+public/uploads/ar-targets/.gitkeep
+
 # Logs & temp
 *.log
 *.tmp
