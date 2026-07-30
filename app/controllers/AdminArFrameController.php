@@ -32,6 +32,7 @@ class AdminArFrameController extends BaseController
     public function index(): void
     {
         $this->requireAdmin();
+        if ($this->schemaMissing()) return;
 
         $filters = [
             'status'     => (string)$this->input('status', ''),
@@ -57,6 +58,7 @@ class AdminArFrameController extends BaseController
     public function show(int $id): void
     {
         $this->requireAdmin();
+        if ($this->schemaMissing()) return;
 
         $frame = $this->frames->findWithContext($id);
         if (!$frame) {
@@ -329,6 +331,7 @@ class AdminArFrameController extends BaseController
     public function quickCreate(): void
     {
         $this->requireAdmin();
+        if ($this->schemaMissing()) return;
 
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             $this->viewAdmin('admin/ar_frames_quick_create', [
@@ -434,6 +437,7 @@ class AdminArFrameController extends BaseController
     public function liveTest(int $id): void
     {
         $this->requireAdmin();
+        if ($this->schemaMissing()) return;
 
         $frame = $this->frames->find($id);
         if (!$frame) {
@@ -470,6 +474,7 @@ class AdminArFrameController extends BaseController
     public function photo(int $id): void
     {
         $this->requireAdmin();
+        if ($this->schemaMissing()) return;
 
         $frame = $this->frames->find($id);
         if (!$frame) {
@@ -488,6 +493,7 @@ class AdminArFrameController extends BaseController
     public function card(int $id): void
     {
         $this->requireAdmin();
+        if ($this->schemaMissing()) return;
 
         $frame = $this->frames->findWithContext($id);
         if (!$frame) {
@@ -531,6 +537,31 @@ class AdminArFrameController extends BaseController
 
         $basePath = rtrim((string)parse_url(SITE_URL, PHP_URL_PATH), '/');
         return 'https://' . $ip . $basePath . '/scan/' . $slug;
+    }
+
+    /**
+     * Renders setup instructions when the migration has not been run, and
+     * reports whether it did so.
+     *
+     * Deployment ships code without migrations, so on a fresh deploy this is
+     * the expected first state — not an exception. Callers `return` on true.
+     */
+    private function schemaMissing(): bool
+    {
+        if ($this->frames->tableExists()) {
+            return false;
+        }
+
+        $siteRoot = BASE_PATH;
+        $this->viewAdmin('admin/ar_frames_setup', [
+            'metaTitle' => 'AR Frames — Setup Required',
+            'compiler' => $this->compilerStatus(),
+            'migrationCommand' =>
+                "cd {$siteRoot}\n" .
+                "mysql -u <db_user> -p <db_name> < migrations/2026_07_29_ar_frames.sql",
+            'npmCommand' => "cd {$siteRoot}/tools/mindar-compile\nnpm ci",
+        ]);
+        return true;
     }
 
     /**

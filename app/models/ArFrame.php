@@ -19,6 +19,28 @@ class ArFrame extends BaseModel
         'in_store' => 'Walk-in',
     ];
 
+    /**
+     * Whether the ar_frames table has been created yet.
+     *
+     * Deployment is a plain `git reset --hard` with no migration step, so the
+     * code always lands before the schema does. Callers use this to explain
+     * what to run instead of throwing a raw SQL error at whoever clicks first.
+     * Mirrors the intent of BaseModel::columnExists for a whole table.
+     */
+    public function tableExists(): bool
+    {
+        static $exists = null;
+        if ($exists === null) {
+            try {
+                $stmt = $this->db->query("SHOW TABLES LIKE 'ar_frames'");
+                $exists = $stmt->fetch() !== false;
+            } catch (Throwable $e) {
+                $exists = false;
+            }
+        }
+        return $exists;
+    }
+
     public function findBySlug(string $slug): ?array
     {
         $stmt = $this->db->prepare('SELECT * FROM ar_frames WHERE slug = ? LIMIT 1');

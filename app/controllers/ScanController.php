@@ -30,7 +30,16 @@ class ScanController extends BaseController
 
         require_once APP_PATH . '/services/ArFrameService.php';
         $service = new ArFrameService();
-        $frame = (new ArFrame())->findBySlug($slug);
+        $frames = new ArFrame();
+
+        // Code deploys ahead of migrations, so the table may not exist yet.
+        // A recipient holding a printed card must never see a raw SQL error.
+        if (!$frames->tableExists()) {
+            $this->invalid('This Living Photo is still being prepared. Please try again a little later.');
+            return;
+        }
+
+        $frame = $frames->findBySlug($slug);
 
         if (!$frame || empty($frame['is_active'])) {
             $this->invalid('This Living Photo link is no longer available.');
