@@ -4,25 +4,35 @@ on:
   push:
     branches: [ main ]
 
+# Deploys are retried because the SSH connection to the VPS intermittently
+# fails to establish. The signature is a step that hangs for exactly the
+# configured timeout and then fails, while successful runs complete the whole
+# script in 2-13 seconds — the script never starts, so nothing in it is at
+# fault. Observed alternating across identical kinds of commits, including a
+# 15-file feature commit succeeding and a 2-line fix failing.
+#
+# The real fix needs root on the VPS (fail2ban / firewall) which the site login
+# does not have. Until Hostinger clears that, retrying turns an intermittent
+# failure into a delay rather than a broken deploy.
+#
+# The script is duplicated across attempts because GitHub Actions supports
+# neither YAML anchors nor re-running a step; keep the three copies in sync.
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy to VPS via SSH
+      - name: Deploy to VPS via SSH (attempt 1)
+        id: attempt1
+        continue-on-error: true
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
-          # The action's default connection timeout is 30s, and deploys were
-          # failing at exactly 30s while successful ones finished the whole
-          # script in ~13s — i.e. the SSH handshake occasionally does not
-          # complete in time, rather than anything in the script failing.
-          # command_timeout is set explicitly so a slow git fetch is never
-          # mistaken for a hung session.
-          timeout: 120s
+          timeout: 60s
           command_timeout: 10m
           script: |
             set -e
@@ -32,8 +42,84 @@ jobs:
             git reset --hard origin/main
             echo "After:  $(git rev-parse --short HEAD)"
             git --no-pager log -1 --pretty='Deployed commit %h — %s'
-            # Warn about any files pinned with skip-worktree/assume-unchanged —
-            # these are silently skipped by reset and can cause stale config.
             pinned="$(git ls-files -v | grep -iE '^[a-z]' || true)"
             if [ -n "$pinned" ]; then echo "NOTE: pinned files (not updated by deploy):"; echo "$pinned"; fi
             echo "Deployed at $(date)"
+
+      - name: Wait before retrying
+        if: steps.attempt1.outcome == 'failure'
+        run: |
+          echo "Attempt 1 failed. If it ran for the full 60s timeout this is the"
+          echo "known intermittent SSH issue, not the commit. Waiting before retry."
+          sleep 30
+
+      - name: Deploy to VPS via SSH (attempt 2)
+        id: attempt2
+        if: steps.attempt1.outcome == 'failure'
+        continue-on-error: true
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          timeout: 60s
+          command_timeout: 10m
+          script: |
+            set -e
+            cd /home/giftdekedekho/htdocs/www.giftdekedekho.com
+            echo "Before: $(git rev-parse --short HEAD)"
+            git fetch origin main
+            git reset --hard origin/main
+            echo "After:  $(git rev-parse --short HEAD)"
+            git --no-pager log -1 --pretty='Deployed commit %h — %s'
+            pinned="$(git ls-files -v | grep -iE '^[a-z]' || true)"
+            if [ -n "$pinned" ]; then echo "NOTE: pinned files (not updated by deploy):"; echo "$pinned"; fi
+            echo "Deployed at $(date)"
+
+      - name: Wait before final attempt
+        if: steps.attempt1.outcome == 'failure' && steps.attempt2.outcome == 'failure'
+        run: |
+          echo "Attempt 2 failed as well. Waiting longer before the final attempt."
+          sleep 60
+
+      - name: Deploy to VPS via SSH (attempt 3)
+        id: attempt3
+        if: steps.attempt1.outcome == 'failure' && steps.attempt2.outcome == 'failure'
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          timeout: 60s
+          command_timeout: 10m
+          script: |
+            set -e
+            cd /home/giftdekedekho/htdocs/www.giftdekedekho.com
+            echo "Before: $(git rev-parse --short HEAD)"
+            git fetch origin main
+            git reset --hard origin/main
+            echo "After:  $(git rev-parse --short HEAD)"
+            git --no-pager log -1 --pretty='Deployed commit %h — %s'
+            pinned="$(git ls-files -v | grep -iE '^[a-z]' || true)"
+            if [ -n "$pinned" ]; then echo "NOTE: pinned files (not updated by deploy):"; echo "$pinned"; fi
+            echo "Deployed at $(date)"
+
+      - name: Report outcome
+        if: always()
+        run: |
+          if [ "${{ steps.attempt1.outcome }}" = "success" ]; then
+            echo "Deployed on attempt 1."
+          elif [ "${{ steps.attempt2.outcome }}" = "success" ]; then
+            echo "Deployed on attempt 2 — attempt 1 could not connect."
+          elif [ "${{ steps.attempt3.outcome }}" = "success" ]; then
+            echo "Deployed on attempt 3 — earlier attempts could not connect."
+          else
+            echo "All three attempts failed to reach the VPS."
+            echo "If each ran for the full 60s, SSH is being blocked rather than"
+            echo "the deploy script failing. Check fail2ban and the firewall for"
+            echo "the SSH port (needs root / Hostinger support), then deploy by hand:"
+            echo "  cd ~/htdocs/www.giftdekedekho.com && git fetch origin main && git reset --hard origin/main"
+            exit 1
+          fi
