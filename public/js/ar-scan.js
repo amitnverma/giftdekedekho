@@ -322,12 +322,15 @@ export function initScanner(config) {
    * be used as a WebGL texture, so those always play full-screen.
    */
   function buildOverlayPlane(anchor) {
-    overlayVideo = els.video;
-    overlayVideo.muted = false;
-    overlayVideo.loop = false;
-    overlayVideo.playsInline = true;
+    // Uses els.video directly. A module runs in strict mode, so the alias this
+    // previously assigned to had to be declared — losing that declaration threw
+    // a ReferenceError while the anchors were being built, which surfaced to the
+    // recipient as "the camera could not be started".
+    els.video.muted = false;
+    els.video.loop = false;
+    els.video.playsInline = true;
 
-    const texture = new THREE.VideoTexture(overlayVideo);
+    const texture = new THREE.VideoTexture(els.video);
     const geometry = new THREE.PlaneGeometry(1, 1 / (config.aspect || 1));
     const material = new THREE.MeshBasicMaterial({ map: texture });
     const plane = new THREE.Mesh(geometry, material);
@@ -399,11 +402,25 @@ export function initScanner(config) {
       // tells us which customer's video to play.
       targets.forEach((target, index) => {
         const anchor = mindarThree.addAnchor(index);
+
         // Overlay needs the video as a WebGL texture, which only works for a
         // real video element — an iframe cannot be textured.
-        const useOverlay = target.playbackMode === 'overlay'
+        //
+        // Wrapped because /scan registers every active frame at once: a single
+        // bad target must not take the camera down for all the others. That is
+        // exactly what happened when this threw — the whole scanner reported
+        // "the camera could not be started" because of one frame's settings.
+        let useOverlay = target.playbackMode === 'overlay'
           && (target.videoType === 'upload' || target.videoType === 'direct');
-        if (useOverlay) buildOverlayPlane(anchor);
+        if (useOverlay) {
+          try {
+            buildOverlayPlane(anchor);
+          } catch (overlayErr) {
+            useOverlay = false;   // fall back to full-screen for this frame
+            debug.overlayErrors = (debug.overlayErrors || 0) + 1;
+            renderDebug();
+          }
+        }
 
         anchor.onTargetFound = () => {
           // Ignore a second target firing while a video is already playing.
