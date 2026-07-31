@@ -43,15 +43,30 @@ You should see a line beginning with __GDD_RESULT__ and containing
 The admin panel supports two modes, selected by `ar_compiler_mode` in
 config/local.php. Default is "shell".
 
-MODE A — "shell" (preferred, simplest)
+MODE A — "shell" (preferred, simplest, and the default)
     PHP shells out to `node compile.mjs`. Requires shell_exec or proc_open to
-    be enabled in php.ini. If `node` is not on the web server user's PATH, set
-    its absolute path:
+    be enabled in php.ini.
+
+    You normally do NOT need to configure a path. Node is located
+    automatically: PATH first, then the newest nvm install under the account's
+    home directory, then the usual system locations.
+
+    That search exists because PHP-FPM does not read .bashrc, so an nvm install
+    is invisible to it even though `node -v` works fine over SSH. Installing
+    Node with nvm as the site user is therefore enough on its own:
+
+        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+        export NVM_DIR="$HOME/.nvm" && . "$NVM_DIR/nvm.sh"
+        nvm install 20
+        cd tools/mindar-compile && npm ci
+
+    Admin -> AR Frame Orders names the binary it resolved, so you can confirm
+    which Node the website is actually using. Override it only if that choice
+    is wrong:
 
         // config/local.php
         return [
-            'ar_compiler_mode' => 'shell',
-            'ar_node_binary'   => '/usr/bin/node',   // output of `which node`
+            'ar_node_binary' => '/usr/bin/node',   // output of `which node`
         ];
 
 MODE B — "http" (for hosts where shell_exec is disabled)
