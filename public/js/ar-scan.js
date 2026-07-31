@@ -130,7 +130,9 @@ export function initScanner(config) {
    * ruin the moment this product exists for.
    */
   function playUploadedVideo() {
-    els.video.style.display = '';
+    // An explicit value, not '': clearing the inline style would fall back to
+    // the stylesheet's `display: none` and leave a blank player.
+    els.video.style.display = 'block';
     els.video.muted = false;
     const attempt = els.video.play();
     if (attempt && typeof attempt.catch === 'function') {
@@ -159,7 +161,9 @@ export function initScanner(config) {
       encodeURIComponent(active.youtubeId) + '?' + params.toString() + '"' +
       ' title="Your video" frameborder="0" allowfullscreen' +
       ' allow="autoplay; encrypted-media; picture-in-picture"></iframe>';
-    els.youtube.style.display = '';
+    // Same trap as the uploaded-video path: '' would revert to the
+    // stylesheet's `display: none` and show a blank screen.
+    els.youtube.style.display = 'block';
   }
 
   /**
@@ -189,7 +193,10 @@ export function initScanner(config) {
 
   function closePlayer() {
     els.player.style.display = 'none';
+    // Clearing innerHTML stops playback; hiding the container too keeps it from
+    // sitting over the camera view as an invisible block on the next scan.
     els.youtube.innerHTML = '';
+    els.youtube.style.display = 'none';
     if (els.video) {
       els.video.pause();
       els.video.style.display = 'none';
