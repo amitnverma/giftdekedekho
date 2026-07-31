@@ -102,11 +102,52 @@ $scanConfig = [
     /* Full-screen player */
     #arPlayer {
         position: fixed; inset: 0; z-index: 30; display: none;
-        flex-direction: column; align-items: center; justify-content: center; background: #000;
+        flex-direction: column; align-items: center; justify-content: center;
+        /* Warm vignette rather than flat black — the video should feel like it
+           is hanging on a wall, not like a media player took over the phone. */
+        background: radial-gradient(circle at 50% 45%, #23201d 0%, #0b0a09 100%);
+        padding: 4vmin;
     }
-    #arVideo { width: 100%; height: 100%; object-fit: contain; display: none; background: #000; }
-    #arYoutube { display: none; width: 100%; height: 100%; }
-    #arYoutube iframe { width: 100%; height: 100%; border: 0; }
+
+    /* The picture frame the video plays inside. Moulding, mat and a cast
+       shadow, sized so the video still fills as much of a phone as possible. */
+    .ar-frame {
+        position: relative; display: none;
+        max-width: 100%; max-height: 100%;
+        padding: 3.2vmin;                              /* the mat */
+        background: linear-gradient(145deg, #f6f1e7 0%, #e8e0d2 100%);
+        border: 1.6vmin solid;
+        border-image: linear-gradient(145deg, #a9793f 0%, #6d4620 45%, #c99a5b 70%, #7a5127 100%) 1;
+        box-shadow:
+            0 0 0 0.35vmin rgba(0,0,0,.35),            /* rebate shadow */
+            0 3vmin 6vmin rgba(0,0,0,.65);             /* cast shadow */
+    }
+    .ar-frame::after {
+        /* Faint glass sheen across the picture. */
+        content: ''; position: absolute; inset: 0; pointer-events: none;
+        background: linear-gradient(118deg, rgba(255,255,255,.16) 0%, rgba(255,255,255,0) 42%);
+    }
+    .ar-frame.is-visible { display: block; }
+
+    /* Both players are hidden by default — the module shows exactly one, so an
+       empty <video> never stacks above an iframe. */
+    #arVideo, #arYoutube {
+        display: none; background: #000;
+        width: min(86vw, 150vh); max-width: 100%;
+        aspect-ratio: 16 / 9; height: auto;
+    }
+    #arYoutube iframe { width: 100%; height: 100%; border: 0; display: block; }
+
+    /* Unmute prompt — only for embedded providers, which cannot be primed.
+       Sits below the moulding so it never covers the player's own controls. */
+    #arUnmute {
+        position: absolute; left: 50%; transform: translateX(-50%);
+        bottom: -7vmin; z-index: 35; display: none;
+        border: 0; cursor: pointer; font-family: inherit; font-weight: 700;
+        background: #e63946; color: #fff; border-radius: 999px;
+        padding: 11px 22px; font-size: 14px; white-space: nowrap;
+        box-shadow: 0 6px 18px rgba(0,0,0,.5);
+    }
     #arClose {
         position: absolute; top: calc(14px + env(safe-area-inset-top)); right: 14px; z-index: 33;
         width: 40px; height: 40px; border-radius: 50%; border: 0; cursor: pointer;
@@ -213,9 +254,14 @@ $scanConfig = [
 <!-- Player -->
 <div id="arPlayer">
     <button id="arClose" type="button" aria-label="Close video">×</button>
-    <!-- src is set by the module once a match identifies which frame it is. -->
-    <video id="arVideo" playsinline controls preload="none"></video>
-    <div id="arYoutube"></div>
+    <!-- The video plays inside a picture frame, so the moment reads as the
+         gift coming alive rather than a media player taking over the screen.
+         src is set by the module once a match identifies which frame it is. -->
+    <div class="ar-frame" id="arFrame">
+        <video id="arVideo" playsinline controls preload="auto"></video>
+        <div id="arYoutube"></div>
+        <button id="arUnmute" type="button">🔊 Tap for sound</button>
+    </div>
     <div id="arTapToPlay">
         <div class="ar-play-ring">▶</div>
         <span>Tap to play your video</span>

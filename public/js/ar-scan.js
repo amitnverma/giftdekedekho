@@ -44,6 +44,8 @@ export function initScanner(config) {
     closeBtn: document.getElementById('arClose'),
     verified: document.getElementById('arVerified'),
     fallback: document.getElementById('arFallback'),
+    frame: document.getElementById('arFrame'),
+    unmute: document.getElementById('arUnmute'),
   };
 
   let mindarThree = null;
@@ -77,6 +79,7 @@ export function initScanner(config) {
     secureContext: window.isSecureContext,
     targetCount: targets.length,
     matchedSlug: null,
+    videoPrimed: null,
   };
   window.__arDebug = debug;
 
@@ -125,27 +128,64 @@ export function initScanner(config) {
   // ------------------------------------------------------------------ playback
 
   /**
-   * Try to play with sound. Browsers block unmuted autoplay without a recent
-   * user gesture, and the tap that started the camera may no longer count — so
-   * fall back to an explicit tap rather than silently playing muted, which would
-   * ruin the moment this product exists for.
+   * Unlock the <video> element for later automatic playback.
+   *
+   * Browsers refuse unmuted playback that is not tied to a user gesture, and by
+   * the time the photo is recognised that gesture is long gone. Starting the
+   * element muted *inside* the "Start camera" tap and immediately pausing marks
+   * it as user-initiated, so the real play() on match is allowed — with sound,
+   * and with no second tap. Verified: without this, a delayed unmuted play()
+   * is blocked; with it, the same call plays.
+   *
+   * Only possible for a real video element. An iframe cannot be primed, which
+   * is why embedded providers still need one tap for sound.
+   */
+  function primeVideoElement() {
+    if (!els.video) return;
+    els.video.muted = true;
+    els.video.playsInline = true;
+    const attempt = els.video.play();
+    if (attempt && typeof attempt.then === 'function') {
+      attempt.then(() => {
+        els.video.pause();
+        els.video.currentTime = 0;
+        debug.videoPrimed = true;
+        renderDebug();
+      }).catch(() => {
+        debug.videoPrimed = false;
+        renderDebug();
+      });
+    }
+  }
+
+  /**
+   * Play a self-hosted or directly-linked video. Thanks to priming this starts
+   * on its own, with sound, the instant the photo is recognised.
    */
   function playUploadedVideo() {
-    // An explicit value, not '': clearing the inline style would fall back to
-    // the stylesheet's `display: none` and leave a blank player.
     els.video.style.display = 'block';
     els.video.muted = false;
     const attempt = els.video.play();
     if (attempt && typeof attempt.catch === 'function') {
       attempt.catch(() => {
-        els.tapToPlay.style.display = 'flex';
-        els.tapToPlay.onclick = () => {
-          els.tapToPlay.style.display = 'none';
-          els.video.muted = false;
-          els.video.play().catch(() => {});
-        };
+        // Priming did not take (or was refused). Rather than leave a still
+        // frame, start it muted and offer sound in one tap.
+        els.video.muted = true;
+        els.video.play().catch(() => {});
+        showUnmuteButton();
       });
     }
+  }
+
+  /** One tap to restore sound when autoplay was only allowed muted. */
+  function showUnmuteButton() {
+    if (!els.unmute) return;
+    els.unmute.style.display = 'block';
+    els.unmute.onclick = () => {
+      els.unmute.style.display = 'none';
+      els.video.muted = false;
+      els.video.play().catch(() => {});
+    };
   }
 
   /**
@@ -161,8 +201,12 @@ export function initScanner(config) {
     let src;
 
     if (active.videoType === 'vimeo') {
+      // muted=1 so autoplay is permitted without a gesture — an iframe cannot
+      // be primed the way a video element can, and motion starting on its own
+      // matters more than the first second having sound. The unmute button
+      // restores audio in one tap.
       src = 'https://player.vimeo.com/video/' + encodeURIComponent(active.vimeoId) +
-        '?autoplay=1&playsinline=1';
+        '?autoplay=1&muted=1&playsinline=1&title=0&byline=0&portrait=0';
     } else {
       const params = new URLSearchParams({
         autoplay: '1',
@@ -183,6 +227,20 @@ export function initScanner(config) {
     // Same trap as the uploaded-video path: '' would revert to the
     // stylesheet's `display: none` and show a blank screen.
     els.youtube.style.display = 'block';
+
+    if (active.videoType === 'vimeo') {
+      // Vimeo starts muted so it can autoplay; offer sound in one tap. The
+      // button drives the iframe by reloading it unmuted, which needs no SDK.
+      if (els.unmute) {
+        els.unmute.style.display = 'block';
+        els.unmute.onclick = () => {
+          els.unmute.style.display = 'none';
+          els.youtube.innerHTML = els.youtube.innerHTML
+            .replace('&muted=1', '')
+            .replace('autoplay=1', 'autoplay=1');
+        };
+      }
+    }
 
     showFallbackLink();
   }
@@ -225,11 +283,16 @@ export function initScanner(config) {
   function showFullscreenPlayer() {
     els.player.style.display = 'flex';
     els.status.style.display = 'none';
+    if (els.frame) els.frame.classList.add('is-visible');
 
-    // youtube and vimeo play in an iframe; direct links and uploaded files are
-    // ordinary video files and play in the <video> element.
-    if (active.videoType === 'youtube' || active.videoType === 'vimeo') {
+    // Vimeo, uploaded files and direct links all start on their own the moment
+    // the photo is recognised — no tap. YouTube is the exception: it refuses to
+    // embed on this domain, so it keeps an explicit tap and the escape link
+    // rather than silently showing its own error screen.
+    if (active.videoType === 'youtube') {
       playEmbedded();
+    } else if (active.videoType === 'vimeo') {
+      buildEmbedIframe();
     } else {
       playUploadedVideo();
     }
@@ -242,6 +305,8 @@ export function initScanner(config) {
     els.youtube.innerHTML = '';
     els.youtube.style.display = 'none';
     if (els.fallback) els.fallback.style.display = 'none';
+    if (els.unmute) els.unmute.style.display = 'none';
+    if (els.frame) els.frame.classList.remove('is-visible');
     if (els.video) {
       els.video.pause();
       els.video.style.display = 'none';
@@ -424,7 +489,12 @@ export function initScanner(config) {
     }
   }
 
-  els.startBtn.addEventListener('click', start);
+  els.startBtn.addEventListener('click', () => {
+    // Must happen inside the tap itself — this is what allows the video to
+    // start on its own, with sound, when the photo is later recognised.
+    primeVideoElement();
+    start();
+  });
   els.closeBtn.addEventListener('click', closePlayer);
   els.error.querySelector('[data-retry]').addEventListener('click', () => {
     els.error.style.display = 'none';
