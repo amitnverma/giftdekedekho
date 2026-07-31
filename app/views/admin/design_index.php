@@ -11,7 +11,12 @@
  * @param string $id        unique HTML id prefix (auto-generated from $name if omitted)
  */
 function designColorPicker(string $name, string $label, string $hint, string $current, string $default, string $id = ''): void {
-    if ($id === '') $id = 'cp_' . preg_replace('/[^a-z0-9]/i', '_', $name) . '_' . substr(md5($name . $default), 0, 6);
+    // Every section's appearance panel posts the same field names (style[heading_color] …)
+    // with the same defaults, so an id derived from name+default collides across panels and
+    // getElementById() would drive the FIRST panel on the page. Sequence keeps ids unique.
+    static $seq = 0;
+    $seq++;
+    if ($id === '') $id = 'cp_' . preg_replace('/[^a-z0-9]/i', '_', $name) . '_' . $seq;
     // Ensure current is a valid 6-digit hex; fall back to default
     if (!preg_match('/^#[0-9a-fA-F]{6}$/', $current)) $current = $default;
     $esc_cur = htmlspecialchars($current, ENT_QUOTES);
