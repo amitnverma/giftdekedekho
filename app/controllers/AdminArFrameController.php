@@ -13,6 +13,11 @@ class AdminArFrameController extends BaseController
 {
     private const PER_PAGE = 20;
 
+    /** Shown whenever a pasted video link is not one we can play. */
+    private const VIDEO_URL_HELP =
+        'That video link was not recognised. Paste a YouTube link (youtube.com or youtu.be), '
+        . 'a Vimeo link, or a direct https link to an .mp4, .webm or .mov file.';
+
     /** Target generation is CPU-heavy, so cap it per admin session. */
     private const GENERATE_LIMIT = 20;
     private const GENERATE_WINDOW_SECONDS = 300;
@@ -308,16 +313,17 @@ class AdminArFrameController extends BaseController
             'is_active'      => $this->input('is_active') ? 1 : 0,
         ];
 
-        $videoType = $this->input('video_type') === 'upload' ? 'upload' : 'youtube';
+        $videoType = $this->input('video_type') === 'upload' ? 'upload' : 'link';
 
-        if ($videoType === 'youtube') {
-            $url = $this->service->normaliseYoutubeUrl((string)$this->input('video_url', ''));
-            if ($url === null) {
-                flash('error', 'Please enter a valid YouTube link.');
+        if ($videoType === 'link') {
+            // One field for every provider — the source is detected from the URL.
+            $source = $this->service->detectVideoSource((string)$this->input('video_url', ''));
+            if ($source === null) {
+                flash('error', self::VIDEO_URL_HELP);
                 redirect('/admin/ar-frames/' . $id);
             }
-            $data['video_type'] = 'youtube';
-            $data['video_url'] = $url;
+            $data['video_type'] = $source['type'];
+            $data['video_url'] = $source['url'];
         } else {
             $data['video_type'] = 'upload';
             // Only replace the file when a new one was actually chosen.
@@ -364,17 +370,19 @@ class AdminArFrameController extends BaseController
 
         $this->requireCsrf();
 
-        $videoType = $this->input('video_type') === 'upload' ? 'upload' : 'youtube';
+        $videoType = $this->input('video_type') === 'upload' ? 'upload' : 'link';
         $videoUrl = null;
         $videoPath = null;
 
         // Validate the video before touching the photo, so a bad link doesn't
         // leave an orphaned upload behind.
-        if ($videoType === 'youtube') {
-            $videoUrl = $this->service->normaliseYoutubeUrl((string)$this->input('video_url', ''));
-            if ($videoUrl === null) {
-                $this->quickCreateError('Please paste a valid YouTube link (youtube.com or youtu.be).');
+        if ($videoType === 'link') {
+            $source = $this->service->detectVideoSource((string)$this->input('video_url', ''));
+            if ($source === null) {
+                $this->quickCreateError(self::VIDEO_URL_HELP);
             }
+            $videoType = $source['type'];
+            $videoUrl = $source['url'];
         }
 
         $photo = $this->service->storePhoto($_FILES['photo'] ?? []);
@@ -472,16 +480,9 @@ class AdminArFrameController extends BaseController
 
         // Rendered with no admin chrome: this page is held up to a phone camera,
         // and it reuses the public scan view so the test exercises the real thing.
-        $playback = $this->service->playback($frame);
         renderRaw('store/scan_page', [
             'frame'      => $frame,
-            'targets'    => [[
-                'slug' => $frame['slug'],
-                'videoType' => $playback['type'] ?? null,
-                'youtubeId' => $playback['youtube_id'] ?? null,
-                'videoUrl' => ($playback['type'] ?? '') === 'upload' ? $playback['url'] : null,
-                'playbackMode' => $frame['playback_mode'],
-            ]],
+            'targets'    => [$this->service->browserTarget($frame)],
             'targetUrl'  => ArFrameService::fileUrl($frame['target_path']),
             'photoUrl'   => ArFrameService::fileUrl($frame['photo_path']),
             'isAdminTest' => true,

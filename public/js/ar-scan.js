@@ -43,6 +43,7 @@ export function initScanner(config) {
     tapToPlay: document.getElementById('arTapToPlay'),
     closeBtn: document.getElementById('arClose'),
     verified: document.getElementById('arVerified'),
+    fallback: document.getElementById('arFallback'),
   };
 
   let mindarThree = null;
@@ -147,48 +148,91 @@ export function initScanner(config) {
     }
   }
 
-  function buildYoutubeIframe() {
-    // Built on demand rather than in the markup so nothing loads (or phones
-    // home to YouTube) until the recipient actually asks for the video.
-    const params = new URLSearchParams({
-      autoplay: '1',
-      playsinline: '1',
-      rel: '0',
-      modestbranding: '1',
-    });
+  /**
+   * Build the embed for whichever provider this frame uses.
+   *
+   * `origin` is passed to YouTube because the player rejects embeds whose
+   * origin it cannot verify — that surfaces as "player configuration error
+   * 153", which looks like a broken video to the recipient. youtube.com is
+   * used rather than youtube-nocookie.com for the same reason: the nocookie
+   * host refuses embeds in more situations.
+   */
+  function buildEmbedIframe() {
+    let src;
+
+    if (active.videoType === 'vimeo') {
+      src = 'https://player.vimeo.com/video/' + encodeURIComponent(active.vimeoId) +
+        '?autoplay=1&playsinline=1';
+    } else {
+      const params = new URLSearchParams({
+        autoplay: '1',
+        playsinline: '1',
+        rel: '0',
+        modestbranding: '1',
+        origin: window.location.origin,
+      });
+      src = 'https://www.youtube.com/embed/' + encodeURIComponent(active.youtubeId) +
+        '?' + params.toString();
+    }
+
+    // Built on demand so nothing loads (or phones home to the provider) until
+    // the recipient actually asks for the video.
     els.youtube.innerHTML =
-      '<iframe src="https://www.youtube-nocookie.com/embed/' +
-      encodeURIComponent(active.youtubeId) + '?' + params.toString() + '"' +
-      ' title="Your video" frameborder="0" allowfullscreen' +
+      '<iframe src="' + src + '" title="Your video" frameborder="0" allowfullscreen' +
       ' allow="autoplay; encrypted-media; picture-in-picture"></iframe>';
     // Same trap as the uploaded-video path: '' would revert to the
     // stylesheet's `display: none` and show a blank screen.
     els.youtube.style.display = 'block';
+
+    showFallbackLink();
   }
 
   /**
-   * YouTube always goes through an explicit tap.
+   * A way out if the embed refuses to play.
+   *
+   * An iframe reports "loaded" even when the provider renders its own error
+   * inside it, so a failed embed cannot be detected reliably without pulling in
+   * each provider's player API. Instead the recipient always gets a visible
+   * link to open the video directly — small and out of the way when the embed
+   * works, and the difference between a working gift and a dead end when it
+   * does not.
+   */
+  function showFallbackLink() {
+    if (!els.fallback || !active.watchUrl) return;
+    const link = els.fallback.querySelector('a');
+    link.href = active.watchUrl;
+    els.fallback.style.display = 'block';
+  }
+
+  /**
+   * Embedded providers always go through an explicit tap.
    *
    * iOS Safari blocks unmuted autoplay inside an iframe, and unlike a <video>
-   * element there is no way to detect that failure without pulling in the whole
-   * YouTube Player API. Rather than gamble — and risk the recipient staring at
-   * a bare play button with no explanation — the tap is made deliberate. It also
-   * guarantees sound: the tap is a fresh user gesture, so autoplay is permitted.
-   * Playing a silent video would defeat the point of the gift.
+   * element there is no way to detect that failure without pulling in each
+   * provider's player API. Rather than gamble — and risk the recipient staring
+   * at a bare play button with no explanation — the tap is made deliberate. It
+   * also guarantees sound: the tap is a fresh user gesture, so autoplay is
+   * permitted. Playing a silent video would defeat the point of the gift.
    */
-  function playYoutube() {
+  function playEmbedded() {
     els.tapToPlay.style.display = 'flex';
     els.tapToPlay.onclick = () => {
       els.tapToPlay.style.display = 'none';
-      buildYoutubeIframe();
+      buildEmbedIframe();
     };
   }
 
   function showFullscreenPlayer() {
     els.player.style.display = 'flex';
     els.status.style.display = 'none';
-    if (active.videoType === "youtube") playYoutube();
-    else playUploadedVideo();
+
+    // youtube and vimeo play in an iframe; direct links and uploaded files are
+    // ordinary video files and play in the <video> element.
+    if (active.videoType === 'youtube' || active.videoType === 'vimeo') {
+      playEmbedded();
+    } else {
+      playUploadedVideo();
+    }
   }
 
   function closePlayer() {
@@ -197,6 +241,7 @@ export function initScanner(config) {
     // sitting over the camera view as an invisible block on the next scan.
     els.youtube.innerHTML = '';
     els.youtube.style.display = 'none';
+    if (els.fallback) els.fallback.style.display = 'none';
     if (els.video) {
       els.video.pause();
       els.video.style.display = 'none';
@@ -289,7 +334,10 @@ export function initScanner(config) {
       // tells us which customer's video to play.
       targets.forEach((target, index) => {
         const anchor = mindarThree.addAnchor(index);
-        const useOverlay = target.playbackMode === 'overlay' && target.videoType === 'upload';
+        // Overlay needs the video as a WebGL texture, which only works for a
+        // real video element — an iframe cannot be textured.
+        const useOverlay = target.playbackMode === 'overlay'
+          && (target.videoType === 'upload' || target.videoType === 'direct');
         if (useOverlay) buildOverlayPlane(anchor);
 
         anchor.onTargetFound = () => {
@@ -309,7 +357,9 @@ export function initScanner(config) {
             return;
           }
 
-          if (target.videoType === 'upload' && target.videoUrl) {
+          // Direct links and uploaded files both play from a URL in the
+          // <video> element; embedded providers build an iframe instead.
+          if ((target.videoType === 'upload' || target.videoType === 'direct') && target.videoUrl) {
             els.video.src = target.videoUrl;
           }
 

@@ -245,16 +245,16 @@ $flagBadge = ['good' => 'admin-badge-green', 'fair' => 'admin-badge-yellow', 'po
                 <div class="admin-form-row">
                     <label class="admin-label-hint">Video source</label>
                     <select name="video_type" id="arVideoType">
-                        <option value="youtube" <?= $frame['video_type'] === 'youtube' ? 'selected' : '' ?>>YouTube link</option>
+                        <option value="link" <?= $frame['video_type'] !== 'upload' ? 'selected' : '' ?>>Video link (YouTube, Vimeo or direct file)</option>
                         <option value="upload" <?= $frame['video_type'] === 'upload' ? 'selected' : '' ?>>Uploaded video file</option>
                     </select>
                 </div>
 
-                <div class="admin-form-row" data-ar-video="youtube">
-                    <label class="admin-label-hint">YouTube link</label>
+                <div class="admin-form-row" data-ar-video="link">
+                    <label class="admin-label-hint">Video link</label>
                     <input type="url" name="video_url" value="<?= e((string)$frame['video_url']) ?>"
                            placeholder="https://www.youtube.com/watch?v=…">
-                    <p class="admin-help-text">Only youtube.com / youtu.be links are accepted. Must be Public or Unlisted.</p>
+                    <p class="admin-help-text">YouTube, Vimeo, or a direct https link to an .mp4 / .webm / .mov file. Must be Public or Unlisted.</p>
                 </div>
 
                 <div class="admin-form-row" data-ar-video="upload">

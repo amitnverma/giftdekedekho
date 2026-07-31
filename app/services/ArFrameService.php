@@ -148,16 +148,167 @@ class ArFrameService
 
     // ----------------------------------------------------------------- videos
 
+    private const VIMEO_HOSTS = ['vimeo.com', 'www.vimeo.com', 'player.vimeo.com'];
+
+    /** Extensions accepted for a directly-linked video file. */
+    private const DIRECT_EXTENSIONS = ['mp4', 'webm', 'mov', 'm4v'];
+
     /**
-     * Reduce a user-supplied YouTube URL to its canonical form, or null if it
-     * isn't one. Rebuilt from the extracted video id rather than passed through,
-     * so nothing user-controlled other than an 11-character id reaches the
-     * public page's embed.
+     * Work out what kind of video a pasted URL is, and reduce it to a safe
+     * canonical form.
+     *
+     * One field for every source: the admin pastes a link and this decides
+     * whether it is YouTube, Vimeo or a direct video file. Anything else is
+     * rejected rather than stored, because this URL ends up on a public page.
+     *
+     * @return array{type: string, url: string, id?: string}|null
+     */
+    public function detectVideoSource(string $url): ?array
+    {
+        $url = trim($url);
+        if ($url === '') {
+            return null;
+        }
+
+        $id = $this->youtubeId($url);
+        if ($id !== null) {
+            return ['type' => 'youtube', 'url' => 'https://www.youtube.com/watch?v=' . $id, 'id' => $id];
+        }
+
+        $vimeoId = $this->vimeoId($url);
+        if ($vimeoId !== null) {
+            return ['type' => 'vimeo', 'url' => 'https://vimeo.com/' . $vimeoId, 'id' => $vimeoId];
+        }
+
+        $direct = $this->directVideoUrl($url);
+        if ($direct !== null) {
+            return ['type' => 'direct', 'url' => $direct];
+        }
+
+        return null;
+    }
+
+    /**
+     * Kept for the storefront and any caller that only wants YouTube.
+     * Prefer detectVideoSource() for admin-facing input.
      */
     public function normaliseYoutubeUrl(string $url): ?string
     {
         $id = $this->youtubeId($url);
         return $id === null ? null : 'https://www.youtube.com/watch?v=' . $id;
+    }
+
+    /** Numeric Vimeo id, or null. */
+    public function vimeoId(string $url): ?string
+    {
+        $url = trim($url);
+        if ($url === '') {
+            return null;
+        }
+        if (!preg_match('#^https?://#i', $url)) {
+            $url = 'https://' . $url;
+        }
+
+        $parts = parse_url($url);
+        if ($parts === false || empty($parts['host'])) {
+            return null;
+        }
+        if (!in_array(strtolower($parts['host']), self::VIMEO_HOSTS, true)) {
+            return null;
+        }
+
+        // vimeo.com/123456789 and player.vimeo.com/video/123456789
+        if (preg_match('#^/(?:video/)?(\d{6,12})#', $parts['path'] ?? '', $m)) {
+            return $m[1];
+        }
+        return null;
+    }
+
+    /**
+     * A direct link to a video file, or null.
+     *
+     * https only, and the path must end in a known video extension — this URL is
+     * handed to a <video> element on a public page, so anything ambiguous is
+     * refused rather than guessed at.
+     */
+    public function directVideoUrl(string $url): ?string
+    {
+        $url = trim($url);
+        if (!preg_match('#^https://#i', $url)) {
+            return null;
+        }
+
+        $parts = parse_url($url);
+        if ($parts === false || empty($parts['host']) || empty($parts['path'])) {
+            return null;
+        }
+
+        $extension = strtolower((string)pathinfo(parse_url($url, PHP_URL_PATH), PATHINFO_EXTENSION));
+        if (!in_array($extension, self::DIRECT_EXTENSIONS, true)) {
+            return null;
+        }
+
+        // Rebuild from parsed parts so nothing unexpected (credentials, fragments)
+        // survives into the page.
+        $rebuilt = 'https://' . $parts['host']
+            . (isset($parts['port']) ? ':' . (int)$parts['port'] : '')
+            . $parts['path']
+            . (isset($parts['query']) ? '?' . $parts['query'] : '');
+
+        return filter_var($rebuilt, FILTER_VALIDATE_URL) ? $rebuilt : null;
+    }
+
+    /**
+     * The browser-side descriptor for one frame: what to play and how.
+     *
+     * Built here rather than in each controller so the public scan page, the
+     * scan-anything page and the admin live test cannot drift apart. Index order
+     * in the caller's array is the anchor index MindAR reports on a match.
+     *
+     * @return array{slug: string, videoType: ?string, youtubeId: ?string, vimeoId: ?string, videoUrl: ?string, watchUrl: ?string, playbackMode: string}
+     */
+    public function browserTarget(array $frame): array
+    {
+        $playback = $this->playback($frame);
+
+        // A recognised frame with no playable video is kept in the list so the
+        // anchor indexes still line up with the compiled bundle.
+        if ($playback === null) {
+            return [
+                'slug' => (string)($frame['slug'] ?? ''),
+                'videoType' => null,
+                'youtubeId' => null,
+                'vimeoId' => null,
+                'videoUrl' => null,
+                'watchUrl' => null,
+                'playbackMode' => (string)($frame['playback_mode'] ?? 'fullscreen'),
+            ];
+        }
+
+        $playsInVideoElement = in_array($playback['type'], ['upload', 'direct'], true);
+
+        return [
+            'slug' => (string)($frame['slug'] ?? ''),
+            'videoType' => $playback['type'],
+            'youtubeId' => $playback['youtube_id'] ?? null,
+            'vimeoId' => $playback['vimeo_id'] ?? null,
+            'videoUrl' => $playsInVideoElement ? $playback['url'] : null,
+            // Somewhere to send the recipient if the embed refuses to play.
+            'watchUrl' => $playback['url'],
+            'playbackMode' => (string)($frame['playback_mode'] ?? 'fullscreen'),
+        ];
+    }
+
+    /** Human label for a stored video type. */
+    public static function videoTypeLabel(string $type): string
+    {
+        switch ($type) {
+            case 'youtube': return 'YouTube';
+            case 'vimeo':   return 'Vimeo';
+            case 'direct':  return 'Direct video link';
+            case 'upload':  return 'Uploaded file';
+            default:        return $type;
+        }
     }
 
     public function youtubeId(string $url): ?string
@@ -474,7 +625,9 @@ class ArFrameService
      */
     public function playback(array $frame): ?array
     {
-        if (($frame['video_type'] ?? '') === 'upload') {
+        $type = (string)($frame['video_type'] ?? '');
+
+        if ($type === 'upload') {
             if (empty($frame['video_path'])) {
                 return null;
             }
@@ -484,17 +637,31 @@ class ArFrameService
         if (empty($frame['video_url'])) {
             return null;
         }
-        // Re-validate on the way out as well as on the way in, so a row edited
-        // directly in the database can't inject an arbitrary embed.
-        $id = $this->youtubeId((string)$frame['video_url']);
-        if ($id === null) {
-            return null;
+
+        // Re-validated on the way out as well as on the way in, so a row edited
+        // directly in the database cannot inject an arbitrary embed or URL.
+        switch ($type) {
+            case 'vimeo':
+                $id = $this->vimeoId((string)$frame['video_url']);
+                return $id === null ? null : [
+                    'type' => 'vimeo',
+                    'url' => 'https://vimeo.com/' . $id,
+                    'vimeo_id' => $id,
+                ];
+
+            case 'direct':
+                $url = $this->directVideoUrl((string)$frame['video_url']);
+                return $url === null ? null : ['type' => 'direct', 'url' => $url];
+
+            case 'youtube':
+            default:
+                $id = $this->youtubeId((string)$frame['video_url']);
+                return $id === null ? null : [
+                    'type' => 'youtube',
+                    'url' => 'https://www.youtube.com/watch?v=' . $id,
+                    'youtube_id' => $id,
+                ];
         }
-        return [
-            'type' => 'youtube',
-            'url' => 'https://www.youtube.com/watch?v=' . $id,
-            'youtube_id' => $id,
-        ];
     }
 
     /**

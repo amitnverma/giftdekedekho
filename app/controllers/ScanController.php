@@ -39,20 +39,7 @@ class ScanController extends BaseController
         // One entry per target, indexed the same way the browser reports a match.
         $targets = [];
         foreach ($bundle['frames'] as $frame) {
-            $playback = $service->playback($frame);
-            if ($playback === null) {
-                // Keep the index aligned with the bundle even when a frame has no
-                // playable video; the page shows a gentle message instead.
-                $targets[] = ['slug' => $frame['slug'], 'videoType' => null];
-                continue;
-            }
-            $targets[] = [
-                'slug' => $frame['slug'],
-                'videoType' => $playback['type'],
-                'youtubeId' => $playback['youtube_id'] ?? null,
-                'videoUrl' => $playback['type'] === 'upload' ? $playback['url'] : null,
-                'playbackMode' => $frame['playback_mode'],
-            ];
+            $targets[] = $service->browserTarget($frame);
         }
 
         renderRaw('store/scan_page', [
@@ -118,13 +105,7 @@ class ScanController extends BaseController
         // view and the browser module have exactly one code path.
         renderRaw('store/scan_page', [
             'frame' => $frame,
-            'targets' => [[
-                'slug' => $frame['slug'],
-                'videoType' => $playback['type'],
-                'youtubeId' => $playback['youtube_id'] ?? null,
-                'videoUrl' => $playback['type'] === 'upload' ? $playback['url'] : null,
-                'playbackMode' => $frame['playback_mode'],
-            ]],
+            'targets' => [$service->browserTarget($frame)],
             'targetUrl' => ArFrameService::fileUrl($frame['target_path']),
             'photoUrl' => ArFrameService::fileUrl($frame['photo_path']),
             'isAdminTest' => false,

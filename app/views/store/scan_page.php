@@ -118,6 +118,15 @@ $scanConfig = [
         background: rgba(0,0,0,.66); cursor: pointer; gap: 14px;
     }
     #arTapToPlay span { font-size: 17px; font-weight: 600; }
+    #arFallback {
+        position: absolute; left: 0; right: 0; z-index: 34; display: none;
+        bottom: calc(14px + env(safe-area-inset-bottom)); text-align: center; padding: 0 16px;
+    }
+    #arFallback a {
+        display: inline-block; color: #fff; text-decoration: none; font-size: 13.5px;
+        background: rgba(0,0,0,.62); backdrop-filter: blur(8px);
+        padding: 10px 18px; border-radius: 999px;
+    }
     .ar-play-ring {
         width: 76px; height: 76px; border-radius: 50%; background: #e63946;
         display: flex; align-items: center; justify-content: center; font-size: 26px;
@@ -210,6 +219,13 @@ $scanConfig = [
     <div id="arTapToPlay">
         <div class="ar-play-ring">▶</div>
         <span>Tap to play your video</span>
+    </div>
+    <!-- Always offered once an embed is built. A provider can refuse to play
+         inside an iframe (YouTube reports "player configuration error 153"),
+         and an iframe reports success even while showing its own error, so this
+         is the only reliable way to guarantee the recipient reaches the video. -->
+    <div id="arFallback">
+        <a href="#" target="_blank" rel="noopener">Video not playing? Open it directly ↗</a>
     </div>
 </div>
 
