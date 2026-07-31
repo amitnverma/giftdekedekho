@@ -21,11 +21,29 @@ $flagBadge = ['good' => 'admin-badge-green', 'fair' => 'admin-badge-yellow', 'po
     </div>
 <?php endif; ?>
 
+<?php if (!empty($scanAll['heavy'])): ?>
+    <div class="admin-callout">
+        <strong>The public scanner page is getting heavy.</strong>
+        <?= (int)$scanAll['count'] ?> active frames means visitors to
+        <a href="<?= url('/scan') ?>" target="_blank">/scan</a> download about
+        <?= e($scanAll['approx_mb']) ?>MB before they can scan anything.
+        Frames scanned from the link on their own printed card are unaffected — those stay small and instant.
+        Consider deactivating frames that are no longer in circulation.
+    </div>
+<?php endif; ?>
+
 <div class="admin-flex-between">
     <div>
         <p class="admin-muted" style="margin:0 0 4px;font-size:13px">
             A printed photo that plays a video when any phone camera looks at it. No QR code on the product.
         </p>
+        <?php if (!empty($scanAll['count'])): ?>
+            <p class="admin-muted" style="margin:0;font-size:12.5px">
+                <a href="<?= url('/scan') ?>" target="_blank">/scan</a> recognises
+                <?= (int)$scanAll['count'] ?> active frame<?= $scanAll['count'] === 1 ? '' : 's' ?>
+                (~<?= e($scanAll['approx_mb']) ?>MB)
+            </p>
+        <?php endif; ?>
     </div>
     <a class="admin-btn admin-btn-primary" href="<?= url('/admin/ar-frames/quick-create') ?>">⚡ Quick Create (Walk-in)</a>
 </div>

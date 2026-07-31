@@ -49,7 +49,12 @@ export function initScanner(config) {
   let hasMatched = false;
   let hintTimer = null;
   let startedAt = 0;
-  let overlayVideo = null;
+
+  // One entry per target in the .mind file, in the same order. A single-frame
+  // page supplies an array of one, so /scan and /scan/{slug} run identical code.
+  const targets = Array.isArray(config.targets) ? config.targets : [];
+  // Which target matched — playback reads from this rather than global config.
+  let active = null;
 
   /**
    * Live diagnostics, always collected and exposed on window.__arDebug.
@@ -69,8 +74,8 @@ export function initScanner(config) {
     targetLostCount: 0,
     lastError: null,
     secureContext: window.isSecureContext,
-    playbackMode: config.playbackMode,
-    videoType: config.videoType,
+    targetCount: targets.length,
+    matchedSlug: null,
   };
   window.__arDebug = debug;
 
@@ -84,7 +89,6 @@ export function initScanner(config) {
   }
   renderDebug();
 
-  const isOverlay = config.playbackMode === 'overlay';
 
   // ---------------------------------------------------------------- UI helpers
 
@@ -152,7 +156,7 @@ export function initScanner(config) {
     });
     els.youtube.innerHTML =
       '<iframe src="https://www.youtube-nocookie.com/embed/' +
-      encodeURIComponent(config.youtubeId) + '?' + params.toString() + '"' +
+      encodeURIComponent(active.youtubeId) + '?' + params.toString() + '"' +
       ' title="Your video" frameborder="0" allowfullscreen' +
       ' allow="autoplay; encrypted-media; picture-in-picture"></iframe>';
     els.youtube.style.display = '';
@@ -179,7 +183,7 @@ export function initScanner(config) {
   function showFullscreenPlayer() {
     els.player.style.display = 'flex';
     els.status.style.display = 'none';
-    if (config.videoType === 'youtube') playYoutube();
+    if (active.videoType === "youtube") playYoutube();
     else playUploadedVideo();
   }
 
@@ -273,39 +277,61 @@ export function initScanner(config) {
         uiError: 'no',
       });
 
-      const anchor = mindarThree.addAnchor(0);
-      const useOverlay = isOverlay && config.videoType === 'upload';
-      if (useOverlay) buildOverlayPlane(anchor);
+      // One anchor per target in the .mind file. With a single frame that is a
+      // loop of one; on /scan it is every active frame, and whichever fires
+      // tells us which customer's video to play.
+      targets.forEach((target, index) => {
+        const anchor = mindarThree.addAnchor(index);
+        const useOverlay = target.playbackMode === 'overlay' && target.videoType === 'upload';
+        if (useOverlay) buildOverlayPlane(anchor);
 
-      anchor.onTargetFound = () => {
-        hasMatched = true;
-        debug.targetFoundCount++;
-        renderDebug();
-        stopHints();
-        if (useOverlay) {
-          els.video.style.display = 'none'; // drawn through the WebGL texture
-          els.video.play().catch(() => {
-            // Autoplay refused — fall back to the reliable full-screen path.
+        anchor.onTargetFound = () => {
+          // Ignore a second target firing while a video is already playing.
+          if (hasMatched) return;
+
+          active = target;
+          hasMatched = true;
+          debug.targetFoundCount++;
+          debug.matchedSlug = target.slug || null;
+          renderDebug();
+          stopHints();
+
+          if (!target.videoType) {
+            // Recognised, but this frame has no playable video yet.
+            showError('This Living Photo is still being prepared. Please try again a little later.', false);
+            return;
+          }
+
+          if (target.videoType === 'upload' && target.videoUrl) {
+            els.video.src = target.videoUrl;
+          }
+
+          if (useOverlay) {
+            els.video.style.display = 'none'; // drawn through the WebGL texture
+            els.video.play().catch(() => {
+              // Autoplay refused — fall back to the reliable full-screen path.
+              showFullscreenPlayer();
+            });
+            els.status.style.display = 'none';
+          } else {
             showFullscreenPlayer();
-          });
-          els.status.style.display = 'none';
-        } else {
-          showFullscreenPlayer();
-        }
-        reportVerified();
-      };
+          }
+          reportVerified();
+        };
 
-      anchor.onTargetLost = () => {
-        debug.targetLostCount++;
-        renderDebug();
-        if (useOverlay) {
-          els.video.pause();
-          hasMatched = false;
-          startHints();
-        }
-        // Full-screen playback deliberately survives losing the target — people
-        // lower the phone once the video starts.
-      };
+        anchor.onTargetLost = () => {
+          debug.targetLostCount++;
+          renderDebug();
+          if (useOverlay && active === target) {
+            els.video.pause();
+            hasMatched = false;
+            active = null;
+            startHints();
+          }
+          // Full-screen playback deliberately survives losing the target —
+          // people lower the phone once the video starts.
+        };
+      });
 
       await mindarThree.start();
       const { renderer, scene, camera } = mindarThree;

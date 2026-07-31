@@ -48,9 +48,9 @@ function withinRoot(candidate) {
   return resolved === ROOT || resolved.startsWith(ROOT + path.sep);
 }
 
-function runCompile(input, output) {
+function runScript(script, args) {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, [path.join(HERE, 'compile.mjs'), input, output], {
+    const child = spawn(process.execPath, [path.join(HERE, script), ...args], {
       cwd: HERE,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -88,10 +88,11 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  if (req.method !== 'POST' || req.url !== '/compile') {
+  if (req.method !== 'POST' || (req.url !== '/compile' && req.url !== '/bundle')) {
     send(res, 404, { ok: false, error: 'Not found.' });
     return;
   }
+  const action = req.url;
 
   if (TOKEN === '' || req.headers['x-gdd-token'] !== TOKEN) {
     send(res, 401, { ok: false, error: 'Unauthorized.' });
@@ -102,7 +103,9 @@ const server = http.createServer((req, res) => {
   let tooLarge = false;
   req.on('data', (chunk) => {
     body += chunk;
-    if (body.length > 8192) { tooLarge = true; req.destroy(); }
+    // A bundle request carries one path per frame, so allow more room than a
+    // compile request needs while still bounding the payload.
+    if (body.length > 262144) { tooLarge = true; req.destroy(); }
   });
 
   req.on('end', async () => {
@@ -116,14 +119,34 @@ const server = http.createServer((req, res) => {
       return;
     }
 
-    const { input, output } = parsed;
-    if (typeof input !== 'string' || typeof output !== 'string' || !input || !output) {
-      send(res, 400, { ok: false, error: 'Both "input" and "output" paths are required.' });
+    const { output } = parsed;
+    if (typeof output !== 'string' || !output || !withinRoot(output)) {
+      send(res, 400, { ok: false, error: '"output" must be a path inside the application directory.' });
       return;
     }
-    if (!withinRoot(input) || !withinRoot(output)) {
-      send(res, 400, { ok: false, error: 'Paths must be inside the application directory.' });
-      return;
+
+    let script, args;
+
+    if (action === '/compile') {
+      const { input } = parsed;
+      if (typeof input !== 'string' || !input || !withinRoot(input)) {
+        send(res, 400, { ok: false, error: '"input" must be a path inside the application directory.' });
+        return;
+      }
+      script = 'compile.mjs';
+      args = [input, output];
+    } else {
+      const inputs = parsed.inputs;
+      if (!Array.isArray(inputs) || inputs.length === 0) {
+        send(res, 400, { ok: false, error: '"inputs" must be a non-empty array of paths.' });
+        return;
+      }
+      if (!inputs.every((p) => typeof p === 'string' && p && withinRoot(p))) {
+        send(res, 400, { ok: false, error: 'Every input path must be inside the application directory.' });
+        return;
+      }
+      script = 'bundle-targets.mjs';
+      args = [output, ...inputs];
     }
 
     if (busy) {
@@ -133,7 +156,7 @@ const server = http.createServer((req, res) => {
 
     busy = true;
     try {
-      const result = await runCompile(input, output);
+      const result = await runScript(script, args);
       send(res, result.ok ? 200 : 422, result);
     } finally {
       busy = false;

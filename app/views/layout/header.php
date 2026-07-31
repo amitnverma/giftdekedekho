@@ -162,6 +162,9 @@ function gddNavActive(string $href, string $current): string {
 
       <div class="gdd-actions">
         <button class="gdd-burger" id="gddBurgerBtn" aria-label="Open menu">☰</button>
+        <!-- Living Photo scanner. Reachable from every page because a gift
+             recipient arrives here holding a frame, not browsing the shop. -->
+        <a href="<?= url('/scan') ?>" class="gdd-icon-btn" title="Scan your Living Photo frame">📷</a>
         <a href="<?= url('/account/wishlist') ?>" class="gdd-icon-btn" title="Wishlist">♡</a>
         <a href="<?= url('/cart') ?>" class="gdd-icon-btn" title="Cart">
           🛍 <?php if ($__cartCount > 0): ?><span class="badge-count"><?= (int)$__cartCount ?></span><?php endif; ?>

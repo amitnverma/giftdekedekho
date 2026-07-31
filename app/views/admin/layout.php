@@ -7,8 +7,9 @@ $navItems = [
     ['icon' => '🗂️', 'label' => 'Categories', 'href' => '/admin/categories', 'match' => ['admin/categories']],
     ['icon' => '🔮', 'label' => 'Charm Library', 'href' => '/admin/charm-sets', 'match' => ['admin/charm_sets_index', 'admin/charm_set_form']],
     ['icon' => '📦', 'label' => 'Orders', 'href' => '/admin/orders', 'match' => ['admin/orders']],
-    ['icon' => '🪄', 'label' => 'AR Frame Orders', 'href' => '/admin/ar-frames', 'match' => ['admin/ar_frames_index', 'admin/ar_frames_show']],
-    ['icon' => '⚡', 'label' => 'Quick Create (Walk-in)', 'href' => '/admin/ar-frames/quick-create', 'match' => ['admin/ar_frames_quick_create']],
+    // One entry, like every other section — the queue page carries the
+    // "Quick Create (Walk-in)" button, so a second sidebar link only duplicated it.
+    ['icon' => '🪄', 'label' => 'AR Frames', 'href' => '/admin/ar-frames', 'match' => ['admin/ar_frames_index', 'admin/ar_frames_show', 'admin/ar_frames_quick_create', 'admin/ar_frames_setup']],
     ['icon' => '🏷️', 'label' => 'Coupons', 'href' => '/admin/coupons', 'match' => ['admin/coupons']],
     ['icon' => '👥', 'label' => 'Customers', 'href' => '/admin/customers', 'match' => ['admin/customers']],
     ['icon' => '⭐', 'label' => 'Reviews', 'href' => '/admin/reviews', 'match' => ['admin/reviews']],

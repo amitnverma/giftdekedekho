@@ -73,6 +73,14 @@ class ArFrame extends BaseModel
         return $slug;
     }
 
+    /** Run a prepared read-only query. Used by services that need a custom projection. */
+    public function rawQuery(string $sql, array $params = []): array
+    {
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll();
+    }
+
     public function create(array $data): int
     {
         return $this->insertInto('ar_frames', $data);

@@ -52,7 +52,28 @@ class AdminArFrameController extends BaseController
             'pagination'   => $pagination,
             'statusCounts' => $this->frames->statusCounts(),
             'compiler'     => $this->compilerStatus(),
+            'scanAll'      => $this->scanAllStatus(),
         ]);
+    }
+
+    /**
+     * Size of the public "scan anything" bundle.
+     *
+     * Every active frame's target is downloaded by /scan, so this grows with the
+     * catalogue. Reported here rather than left to surprise a customer on mobile
+     * data — the per-frame link printed on each card is unaffected either way.
+     */
+    private function scanAllStatus(): array
+    {
+        $count = count($this->service->scannableFrames());
+        $bytes = $count * 464 * 1024;   // measured average per compiled target
+
+        return [
+            'count' => $count,
+            'approx_mb' => round($bytes / 1048576, 1),
+            'heavy' => $count > ArFrameService::BUNDLE_WARN_AT,
+            'warn_at' => ArFrameService::BUNDLE_WARN_AT,
+        ];
     }
 
     public function show(int $id): void
@@ -451,9 +472,16 @@ class AdminArFrameController extends BaseController
 
         // Rendered with no admin chrome: this page is held up to a phone camera,
         // and it reuses the public scan view so the test exercises the real thing.
+        $playback = $this->service->playback($frame);
         renderRaw('store/scan_page', [
             'frame'      => $frame,
-            'playback'   => $this->service->playback($frame),
+            'targets'    => [[
+                'slug' => $frame['slug'],
+                'videoType' => $playback['type'] ?? null,
+                'youtubeId' => $playback['youtube_id'] ?? null,
+                'videoUrl' => ($playback['type'] ?? '') === 'upload' ? $playback['url'] : null,
+                'playbackMode' => $frame['playback_mode'],
+            ]],
             'targetUrl'  => ArFrameService::fileUrl($frame['target_path']),
             'photoUrl'   => ArFrameService::fileUrl($frame['photo_path']),
             'isAdminTest' => true,

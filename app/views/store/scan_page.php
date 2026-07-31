@@ -12,6 +12,9 @@
  * in later releases, so upgrading blindly would break the page.
  */
 $isAdminTest = !empty($isAdminTest);
+$frame = $frame ?? null;
+// $frame is null on the scan-anything page, which matches every active frame.
+$isMulti = $frame === null;
 $metrics = !empty($frame['trackability_json']) ? json_decode($frame['trackability_json'], true) : null;
 $aspect = 1.0;
 if ($metrics && !empty($metrics['compiled_width']) && !empty($metrics['compiled_height'])) {
@@ -24,13 +27,13 @@ if ($metrics && !empty($metrics['compiled_width']) && !empty($metrics['compiled_
 $showDebug = isset($_GET['debug']) && $_GET['debug'] === '1';
 
 $scanConfig = [
-    'targetUrl'    => $targetUrl,
-    'videoType'    => $playback['type'],
-    'youtubeId'    => $playback['youtube_id'] ?? null,
-    'playbackMode' => $frame['playback_mode'],
-    'aspect'       => $aspect,
-    'verifyUrl'    => $isAdminTest ? $verifyUrl : null,
-    'csrf'         => $isAdminTest ? $csrf : null,
+    'targetUrl' => $targetUrl,
+    // Index in this array is the anchor index MindAR reports on a match, so a
+    // single frame and the scan-anything bundle share one code path.
+    'targets'   => $targets,
+    'aspect'    => $aspect,
+    'verifyUrl' => $isAdminTest ? $verifyUrl : null,
+    'csrf'      => $isAdminTest ? $csrf : null,
 ];
 ?>
 <!DOCTYPE html>
@@ -163,11 +166,20 @@ $scanConfig = [
             Open this page <strong>on a phone</strong>, then point it at the photo shown on your computer
             screen (use "Show photo full-screen" on the frame page) or at a printed proof.
             The frame is only marked verified when a real match fires — it cannot be printed or handed over until then.
+        <?php elseif ($isMulti): ?>
+            Point your camera at the <strong>printed photo in your frame</strong> and the video will start playing.
+            Nothing to install — just allow camera access.
         <?php else: ?>
             Point your camera at the <strong>printed photo in your frame</strong> and the video will start playing.
             Nothing to install — just allow camera access.
         <?php endif; ?>
     </p>
+    <?php if ($isMulti && !empty($bundleBytes)): ?>
+        <p style="font-size:12px;color:#8b8b95;margin:-8px 0 18px">
+            Recognises any <?= e($siteName) ?> Living Photo
+            (<?= number_format($bundleBytes / 1048576, 1) ?>MB to load once)
+        </p>
+    <?php endif; ?>
     <button class="ar-btn" id="arStart" type="button">Start camera</button>
     <?php if (!$isAdminTest && $frame['trackability_flag'] === 'poor'): ?>
         <p style="margin-top:18px;font-size:13px;color:#f5b400">
@@ -192,8 +204,8 @@ $scanConfig = [
 <!-- Player -->
 <div id="arPlayer">
     <button id="arClose" type="button" aria-label="Close video">×</button>
-    <video id="arVideo" playsinline controls preload="none"
-           <?= $playback['type'] === 'upload' ? 'src="' . e($playback['url']) . '"' : '' ?>></video>
+    <!-- src is set by the module once a match identifies which frame it is. -->
+    <video id="arVideo" playsinline controls preload="none"></video>
     <div id="arYoutube"></div>
     <div id="arTapToPlay">
         <div class="ar-play-ring">▶</div>

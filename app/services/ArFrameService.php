@@ -292,6 +292,129 @@ class ArFrameService
         ]);
     }
 
+    // --------------------------------------------------------- scan-all bundle
+
+    public const BUNDLE_FILE = self::TARGET_DIR . '/all-frames.mind';
+    public const BUNDLE_MANIFEST = self::TARGET_DIR . '/all-frames.json';
+
+    /** Past this many frames the bundle gets heavy on mobile data (~464KB each). */
+    public const BUNDLE_WARN_AT = 25;
+
+    /**
+     * Frames the public "scan anything" page can recognise: active, and with a
+     * compiled target. Ordered by id so the anchor index a browser reports stays
+     * stable between rebuilds for frames that have not changed.
+     */
+    public function scannableFrames(): array
+    {
+        $sql = "SELECT id, slug, target_path, video_type, video_url, video_path, playback_mode, photo_path
+                FROM ar_frames
+                WHERE is_active = 1 AND target_path IS NOT NULL AND target_path <> ''
+                ORDER BY id ASC";
+        return $this->frames->rawQuery($sql);
+    }
+
+    /**
+     * Build (or reuse) the combined target file used by /scan.
+     *
+     * Rebuilt lazily rather than on every frame change: the manifest records
+     * which frames went in and when, so a rebuild happens only when the set has
+     * actually changed. Merging is milliseconds, so this is cheap enough to
+     * check on each visit.
+     *
+     * @return array{ok: bool, error?: string, path?: string, frames?: array, count?: int, bytes?: int, rebuilt?: bool}
+     */
+    public function scanBundle(): array
+    {
+        $frames = $this->scannableFrames();
+        if (!$frames) {
+            return ['ok' => false, 'error' => 'No Living Photos are ready to scan yet.', 'count' => 0];
+        }
+
+        $bundleAbs = UPLOAD_PATH . '/' . self::BUNDLE_FILE;
+        $manifestAbs = UPLOAD_PATH . '/' . self::BUNDLE_MANIFEST;
+
+        // Fingerprint the set: ids plus the newest change. Any add, removal,
+        // deactivation or regenerated target changes this.
+        $fingerprint = md5(json_encode(array_map(
+            fn($f) => [$f['id'], $f['target_path']],
+            $frames
+        )));
+
+        $manifest = is_file($manifestAbs)
+            ? json_decode((string)file_get_contents($manifestAbs), true)
+            : null;
+
+        $fresh = is_array($manifest)
+            && ($manifest['fingerprint'] ?? null) === $fingerprint
+            && is_file($bundleAbs);
+
+        if (!$fresh) {
+            $result = $this->rebuildBundle($frames, $bundleAbs, $manifestAbs, $fingerprint);
+            if (empty($result['ok'])) {
+                return $result;
+            }
+            $manifest = $result['manifest'];
+        }
+
+        // Only the frames that actually made it into the file, in file order —
+        // that index is what the browser reports on a match.
+        $included = [];
+        foreach (($manifest['frames'] ?? []) as $id) {
+            foreach ($frames as $f) {
+                if ((int)$f['id'] === (int)$id) { $included[] = $f; break; }
+            }
+        }
+
+        return [
+            'ok' => true,
+            'path' => self::BUNDLE_FILE,
+            'frames' => $included,
+            'count' => count($included),
+            'bytes' => is_file($bundleAbs) ? filesize($bundleAbs) : 0,
+            'rebuilt' => !$fresh,
+        ];
+    }
+
+    private function rebuildBundle(array $frames, string $bundleAbs, string $manifestAbs, string $fingerprint): array
+    {
+        $paths = [];
+        $byPath = [];
+        foreach ($frames as $frame) {
+            $abs = $this->absolutePath((string)$frame['target_path']);
+            if ($abs !== null && is_file($abs)) {
+                $paths[] = $abs;
+                $byPath[$abs] = (int)$frame['id'];
+            }
+        }
+        if (!$paths) {
+            return ['ok' => false, 'error' => 'None of the compiled targets are present on disk.'];
+        }
+
+        require_once APP_PATH . '/services/ArTargetService.php';
+        $result = (new ArTargetService())->bundle($paths, $bundleAbs);
+        if (empty($result['ok'])) {
+            return $result;
+        }
+
+        // The bundler reports what it actually included and in what order, which
+        // may differ from the request if a file was unreadable.
+        $includedIds = [];
+        foreach (($result['included'] ?? []) as $abs) {
+            if (isset($byPath[$abs])) { $includedIds[] = $byPath[$abs]; }
+        }
+
+        $manifest = [
+            'fingerprint' => $fingerprint,
+            'frames' => $includedIds,
+            'built_at' => date('c'),
+            'bytes' => $result['metrics']['bytes'] ?? null,
+        ];
+        @file_put_contents($manifestAbs, json_encode($manifest));
+
+        return ['ok' => true, 'manifest' => $manifest];
+    }
+
     // ------------------------------------------------------------------ paths
 
     /** Public URL for the scan page printed on the instruction card. */

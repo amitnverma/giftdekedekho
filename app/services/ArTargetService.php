@@ -136,6 +136,55 @@ class ArTargetService
         return $result;
     }
 
+    /**
+     * Merge already-compiled targets into one bundle for the public
+     * "scan anything" page.
+     *
+     * Merging rather than recompiling: a target costs ~4.5s to compile but only
+     * milliseconds to decode and re-encode, so this stays fast as frames
+     * accumulate. Index order in $targetAbsPaths becomes the anchor index the
+     * browser reports on a match, so callers can map a hit back to a frame.
+     *
+     * @param string[] $targetAbsPaths
+     * @return array{ok: bool, error?: string, included?: string[], skipped?: array, metrics?: array}
+     */
+    public function bundle(array $targetAbsPaths, string $outputAbsPath): array
+    {
+        if (!$targetAbsPaths) {
+            return ['ok' => false, 'error' => 'No targets to bundle.'];
+        }
+
+        $outputDir = dirname($outputAbsPath);
+        if (!is_dir($outputDir) && !@mkdir($outputDir, 0755, true)) {
+            return ['ok' => false, 'error' => 'Could not create the bundle directory.'];
+        }
+
+        if ($this->mode === 'http') {
+            return $this->request('/bundle', [
+                'output' => $outputAbsPath,
+                'inputs' => array_values($targetAbsPaths),
+            ]);
+        }
+
+        if (!$this->shellAvailable()) {
+            return ['ok' => false, 'error' => 'shell_exec is disabled on this host.'];
+        }
+
+        $args = array_map('escapeshellarg', array_merge([$outputAbsPath], array_values($targetAbsPaths)));
+        $command = sprintf(
+            '%s %s %s 2>/dev/null',
+            escapeshellarg($this->nodeBinary()),
+            escapeshellarg($this->toolDir . '/bundle-targets.mjs'),
+            implode(' ', $args)
+        );
+
+        $output = $this->runShell($command);
+        if ($output === null || trim((string)$output) === '') {
+            return ['ok' => false, 'error' => 'The bundler produced no output.'];
+        }
+        return $this->parseResult((string)$output);
+    }
+
     private function compileViaShell(string $photoAbsPath, string $targetAbsPath): array
     {
         if (!$this->shellAvailable()) {
@@ -161,17 +210,31 @@ class ArTargetService
             ];
         }
 
-        return $this->parseResult((string)$output);
+        $result = $this->parseResult((string)$output);
+        return empty($result['ok']) ? $result : $this->normaliseSuccess($result);
     }
 
     private function compileViaHttp(string $photoAbsPath, string $targetAbsPath): array
+    {
+        $result = $this->request('/compile', [
+            'input' => $photoAbsPath,
+            'output' => $targetAbsPath,
+        ]);
+        return empty($result['ok']) ? $result : $this->normaliseSuccess($result);
+    }
+
+    /**
+     * POST a JSON payload to the compiler service and return its decoded reply.
+     * Shared by /compile and /bundle so both behave identically on failure.
+     */
+    private function request(string $path, array $payload): array
     {
         $base = $this->serviceBaseUrl();
         if ($base === '') {
             return ['ok' => false, 'error' => 'ar_compiler_url is not configured.'];
         }
 
-        $ch = curl_init($base . '/compile');
+        $ch = curl_init($base . $path);
         curl_setopt_array($ch, [
             CURLOPT_POST => true,
             CURLOPT_RETURNTRANSFER => true,
@@ -180,10 +243,7 @@ class ArTargetService
                 'Content-Type: application/json',
                 'X-GDD-Token: ' . $this->serviceToken(),
             ],
-            CURLOPT_POSTFIELDS => json_encode([
-                'input' => $photoAbsPath,
-                'output' => $targetAbsPath,
-            ]),
+            CURLOPT_POSTFIELDS => json_encode($payload),
         ]);
         $body = curl_exec($ch);
         $error = curl_error($ch);
@@ -200,12 +260,12 @@ class ArTargetService
         if (empty($decoded['ok'])) {
             return [
                 'ok' => false,
-                'error' => (string)($decoded['error'] ?? 'Target compilation failed.'),
+                'error' => (string)($decoded['error'] ?? 'The compiler service reported a failure.'),
                 'detail' => $decoded['detail'] ?? null,
             ];
         }
 
-        return $this->normaliseSuccess($decoded);
+        return $decoded;
     }
 
     /**
@@ -242,7 +302,9 @@ class ArTargetService
             ];
         }
 
-        return $this->normaliseSuccess($decoded);
+        // Returned as-is: compile() and bundle() have different success shapes,
+        // so shaping happens in the caller rather than here.
+        return $decoded;
     }
 
     private function normaliseSuccess(array $decoded): array

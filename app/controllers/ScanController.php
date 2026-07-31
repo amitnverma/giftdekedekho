@@ -11,7 +11,65 @@
  */
 class ScanController extends BaseController
 {
+    /**
+     * The evergreen /scan URL: opens the camera and matches against every active
+     * frame at once, so a recipient can scan without knowing their code.
+     *
+     * The per-frame /scan/{slug} link on the printed card stays the reliable
+     * path — it loads a single target, so it is smaller and faster regardless of
+     * how many frames exist.
+     */
     public function index(): void
+    {
+        require_once APP_PATH . '/services/ArFrameService.php';
+        $service = new ArFrameService();
+        $frames = new ArFrame();
+
+        if (!$frames->tableExists()) {
+            $this->unavailable();
+            return;
+        }
+
+        $bundle = $service->scanBundle();
+        if (empty($bundle['ok'])) {
+            $this->unavailable();
+            return;
+        }
+
+        // One entry per target, indexed the same way the browser reports a match.
+        $targets = [];
+        foreach ($bundle['frames'] as $frame) {
+            $playback = $service->playback($frame);
+            if ($playback === null) {
+                // Keep the index aligned with the bundle even when a frame has no
+                // playable video; the page shows a gentle message instead.
+                $targets[] = ['slug' => $frame['slug'], 'videoType' => null];
+                continue;
+            }
+            $targets[] = [
+                'slug' => $frame['slug'],
+                'videoType' => $playback['type'],
+                'youtubeId' => $playback['youtube_id'] ?? null,
+                'videoUrl' => $playback['type'] === 'upload' ? $playback['url'] : null,
+                'playbackMode' => $frame['playback_mode'],
+            ];
+        }
+
+        renderRaw('store/scan_page', [
+            'frame' => null,
+            'targets' => $targets,
+            'targetUrl' => ArFrameService::fileUrl($bundle['path']),
+            'photoUrl' => '',
+            'isAdminTest' => false,
+            'verifyUrl' => null,
+            'backUrl' => null,
+            'csrf' => null,
+            'siteName' => siteSetting('site_name', SITE_NAME),
+            'bundleBytes' => $bundle['bytes'],
+        ]);
+    }
+
+    private function unavailable(): void
     {
         renderRaw('store/scan_landing', [
             'siteName' => siteSetting('site_name', SITE_NAME),
@@ -56,9 +114,17 @@ class ScanController extends BaseController
             return;
         }
 
+        // Single frame expressed in the same shape as the scan-all page, so the
+        // view and the browser module have exactly one code path.
         renderRaw('store/scan_page', [
             'frame' => $frame,
-            'playback' => $playback,
+            'targets' => [[
+                'slug' => $frame['slug'],
+                'videoType' => $playback['type'],
+                'youtubeId' => $playback['youtube_id'] ?? null,
+                'videoUrl' => $playback['type'] === 'upload' ? $playback['url'] : null,
+                'playbackMode' => $frame['playback_mode'],
+            ]],
             'targetUrl' => ArFrameService::fileUrl($frame['target_path']),
             'photoUrl' => ArFrameService::fileUrl($frame['photo_path']),
             'isAdminTest' => false,
