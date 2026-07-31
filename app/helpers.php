@@ -18,7 +18,44 @@ function asset(string $path): string
     // reliably across all clients) while preserving the slash separators.
     $clean = ltrim($path, '/');
     $segments = array_map('rawurlencode', explode('/', $clean));
-    return rtrim(SITE_URL, '/') . '/' . implode('/', $segments);
+    $url = rtrim(SITE_URL, '/') . '/' . implode('/', $segments);
+
+    $version = assetVersion($clean);
+    return $version === null ? $url : $url . '?v=' . $version;
+}
+
+/**
+ * Cache-busting stamp for a local asset, or null if there is no such file.
+ *
+ * The production server sends `Cache-Control: max-age=315360000` — ten years —
+ * on static files. Without a changing URL, a deployed CSS or JS fix simply
+ * never reaches anyone who has already visited: their browser has no reason to
+ * ask again. Appending the file's modification time gives each new build a new
+ * URL, so updates take effect immediately while unchanged files stay cached.
+ *
+ * Results are memoised per request; a miss is cached too, so repeated calls for
+ * remote or generated paths do not keep hitting the filesystem.
+ */
+function assetVersion(string $relativePath): ?string
+{
+    static $cache = [];
+
+    if (array_key_exists($relativePath, $cache)) {
+        return $cache[$relativePath];
+    }
+
+    // Query strings and anchors are not part of the filename.
+    $bare = strtok($relativePath, '?#');
+    $full = BASE_PATH . '/' . $bare;
+
+    // Never let a crafted path walk outside the application.
+    $real = realpath($full);
+    $root = realpath(BASE_PATH);
+    $ok = $real !== false && $root !== false
+        && strpos($real, $root . DIRECTORY_SEPARATOR) === 0
+        && is_file($real);
+
+    return $cache[$relativePath] = $ok ? (string)filemtime($real) : null;
 }
 
 /**
