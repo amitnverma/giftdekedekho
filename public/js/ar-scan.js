@@ -455,6 +455,30 @@ export function initScanner(config) {
         };
       });
 
+      // Ask for the camera ourselves before handing over to MindAR.
+      //
+      // MindAR rejects with no error object at all when getUserMedia fails
+      // (`.catch((err) => { console.log(...); reject(); })`), so by the time it
+      // reaches our handler there is nothing left to report and every failure
+      // looks identical. Requesting first means we see the real DOMException and
+      // can say what actually went wrong. The permission is then already
+      // granted, so MindAR's own request resolves immediately.
+      let probeStream = null;
+      try {
+        probeStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' },
+          audio: false,
+        });
+      } catch (permErr) {
+        // Re-thrown so the single handler below formats the message.
+        permErr.__fromProbe = true;
+        throw permErr;
+      } finally {
+        // Release it immediately — MindAR opens its own stream, and holding two
+        // can fail on devices that allow only one consumer of the camera.
+        if (probeStream) probeStream.getTracks().forEach((t) => t.stop());
+      }
+
       await mindarThree.start();
       const { renderer, scene, camera } = mindarThree;
       renderer.setAnimationLoop(() => renderer.render(scene, camera));
@@ -473,18 +497,30 @@ export function initScanner(config) {
 
       startHints();
     } catch (err) {
-      debug.lastError = String((err && err.name) || '') + ': ' + String((err && err.message) || err);
-      renderDebug();
       const name = (err && err.name) || '';
+      const detail = (err && err.message) || '';
+      debug.lastError = (name || 'Error') + (detail ? ': ' + detail : '') +
+        (err && err.__fromProbe ? ' (camera request)' : ' (tracker start)');
+      renderDebug();
+
       if (name === 'NotAllowedError' || name === 'SecurityError') {
         showError(
-          'Camera access was blocked. Allow camera access for this page in your browser settings, then tap Try again.',
+          'Camera access was blocked. Allow camera access for this site in your browser settings, then tap Try again. '
+          + 'In a private/incognito window some browsers refuse the camera entirely — try a normal window.',
           true
         );
-      } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
-        showError('No camera was found on this device.', false);
+      } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError' || name === 'OverconstrainedError') {
+        showError('No usable camera was found on this device.', false);
+      } else if (name === 'NotReadableError' || name === 'AbortError') {
+        showError('The camera is being used by another app. Close it and tap Try again.', true);
       } else {
-        showError('Something went wrong starting the camera. Please reload the page and try again.', true);
+        // Never swallow the reason again — an unexplained failure is what made
+        // this impossible to diagnose from a user's report.
+        showError(
+          'The camera could not be started' + (name ? ' (' + name + ')' : '') + '. '
+          + 'Please reload the page and try again.',
+          true
+        );
       }
     }
   }

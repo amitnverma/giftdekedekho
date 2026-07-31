@@ -231,7 +231,8 @@ $scanConfig = [
         </p>
     <?php endif; ?>
     <button class="ar-btn" id="arStart" type="button">Start camera</button>
-    <?php if (!$isAdminTest && $frame['trackability_flag'] === 'poor'): ?>
+    <?php // $frame is null on the scan-anything page, which has no single frame. ?>
+    <?php if (!$isAdminTest && ($frame['trackability_flag'] ?? null) === 'poor'): ?>
         <p style="margin-top:18px;font-size:13px;color:#f5b400">
             Tip: this photo is quite plain, so it may need good light and a steady hand.
         </p>
