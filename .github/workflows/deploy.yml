@@ -16,6 +16,14 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
+          # The action's default connection timeout is 30s, and deploys were
+          # failing at exactly 30s while successful ones finished the whole
+          # script in ~13s — i.e. the SSH handshake occasionally does not
+          # complete in time, rather than anything in the script failing.
+          # command_timeout is set explicitly so a slow git fetch is never
+          # mistaken for a hung session.
+          timeout: 120s
+          command_timeout: 10m
           script: |
             set -e
             cd /home/giftdekedekho/htdocs/www.giftdekedekho.com
