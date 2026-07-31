@@ -122,6 +122,18 @@ class AdminDesignController extends BaseController
                 ]);
                 break;
 
+            case 'living_photo_scan':
+                $this->saveSection('living_photo_scan', [
+                    'kicker'    => trim((string)$this->input('kicker', 'Living Photo')),
+                    'heading'   => trim((string)$this->input('heading')),
+                    'text'      => trim((string)$this->input('text')),
+                    'cta_text'  => trim((string)$this->input('cta_text', '📷 Scan your frame')),
+                    'note'      => trim((string)$this->input('note')),
+                    'is_active' => $this->input('is_active') ? true : false,
+                    'style'     => $style,
+                ]);
+                break;
+
             case 'trust_badges':
                 $items = [];
                 $icons = (array)($_POST['badge_icon'] ?? []);
@@ -410,7 +422,8 @@ class AdminDesignController extends BaseController
         $allowed = [
             'hero_banner', 'marquee_strip', 'why_choose_us', 'shop_by_category',
             'how_it_works', 'featured_products_section', 'signature_feature',
-            'trust_badges', 'testimonials_section', 'instagram_gallery', 'newsletter',
+            'living_photo_scan', 'trust_badges', 'testimonials_section',
+            'instagram_gallery', 'newsletter',
         ];
 
         $raw = (array)($_POST['section_order'] ?? []);
@@ -515,6 +528,14 @@ class AdminDesignController extends BaseController
                     'Your personal message plays instantly — straight from the heart',
                 ],
                 'is_active'   => true,
+            ],
+            'living_photo_scan' => [
+                'kicker'    => 'Living Photo',
+                'heading'   => 'Point your camera. Watch it come alive.',
+                'text'      => 'Got one of our Living Photo frames? Open the scanner, point your camera at the printed photo, and the video plays right there. No app, no QR code — the photo itself is the trigger.',
+                'cta_text'  => '📷 Scan your frame',
+                'note'      => 'Works in Safari on iPhone and Chrome on Android · nothing to install',
+                'is_active' => true,
             ],
             'trust_badges' => [
                 'is_active' => true,

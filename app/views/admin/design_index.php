@@ -164,6 +164,7 @@ $testimonials = $sections['testimonials_section'] ?? ['items' => []];
 $topbarButtons = $sections['topbar_buttons'] ?? ['items' => []];
 $igGallery = $sections['instagram_gallery'] ?? ['items' => []];
 $sigFeature = $sections['signature_feature'] ?? [];
+$livingPhoto = $sections['living_photo_scan'] ?? [];
 $marqueeSection = $sections['marquee_strip'] ?? [];
 $catSection = $sections['shop_by_category'] ?? [];
 $whyChoose = $sections['why_choose_us'] ?? [];
@@ -207,6 +208,7 @@ foreach (($categories ?? []) as $cat) {
         <span class="admin-tab" data-tab="promo">Promo Strip</span>
         <span class="admin-tab" data-tab="featured">Featured Section</span>
         <span class="admin-tab" data-tab="signature">Signature Feature</span>
+        <span class="admin-tab" data-tab="livingphoto">Living Photo Scan</span>
         <span class="admin-tab" data-tab="badges">Trust Badges</span>
         <span class="admin-tab" data-tab="testimonials">Testimonials</span>
         <span class="admin-tab" data-tab="instagram">Instagram Gallery</span>
@@ -1127,6 +1129,51 @@ foreach (($categories ?? []) as $cat) {
         </div>
     </div>
 
+    <!-- Living Photo scanner entry point -->
+    <div class="admin-tab-pane" data-pane="livingphoto">
+        <div class="admin-card">
+            <p style="margin:0 0 18px;color:#6b7280;font-size:14px">
+                Invites gift recipients to open the AR scanner at <code>/scan</code>.
+                It hides itself automatically whenever no AR frame is live, so turning it on
+                costs nothing until you have a scannable frame.
+            </p>
+            <form method="post" action="<?= url('/admin/design/save') ?>" class="admin-form">
+                <?= csrfField() ?>
+                <input type="hidden" name="section" value="living_photo_scan">
+                <label>Kicker Label <small style="font-weight:400;color:#888">(small label above the heading)</small>
+                    <input type="text" name="kicker" value="<?= e($livingPhoto['kicker'] ?? 'Living Photo') ?>">
+                </label>
+                <label>Heading
+                    <input type="text" name="heading" value="<?= e($livingPhoto['heading'] ?? 'Point your camera. Watch it come alive.') ?>">
+                </label>
+                <label>Description
+                    <textarea name="text" rows="3"><?= e($livingPhoto['text'] ?? 'Got one of our Living Photo frames? Open the scanner, point your camera at the printed photo, and the video plays right there. No app, no QR code — the photo itself is the trigger.') ?></textarea>
+                </label>
+                <label>CTA Button Text <small style="font-weight:400;color:#888">(always links to the scanner at /scan)</small>
+                    <input type="text" name="cta_text" value="<?= e($livingPhoto['cta_text'] ?? '📷 Scan your frame') ?>">
+                </label>
+                <label>Small Note Below Button <small style="font-weight:400;color:#888">(leave blank to hide)</small>
+                    <input type="text" name="note" value="<?= e($livingPhoto['note'] ?? 'Works in Safari on iPhone and Chrome on Android · nothing to install') ?>">
+                </label>
+                <?php
+                // Dark panel by default, so seed the pickers with its own colours
+                // rather than the light-theme section defaults.
+                designAppearancePanel($livingPhoto['style'] ?? [
+                    'kicker_color'  => '#ff8a94',
+                    'heading_color' => '#ffffff',
+                    'subtext_color' => '#b9b9c6',
+                    'bg_color'      => '#12121a',
+                ]);
+                ?>
+                <label class="admin-checkbox">
+                    <input type="checkbox" name="is_active" value="1" <?= (!isset($livingPhoto['is_active']) || !empty($livingPhoto['is_active'])) ? 'checked' : '' ?>>
+                    Show Living Photo Scan section on homepage
+                </label>
+                <button type="submit" class="admin-btn admin-btn-primary">Save Living Photo Section</button>
+            </form>
+        </div>
+    </div>
+
     <!-- Trust badges -->
     <div class="admin-tab-pane" data-pane="badges">
         <div class="admin-card">
@@ -1394,6 +1441,7 @@ foreach (($categories ?? []) as $cat) {
                 'how_it_works'              => 'How It Works',
                 'featured_products_section' => 'Featured Products',
                 'signature_feature'         => 'Signature Feature / QR',
+                'living_photo_scan'         => 'Living Photo Scan',
                 'trust_badges'              => 'Trust Badges',
                 'testimonials_section'      => 'Testimonials',
                 'instagram_gallery'         => 'Instagram Gallery',
