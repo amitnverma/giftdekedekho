@@ -96,7 +96,12 @@ class ArTargetService
             return ['ok' => false, 'message' => 'Node.js 18+ required, found ' . trim((string)$version) . '.'];
         }
 
-        return ['ok' => true, 'message' => 'Node ' . trim((string)$version) . ' ready.'];
+        // Naming the resolved path makes it obvious when auto-detection picked a
+        // different Node than the one you get in a terminal.
+        return [
+            'ok' => true,
+            'message' => 'Node ' . trim((string)$version) . ' ready (' . $node . ').',
+        ];
     }
 
     /**
@@ -272,9 +277,107 @@ class ArTargetService
         }
     }
 
+    /**
+     * Locate a usable Node binary.
+     *
+     * An explicit `ar_node_binary` in config/local.php always wins. Otherwise we
+     * search, because on shared hosting Node is usually installed per-user with
+     * nvm and PHP-FPM never sees it: FPM does not read .bashrc, so nvm's PATH
+     * export is invisible to it and a bare `node` fails even though it works
+     * fine in SSH. Searching removes a config step that is easy to get wrong.
+     */
     private function nodeBinary(): string
     {
-        return (string)gdd_local('ar_node_binary', getenv('GDD_AR_NODE_BINARY') ?: 'node');
+        static $resolved = null;
+        if ($resolved !== null) {
+            return $resolved;
+        }
+
+        $configured = trim((string)gdd_local('ar_node_binary', getenv('GDD_AR_NODE_BINARY') ?: ''));
+        if ($configured !== '') {
+            return $resolved = $configured;
+        }
+
+        foreach ($this->nodeCandidates() as $candidate) {
+            if ($this->isUsableNode($candidate)) {
+                return $resolved = $candidate;
+            }
+        }
+
+        // Nothing found — return the bare name so preflight reports the usual
+        // "Node.js not found" message rather than something cryptic.
+        return $resolved = 'node';
+    }
+
+    /**
+     * Places Node plausibly lives, best first.
+     *
+     * @return string[]
+     */
+    private function nodeCandidates(): array
+    {
+        $candidates = ['node'];   // on PATH, e.g. a system-wide install
+
+        foreach ($this->homeDirs() as $home) {
+            // nvm keeps every installed version side by side; prefer the newest.
+            $nvm = glob($home . '/.nvm/versions/node/*/bin/node') ?: [];
+            usort($nvm, static function ($a, $b) {
+                preg_match('#/node/v?([0-9.]+)/#', $a, $ma);
+                preg_match('#/node/v?([0-9.]+)/#', $b, $mb);
+                return version_compare($mb[1] ?? '0', $ma[1] ?? '0');
+            });
+            $candidates = array_merge($candidates, $nvm);
+        }
+
+        return array_merge($candidates, [
+            '/usr/local/bin/node',
+            '/usr/bin/node',
+            '/opt/homebrew/bin/node',
+        ]);
+    }
+
+    /**
+     * Home directories worth searching. HOME is often unset for PHP-FPM, so the
+     * app's own location is used as a fallback: on this host the site lives at
+     * /home/<user>/htdocs/<domain>, which puts the home two levels up.
+     *
+     * @return string[]
+     */
+    private function homeDirs(): array
+    {
+        $homes = [];
+
+        $env = getenv('HOME');
+        if (is_string($env) && $env !== '' && is_dir($env)) {
+            $homes[] = rtrim($env, '/');
+        }
+
+        if (function_exists('posix_geteuid') && function_exists('posix_getpwuid')) {
+            $info = @posix_getpwuid(posix_geteuid());
+            if (!empty($info['dir']) && is_dir($info['dir'])) {
+                $homes[] = rtrim($info['dir'], '/');
+            }
+        }
+
+        $derived = dirname(dirname(BASE_PATH));
+        if (is_dir($derived . '/.nvm')) {
+            $homes[] = $derived;
+        }
+
+        return array_values(array_unique($homes));
+    }
+
+    /** Whether a candidate path is a Node binary of a version we can use. */
+    private function isUsableNode(string $path): bool
+    {
+        if ($path !== 'node' && !is_file($path)) {
+            return false;
+        }
+        if (!$this->shellAvailable()) {
+            return false;
+        }
+        $version = $this->runShell(escapeshellarg($path) . ' -v 2>/dev/null');
+        return (bool)preg_match('/^v(\d+)\./', trim((string)$version), $m) && (int)$m[1] >= 18;
     }
 
     private function serviceBaseUrl(): string
