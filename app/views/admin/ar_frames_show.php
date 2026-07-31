@@ -306,6 +306,34 @@ $flagBadge = ['good' => 'admin-badge-green', 'fair' => 'admin-badge-yellow', 'po
     </div>
 </div>
 
+<?php
+// Deleting a frame that has been printed or handed over breaks the scan link on
+// a card the customer already holds, so the warning says so before they click.
+$inCirculation = in_array($frame['status'], ['printed', 'shipped', 'handed_over'], true);
+$deleteConfirm = $inCirculation
+    ? "Delete {$frame['slug']}?\n\nThis frame has already been printed or handed over. "
+      . "Deleting it permanently breaks the scan link on that customer's card — their video will stop working.\n\n"
+      . "To stop it working temporarily instead, untick \"Scan link active\" and save."
+    : "Delete {$frame['slug']}?\n\nThe photo and generated target are deleted too. This cannot be undone.";
+?>
+<div class="admin-card admin-mt" style="border-color:#f1c4c4">
+    <h3 class="admin-card-title" style="color:#b03a3a">Delete this frame</h3>
+    <p class="admin-help-text" style="margin-top:0">
+        Removes the record along with its photo and generated target.
+        <?php if ($inCirculation): ?>
+            <strong>This frame is already with the customer</strong> — deleting it breaks the scan link on their
+            printed card. To disable it temporarily instead, untick <em>Scan link active</em> above and save.
+        <?php else: ?>
+            To keep the record but stop the link working, untick <em>Scan link active</em> above instead.
+        <?php endif; ?>
+    </p>
+    <form method="post" action="<?= url('/admin/ar-frames/' . (int)$frame['id'] . '/delete') ?>"
+          onsubmit="return confirm(<?= e(json_encode($deleteConfirm)) ?>)">
+        <?= csrfField() ?>
+        <button class="admin-btn admin-btn-danger" type="submit">Delete <?= e($frame['slug']) ?></button>
+    </form>
+</div>
+
 <script>
 // Show only the fields for the selected video source.
 (function () {

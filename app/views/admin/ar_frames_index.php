@@ -146,7 +146,24 @@ $flagBadge = ['good' => 'admin-badge-green', 'fair' => 'admin-badge-yellow', 'po
                         </span>
                     </td>
                     <td><?= date('d M Y', strtotime($f['created_at'])) ?></td>
-                    <td><a class="admin-btn admin-btn-sm" href="<?= url('/admin/ar-frames/' . (int)$f['id']) ?>">Open</a></td>
+                    <td style="white-space:nowrap">
+                        <a class="admin-btn admin-btn-sm" href="<?= url('/admin/ar-frames/' . (int)$f['id']) ?>">Open</a>
+                        <?php
+                        // A frame past 'verified' may already be in a customer's
+                        // hands, so its confirmation says what deleting breaks.
+                        $inCirculation = in_array($f['status'], ['printed', 'shipped', 'handed_over'], true);
+                        $confirm = $inCirculation
+                            ? "Delete {$f['slug']}?\n\nThis frame has already been printed or handed over. "
+                              . "Deleting it permanently breaks the scan link on that customer's card — their video will stop working.\n\n"
+                              . "To stop it working temporarily instead, open the frame and untick \"Scan link active\"."
+                            : "Delete {$f['slug']}?\n\nThe photo and generated target are deleted too. This cannot be undone.";
+                        ?>
+                        <form method="post" action="<?= url('/admin/ar-frames/' . (int)$f['id'] . '/delete') ?>"
+                              style="display:inline" onsubmit="return confirm(<?= e(json_encode($confirm)) ?>)">
+                            <?= csrfField() ?>
+                            <button class="admin-btn admin-btn-sm admin-btn-danger" type="submit">Delete</button>
+                        </form>
+                    </td>
                 </tr>
             <?php endforeach; ?>
             <?php if (empty($frames)): ?>

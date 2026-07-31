@@ -140,6 +140,9 @@ class AdminRouter
             case preg_match('#^/ar-frames/(\d+)/photo$#', $path, $m) === 1:
                 (new AdminArFrameController())->photo((int)$m[1]);
                 break;
+            case preg_match('#^/ar-frames/(\d+)/delete$#', $path, $m) === 1:
+                (new AdminArFrameController())->delete((int)$m[1]);
+                break;
             case preg_match('#^/ar-frames/(\d+)/card$#', $path, $m) === 1:
                 (new AdminArFrameController())->card((int)$m[1]);
                 break;

@@ -255,6 +255,40 @@ class AdminArFrameController extends BaseController
         redirect('/admin/ar-frames/' . $id);
     }
 
+    /**
+     * Delete a frame and the files it owns.
+     *
+     * Permanent, and it breaks the scan link printed on that customer's card —
+     * so the confirmation in the UI names the slug and says so plainly. Use the
+     * "Scan link active" toggle instead when a frame should merely stop working
+     * but stay on record.
+     *
+     * The scan-anything bundle is keyed on a fingerprint of the frames it
+     * contains, so removing one rebuilds it automatically on the next visit.
+     */
+    public function delete(int $id): void
+    {
+        $this->requireAdmin();
+        $this->requireCsrf();
+
+        $frame = $this->frames->find($id);
+        if (!$frame) {
+            flash('error', 'That AR frame was not found.');
+            redirect('/admin/ar-frames');
+        }
+
+        // Files first: if the row went first and this failed, the files would be
+        // orphaned with nothing left pointing at them.
+        $this->service->deleteFile($frame['photo_path']);
+        $this->service->deleteFile($frame['target_path']);
+        $this->service->deleteFile($frame['video_path']);
+
+        $this->frames->delete($id);
+
+        flash('success', 'AR frame ' . $frame['slug'] . ' deleted, along with its photo and target.');
+        redirect('/admin/ar-frames');
+    }
+
     /** Replace the customer photo (e.g. after a poor trackability warning). */
     public function replacePhoto(int $id): void
     {
