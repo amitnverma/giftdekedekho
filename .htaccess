@@ -4,6 +4,18 @@
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
+    # ---- Block direct access to sensitive directories ----
+    # This MUST come before the "serve existing files" rule below. That rule
+    # ends processing with [L] for any path that resolves to a real file, so a
+    # block placed after it never runs — which is why libs/*/README.txt and
+    # similar were previously being served.
+    #
+    # tools/ holds server-side CLI scripts and their node_modules. The scripts
+    # refuse to run over HTTP on their own, but the directory should not be
+    # browsable either. Browser AR assets live in public/js/vendor and are
+    # unaffected.
+    RewriteRule ^(config|app|libs|tools)/ - [F,L]
+
     # Serve existing files and directories directly (css, js, images, uploads, api/*.php)
     RewriteCond %{REQUEST_FILENAME} -f [OR]
     RewriteCond %{REQUEST_FILENAME} -d
@@ -20,9 +32,6 @@
     Header always set X-XSS-Protection "1; mode=block"
     Header always set Referrer-Policy "strict-origin-when-cross-origin"
 </IfModule>
-
-# ---- Block direct access to sensitive directories ----
-RewriteRule ^(config|app|libs)/ - [F,L]
 
 # ---- Block dotfiles, SQL dumps, and markdown docs ----
 <FilesMatch "(^\.|\.sql$|\.md$|\.log$)">
