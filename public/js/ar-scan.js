@@ -52,6 +52,9 @@ export function initScanner(config) {
   let hasMatched = false;
   let hintTimer = null;
   let startedAt = 0;
+  // Set while a first-touch listener is waiting to prime the video; see
+  // primeOnFirstTouch(). Calling it detaches the listener.
+  let cancelTouchPrime = null;
 
   // One entry per target in the .mind file, in the same order. A single-frame
   // page supplies an array of one, so /scan and /scan/{slug} run identical code.
@@ -105,6 +108,22 @@ export function initScanner(config) {
     els.error.querySelector('[data-retry]').style.display = showRetry ? '' : 'none';
   }
 
+  /**
+   * Put the "Start camera" screen back after an automatic attempt failed.
+   *
+   * Not an error state. Some browsers only hand over the camera from a real
+   * tap, and that refusal is indistinguishable here from someone denying
+   * permission — so offer the button rather than accusing the recipient of
+   * blocking their camera. If the tap fails too, that one does show the error.
+   */
+  function revertToIntro() {
+    stopHints();
+    els.status.style.display = 'none';
+    els.error.style.display = 'none';
+    els.intro.style.display = 'flex';
+    els.startBtn.disabled = false;
+  }
+
   function startHints() {
     startedAt = Date.now();
     els.status.style.display = 'flex';
@@ -156,6 +175,33 @@ export function initScanner(config) {
         renderDebug();
       });
     }
+  }
+
+  /**
+   * Prime from the first touch anywhere on the scanning screen.
+   *
+   * Starting the camera automatically means there is no "Start camera" tap to
+   * prime inside, and no browser allows unmuted playback that no gesture ever
+   * authorised. People do touch the screen while lining a phone up on a photo,
+   * so take the first touch that comes and spend it here.
+   *
+   * If none ever comes, playUploadedVideo() still starts the video muted and
+   * offers sound in one tap — motion is never withheld waiting for a gesture.
+   */
+  function primeOnFirstTouch() {
+    if (cancelTouchPrime) return;
+
+    const handler = () => {
+      cancelTouchPrime();
+      // After a match this same call would mute and rewind a playing video.
+      if (!hasMatched) primeVideoElement();
+    };
+
+    document.addEventListener('pointerdown', handler, { passive: true });
+    cancelTouchPrime = () => {
+      document.removeEventListener('pointerdown', handler);
+      cancelTouchPrime = null;
+    };
   }
 
   /**
@@ -370,7 +416,12 @@ export function initScanner(config) {
 
   // --------------------------------------------------------------------- start
 
-  async function start() {
+  /**
+   * @param {boolean} isAuto Started on page load rather than from a tap. A
+   *        failure then falls back to the intro screen instead of an error —
+   *        see revertToIntro().
+   */
+  async function start(isAuto) {
     els.intro.style.display = 'none';
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -432,6 +483,9 @@ export function initScanner(config) {
           debug.matchedSlug = target.slug || null;
           renderDebug();
           stopHints();
+          // Whatever gesture was going to prime the video is now moot, and a
+          // stray tap on the player must not re-mute it.
+          if (cancelTouchPrime) cancelTouchPrime();
 
           if (!target.videoType) {
             // Recognised, but this frame has no playable video yet.
@@ -520,6 +574,13 @@ export function initScanner(config) {
         (err && err.__fromProbe ? ' (camera request)' : ' (tracker start)');
       renderDebug();
 
+      // An automatic attempt is allowed to fail quietly — offer the button and
+      // let the tap produce a verdict we can actually trust.
+      if (isAuto) {
+        revertToIntro();
+        return;
+      }
+
       if (name === 'NotAllowedError' || name === 'SecurityError') {
         showError(
           'Camera access was blocked. Allow camera access for this site in your browser settings, then tap Try again. '
@@ -543,14 +604,31 @@ export function initScanner(config) {
   }
 
   els.startBtn.addEventListener('click', () => {
+    if (cancelTouchPrime) cancelTouchPrime();
     // Must happen inside the tap itself — this is what allows the video to
     // start on its own, with sound, when the photo is later recognised.
     primeVideoElement();
-    start();
+    start(false);
   });
   els.closeBtn.addEventListener('click', closePlayer);
   els.error.querySelector('[data-retry]').addEventListener('click', () => {
     els.error.style.display = 'none';
-    start();
+    start(false);
   });
+
+  /*
+   * Straight to the camera when the page was reached by scanning a frame's own
+   * QR sticker. Whoever scanned it has already said what they want and is
+   * holding the phone up — an intro screen with a button is one tap asking them
+   * to confirm a decision they just made.
+   *
+   * Only for a single known frame. The scan-anything page downloads every
+   * active target, and starting a multi-megabyte download on someone's mobile
+   * data before they have agreed to it is a different matter — that page keeps
+   * its button and its size warning.
+   */
+  if (config.autoStart) {
+    primeOnFirstTouch();
+    start(true);
+  }
 }

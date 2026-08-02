@@ -34,6 +34,11 @@ $scanConfig = [
     'aspect'    => $aspect,
     'verifyUrl' => $isAdminTest ? $verifyUrl : null,
     'csrf'      => $isAdminTest ? $csrf : null,
+    // Arriving here means a QR sticker was deliberately scanned, so go straight
+    // to the camera. Not on the scan-anything page, which would start a
+    // multi-megabyte download unasked, and not on the admin test, where the
+    // intro carries the instructions for running the test.
+    'autoStart' => !$isAdminTest && !$isMulti,
 ];
 ?>
 <!DOCTYPE html>
@@ -198,8 +203,12 @@ $scanConfig = [
     </div>
 <?php endif; ?>
 
-<!-- Intro / permission gate. The camera only starts on a real tap, which also
-     gives us the user gesture that lets the video play with sound. -->
+<!-- Intro / permission gate.
+     On a frame's own /scan/{slug} this is only the loading state: the scanner
+     starts the camera by itself and hides this. It comes back if the browser
+     refuses the camera without a tap, and it stays the real gate on the
+     scan-anything page and the admin test. A tap here is worth having when it
+     happens — it is the gesture that lets the video play with sound later. -->
 <div class="ar-panel" id="arIntro">
     <?php if ($photoUrl !== ''): ?>
         <img class="ar-thumb" src="<?= e($photoUrl) ?>" alt="">
