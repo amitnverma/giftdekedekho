@@ -38,10 +38,10 @@
     <img src="<?= e(productImage($logo)) ?>" alt="<?= e($siteName) ?>">
     <h1>Play your Living Photo</h1>
     <p>
-      Your frame came with a small card carrying a personal link. Open that link and point your camera
-      at the photo — the video plays automatically. No app to install.
+      Your frame has a small QR sticker on it — scan that with your phone camera and point it at the
+      photo, and the video plays automatically. No app to install.
     </p>
-    <p>Enter the code from your card:</p>
+    <p>Sticker missing? Enter the code from the sticker or your card:</p>
     <form method="get" action="" id="scanForm">
       <input type="text" id="scanCode" name="code" placeholder="gdd-xxxxxx" autocomplete="off"
              autocapitalize="none" spellcheck="false" required>

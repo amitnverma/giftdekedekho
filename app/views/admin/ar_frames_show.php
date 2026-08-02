@@ -183,7 +183,14 @@ $flagBadge = ['good' => 'admin-badge-green', 'fair' => 'admin-badge-yellow', 'po
                 <?= e(ArFrame::statusLabel($frame['status'])) ?> — nothing further to do.
             </p>
         <?php endif; ?>
-        <a class="admin-btn admin-btn-sm admin-mt" href="<?= url('/admin/ar-frames/' . (int)$frame['id'] . '/card') ?>" target="_blank">
+        <p class="admin-help-text" style="margin-bottom:6px">
+            The sticker goes on the frame itself and is how the customer gets in — scanning it opens this
+            frame's camera page directly. The card is the paper backup, for anyone who loses the sticker.
+        </p>
+        <a class="admin-btn admin-btn-sm admin-btn-primary" href="<?= url('/admin/ar-frames/' . (int)$frame['id'] . '/sticker') ?>" target="_blank">
+            🏷 QR sticker to print
+        </a>
+        <a class="admin-btn admin-btn-sm" href="<?= url('/admin/ar-frames/' . (int)$frame['id'] . '/card') ?>" target="_blank">
             🖨 Instruction card (PDF)
         </a>
     </div>

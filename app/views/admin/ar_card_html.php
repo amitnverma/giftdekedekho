@@ -42,9 +42,12 @@
 
   <h2>This photo plays a video.</h2>
   <p>
-    There is no QR code and nothing printed on the photo itself. Open the link below on your phone,
-    allow camera access, then point your camera at the photo in the frame. The video starts on its own.
+    Scan the small QR sticker on the frame with your phone camera and allow camera access.
+    Then point your camera at the photo itself — the video starts on its own.
+    Nothing is printed on the photo, and there is no app to install.
   </p>
+
+  <p>If the sticker is missing or damaged, open this link instead:</p>
 
   <a class="link" href="<?= e($scanUrl) ?>"><?= e(preg_replace('#^https?://#i', '', $scanUrl)) ?></a>
 
@@ -52,7 +55,7 @@
     <li>Works in Safari on iPhone and Chrome on Android. No app needed.</li>
     <li>Fit the whole photo in the camera view and hold steady.</li>
     <li>Good, even light helps. Avoid glare on the glass.</li>
-    <li>Keep this card safe — it is the only place your personal link is written.</li>
+    <li>Keep this card safe — it is your backup if the sticker comes off.</li>
   </ul>
 
   <p class="code">Frame code: <?= e($frame['slug']) ?></p>

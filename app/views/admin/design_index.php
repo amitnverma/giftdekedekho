@@ -1134,8 +1134,10 @@ foreach (($categories ?? []) as $cat) {
         <div class="admin-card">
             <p style="margin:0 0 18px;color:#6b7280;font-size:14px">
                 Invites gift recipients to open the AR scanner at <code>/scan</code>.
-                It hides itself automatically whenever no AR frame is live, so turning it on
-                costs nothing until you have a scannable frame.
+                <strong>Off by default</strong> — every frame now carries its own QR sticker
+                (AR&nbsp;Frames → Sticker), so recipients scan the frame instead of coming here.
+                Turn it on if you also want a way in from the homepage. It hides itself
+                automatically whenever no AR frame is live.
             </p>
             <form method="post" action="<?= url('/admin/design/save') ?>" class="admin-form">
                 <?= csrfField() ?>
@@ -1166,7 +1168,7 @@ foreach (($categories ?? []) as $cat) {
                 ]);
                 ?>
                 <label class="admin-checkbox">
-                    <input type="checkbox" name="is_active" value="1" <?= (!isset($livingPhoto['is_active']) || !empty($livingPhoto['is_active'])) ? 'checked' : '' ?>>
+                    <input type="checkbox" name="is_active" value="1" <?= !empty($livingPhoto['is_active']) ? 'checked' : '' ?>>
                     Show Living Photo Scan section on homepage
                 </label>
                 <button type="submit" class="admin-btn admin-btn-primary">Save Living Photo Section</button>

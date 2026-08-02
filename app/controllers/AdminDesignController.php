@@ -535,7 +535,9 @@ class AdminDesignController extends BaseController
                 'text'      => 'Got one of our Living Photo frames? Open the scanner, point your camera at the printed photo, and the video plays right there. No app, no QR code — the photo itself is the trigger.',
                 'cta_text'  => '📷 Scan your frame',
                 'note'      => 'Works in Safari on iPhone and Chrome on Android · nothing to install',
-                'is_active' => true,
+                // Off by default: the QR sticker on each frame is the way in now,
+                // so this section is an optional fallback rather than the norm.
+                'is_active' => false,
             ],
             'trust_badges' => [
                 'is_active' => true,

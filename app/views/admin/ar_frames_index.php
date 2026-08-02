@@ -148,6 +148,8 @@ $flagBadge = ['good' => 'admin-badge-green', 'fair' => 'admin-badge-yellow', 'po
                     <td><?= date('d M Y', strtotime($f['created_at'])) ?></td>
                     <td style="white-space:nowrap">
                         <a class="admin-btn admin-btn-sm" href="<?= url('/admin/ar-frames/' . (int)$f['id']) ?>">Open</a>
+                        <a class="admin-btn admin-btn-sm" href="<?= url('/admin/ar-frames/' . (int)$f['id'] . '/sticker') ?>"
+                           target="_blank" title="Print the QR sticker for this frame">🏷 Sticker</a>
                         <?php
                         // A frame past 'verified' may already be in a customer's
                         // hands, so its confirmation says what deleting breaks.

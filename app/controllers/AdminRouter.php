@@ -146,6 +146,9 @@ class AdminRouter
             case preg_match('#^/ar-frames/(\d+)/card$#', $path, $m) === 1:
                 (new AdminArFrameController())->card((int)$m[1]);
                 break;
+            case preg_match('#^/ar-frames/(\d+)/sticker$#', $path, $m) === 1:
+                (new AdminArFrameController())->sticker((int)$m[1]);
+                break;
 
             // ---- Coupons ----
             case $path === '/coupons':

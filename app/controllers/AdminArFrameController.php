@@ -22,6 +22,15 @@ class AdminArFrameController extends BaseController
     private const GENERATE_LIMIT = 20;
     private const GENERATE_WINDOW_SECONDS = 300;
 
+    /**
+     * Sticker QR settings. Level Q and a generous module size because the code
+     * is printed small, stuck to a product and then handled — it has to survive
+     * scuffs and a phone held at an angle in poor light. Shared between printing
+     * the sticker and cleaning up its cached PNG, which must agree on the key.
+     */
+    private const QR_EC_LEVEL = 'Q';
+    private const QR_PIXEL_SIZE = 12;
+
     private ArFrame $frames;
     private ArFrameService $service;
 
@@ -282,6 +291,7 @@ class AdminArFrameController extends BaseController
         $this->service->deleteFile($frame['photo_path']);
         $this->service->deleteFile($frame['target_path']);
         $this->service->deleteFile($frame['video_path']);
+        $this->service->deleteFile($this->stickerQrPath($frame['slug']));
 
         $this->frames->delete($id);
 
@@ -566,6 +576,60 @@ class AdminArFrameController extends BaseController
 
         require_once APP_PATH . '/services/InstructionCardService.php';
         (new InstructionCardService())->output($frame);
+    }
+
+    // -------------------------------------------------------------- QR sticker
+
+    /**
+     * Printable sheet of QR stickers for one frame.
+     *
+     * The sticker goes on the physical frame, so it replaces the site-wide
+     * camera button as the way in: scanning it opens this frame's own
+     * /scan/{slug} page, which is the same camera the button used to open — only
+     * pre-aimed at one target instead of the whole catalogue.
+     *
+     * The PNG is embedded in the page rather than linked, so what was on screen
+     * is exactly what reaches the printer.
+     */
+    public function sticker(int $id): void
+    {
+        $this->requireAdmin();
+        if ($this->schemaMissing()) return;
+
+        $frame = $this->frames->find($id);
+        if (!$frame) {
+            flash('error', 'That AR frame was not found.');
+            redirect('/admin/ar-frames');
+        }
+
+        require_once APP_PATH . '/services/QrCodeService.php';
+        $scanUrl = ArFrameService::scanUrl($frame['slug']);
+        $qr = (new QrCodeService())->pngDataUri($scanUrl, self::QR_EC_LEVEL, self::QR_PIXEL_SIZE);
+
+        renderRaw('admin/ar_sticker', [
+            'frame'    => $frame,
+            'scanUrl'  => $scanUrl,
+            'qr'       => $qr,
+            'siteName' => siteSetting('site_name', SITE_NAME),
+            'backUrl'  => url('/admin/ar-frames/' . $id),
+        ]);
+    }
+
+    /**
+     * Where the sticker's QR image is cached, relative to the uploads dir.
+     *
+     * Only ever right for the current SITE_URL — which is the point: after a
+     * domain change the old file is unreachable by this key and simply stops
+     * being written to, rather than serving a code pointing at the old domain.
+     */
+    private function stickerQrPath(string $slug): string
+    {
+        require_once APP_PATH . '/services/QrCodeService.php';
+        return QrCodeService::cachePath(
+            ArFrameService::scanUrl($slug),
+            self::QR_EC_LEVEL,
+            self::QR_PIXEL_SIZE
+        );
     }
 
     // ----------------------------------------------------------------- helpers

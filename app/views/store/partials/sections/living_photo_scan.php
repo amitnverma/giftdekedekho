@@ -2,19 +2,19 @@
 /**
  * Home page entry point to the Living Photo scanner.
  *
- * A gift recipient arrives holding a printed frame, not shopping — so the
- * scanner needs to be findable without knowing the code on their card. This
- * links to /scan, which recognises any active frame.
+ * Off by default. Each frame now ships with its own QR sticker, so a recipient
+ * scans the frame itself rather than coming to the home page to hunt for a
+ * camera button — and a section telling shoppers to "scan your frame" is noise
+ * to everyone who has not bought one yet.
  *
- * Hidden automatically when nothing is scannable yet, so a new shop does not
- * advertise a feature that cannot do anything. Editable from the Design Editor
- * like every other section, but works on defaults with no configuration.
+ * Still fully editable from the Design Editor: tick "Show Living Photo Scan
+ * section on homepage" to bring it back, e.g. as a fallback route for customers
+ * whose sticker has peeled off.
  */
 $scan = $sections['living_photo_scan'] ?? [];
 
-// Absent from site_sections means "not configured yet", which should still show
-// — only an explicit 0 hides it.
-if (array_key_exists('is_active', $scan) && empty($scan['is_active'])) return;
+// Opt-in: absent from site_sections means "never turned on", which stays hidden.
+if (empty($scan['is_active'])) return;
 
 // Nothing to scan? Then there is nothing to promise.
 try {

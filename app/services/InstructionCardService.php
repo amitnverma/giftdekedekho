@@ -54,9 +54,10 @@ class InstructionCardService
         $pdf->SetFont('Arial', '', 10.5);
         $pdf->SetTextColor(70, 70, 80);
         $pdf->MultiCell(0, 6, $this->latin(
-            "There is no QR code and nothing printed on the photo itself. "
-            . "Open the link below on your phone, allow camera access, then point your camera at the photo in the frame. "
-            . "The video starts on its own."
+            "Scan the small QR sticker on the frame with your phone camera and allow camera access. "
+            . "Then point your camera at the photo itself - the video starts on its own. "
+            . "Nothing is printed on the photo, and there is no app to install.\n\n"
+            . "If the sticker is missing or damaged, open this link instead:"
         ), 0, 'C');
         $pdf->Ln(4);
 
@@ -74,7 +75,7 @@ class InstructionCardService
             . "- Works in Safari on iPhone and Chrome on Android. No app needed.\n"
             . "- Fit the whole photo in the camera view and hold steady.\n"
             . "- Good, even light helps. Avoid glare on the glass.\n"
-            . "- Keep this card safe: it is the only place your personal link is written."
+            . "- Keep this card safe: it is your backup if the sticker comes off."
         ), 0, 'L');
 
         $pdf->Ln(6);
