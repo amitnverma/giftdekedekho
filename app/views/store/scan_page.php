@@ -166,7 +166,21 @@ $scanConfig = [
         /* Warm vignette rather than flat black — the video should feel like it
            is hanging on a wall, not like a media player took over the phone. */
         background: radial-gradient(circle at 50% 45%, #23201d 0%, #0b0a09 100%);
-        padding: 4vmin;
+        padding: 2.4vmin;
+
+        /* The video's shape. 16:9 is only the assumption used until the file's
+           metadata arrives; the module replaces it with the real ratio, because
+           a phone-shot portrait video letterboxed into a 16:9 box was playing
+           at a fraction of the screen it could have filled. */
+        --ar-video-aspect: 1.7778;
+        /* Player padding + moulding + mat, both sides: 2 x (2.4 + 1.2 + 2). */
+        --ar-chrome: 11.2vmin;
+        --ar-avail-w: calc(100vw - var(--ar-chrome));
+        /* The 9vmin keeps the unmute pill, which hangs below the moulding, on
+           the screen. dvh (where supported) excludes the browser's own chrome,
+           which vh does not. */
+        --ar-avail-h: calc(100vh - var(--ar-chrome) - 9vmin - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+        --ar-avail-h: calc(100dvh - var(--ar-chrome) - 9vmin - env(safe-area-inset-top) - env(safe-area-inset-bottom));
     }
 
     /* The picture frame the video plays inside. Moulding, mat and a cast
@@ -174,9 +188,9 @@ $scanConfig = [
     .ar-frame {
         position: relative; display: none;
         max-width: 100%; max-height: 100%;
-        padding: 3.2vmin;                              /* the mat */
+        padding: 2vmin;                                /* the mat */
         background: linear-gradient(145deg, #f6f1e7 0%, #e8e0d2 100%);
-        border: 1.6vmin solid;
+        border: 1.2vmin solid;
         border-image: linear-gradient(145deg, #a9793f 0%, #6d4620 45%, #c99a5b 70%, #7a5127 100%) 1;
         box-shadow:
             0 0 0 0.35vmin rgba(0,0,0,.35),            /* rebate shadow */
@@ -191,10 +205,15 @@ $scanConfig = [
 
     /* Both players are hidden by default — the module shows exactly one, so an
        empty <video> never stacks above an iframe. */
+    /* As large as the screen allows for the video's own shape: capped by the
+       width available, and by the height available once turned back into a
+       width. --ar-video-aspect is per-element, so a portrait upload resizing
+       itself never reshapes a 16:9 provider embed. */
     #arVideo, #arYoutube {
         display: none; background: #000;
-        width: min(86vw, 150vh); max-width: 100%;
-        aspect-ratio: 16 / 9; height: auto;
+        width: min(var(--ar-avail-w), calc(var(--ar-avail-h) * var(--ar-video-aspect)));
+        max-width: 100%;
+        aspect-ratio: var(--ar-video-aspect); height: auto;
     }
     #arYoutube iframe { width: 100%; height: 100%; border: 0; display: block; }
 

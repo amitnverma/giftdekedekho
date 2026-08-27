@@ -205,10 +205,33 @@ export function initScanner(config) {
   }
 
   /**
+   * Give the picture frame the video's real shape.
+   *
+   * The stylesheet has to assume 16:9 until the file says otherwise, and a
+   * portrait video letterboxed inside a 16:9 box played at a fraction of the
+   * screen it could have used. videoWidth/videoHeight are only known once
+   * metadata has loaded, so this runs from the event and again at playback in
+   * case the metadata beat the player to it.
+   *
+   * Set on the element rather than the player, so it can never reshape a
+   * provider iframe, whose real ratio is not knowable from here.
+   */
+  function fitFrameToVideo() {
+    if (!els.video || !els.video.videoWidth || !els.video.videoHeight) return;
+    els.video.style.setProperty(
+      '--ar-video-aspect',
+      String(els.video.videoWidth / els.video.videoHeight)
+    );
+  }
+
+  if (els.video) els.video.addEventListener('loadedmetadata', fitFrameToVideo);
+
+  /**
    * Play a self-hosted or directly-linked video. Thanks to priming this starts
    * on its own, with sound, the instant the photo is recognised.
    */
   function playUploadedVideo() {
+    fitFrameToVideo();
     els.video.style.display = 'block';
     els.video.muted = false;
     const attempt = els.video.play();
@@ -356,6 +379,7 @@ export function initScanner(config) {
     if (els.video) {
       els.video.pause();
       els.video.style.display = 'none';
+      els.video.style.removeProperty('--ar-video-aspect');
     }
     els.tapToPlay.style.display = 'none';
     hasMatched = false;
