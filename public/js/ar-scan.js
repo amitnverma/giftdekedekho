@@ -21,7 +21,7 @@ import { MindARThree } from './vendor/mindar/mindar-image-three.prod.js';
  * "found" or "lost", so the useful signal for a stuck user is elapsed time.
  */
 const HINTS = [
-  { after: 0,     text: 'Point your camera at the photo in the frame' },
+  { after: 0,     text: 'Fit the whole photo inside the corners' },
   { after: 6000,  text: 'Hold steady and fit the whole photo in the view' },
   { after: 12000, text: 'Try moving a little closer' },
   { after: 18000, text: 'More light helps — avoid glare and reflections on the glass' },

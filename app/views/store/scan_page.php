@@ -82,17 +82,72 @@ $scanConfig = [
     #arStatus {
         position: fixed; inset: 0; z-index: 10; display: none;
         flex-direction: column; align-items: center; justify-content: space-between;
-        padding: 32px 24px calc(40px + env(safe-area-inset-bottom)); pointer-events: none;
+        padding: calc(26px + env(safe-area-inset-top)) 24px calc(34px + env(safe-area-inset-bottom));
+        pointer-events: none;
     }
+    /* The admin test has a topbar sitting where the title would go. */
+    #arStatus.has-topbar { padding-top: calc(70px + env(safe-area-inset-top)); }
+
+    /* Title above the viewfinder. Recipients were opening the camera and not
+       knowing what they were meant to do with it, so the instruction lives on
+       the camera screen rather than only on the intro they already tapped past. */
+    /* Above the reticle's vignette, which is painted by a later sibling and
+       would otherwise wash the title out. */
+    .ar-guide-head, .ar-guide-foot { position: relative; z-index: 1; }
+    .ar-guide-head { max-width: 24em; }
+    .ar-guide-head h2 {
+        margin: 0 0 6px; font-size: 22px; font-weight: 700; line-height: 1.25;
+        text-shadow: 0 2px 12px rgba(0,0,0,.85);
+    }
+    .ar-guide-head p {
+        margin: 0; font-size: 14.5px; line-height: 1.45; color: rgba(255,255,255,.88);
+        text-shadow: 0 2px 10px rgba(0,0,0,.9);
+    }
+
+    /* Viewfinder: corner brackets sized to the photo's own shape, with a faint
+       ghost of that photo inside them. A plain empty box gave no clue how far
+       away or how square to hold the phone — lining the real photo up with the
+       ghost is something anyone can do without being told. */
     .ar-reticle {
-        width: min(74vw, 340px); aspect-ratio: 1; margin: auto;
-        border-radius: 18px; border: 2px dashed rgba(255,255,255,.5);
-        box-shadow: 0 0 0 100vmax rgba(0,0,0,.32);
+        position: relative; margin: auto;
+        width: min(78vw, 360px, calc(48vh * var(--ar-target-aspect, 1)));
+        aspect-ratio: var(--ar-target-aspect, 1);
+        box-shadow: 0 0 0 100vmax rgba(0,0,0,.45);
     }
+    .ar-corner {
+        position: absolute; width: 34px; height: 34px;
+        border: 3px solid #fff;
+    }
+    .ar-corner-tl { top: -3px; left: -3px;  border-right: 0; border-bottom: 0; border-top-left-radius: 16px; }
+    .ar-corner-tr { top: -3px; right: -3px; border-left: 0;  border-bottom: 0; border-top-right-radius: 16px; }
+    .ar-corner-bl { bottom: -3px; left: -3px;  border-right: 0; border-top: 0; border-bottom-left-radius: 16px; }
+    .ar-corner-br { bottom: -3px; right: -3px; border-left: 0;  border-top: 0; border-bottom-right-radius: 16px; }
+
+    .ar-ghost {
+        position: absolute; inset: 0; width: 100%; height: 100%;
+        object-fit: contain; opacity: .38;
+        animation: arGhostPulse 2.8s ease-in-out infinite;
+    }
+    @keyframes arGhostPulse { 0%, 100% { opacity: .3; } 50% { opacity: .5; } }
+
+    .ar-guide-foot { display: flex; flex-direction: column; align-items: center; gap: 9px; }
+    /* Points up at the viewfinder, so the hint underneath is read as being
+       about the box rather than about the whole screen. */
+    .ar-guide-arrow {
+        font-size: 20px; line-height: 1; color: #fff;
+        text-shadow: 0 2px 10px rgba(0,0,0,.85);
+        animation: arArrowNudge 1.8s ease-in-out infinite;
+    }
+    @keyframes arArrowNudge { 0%, 100% { transform: translateY(3px); opacity: .65; } 50% { transform: translateY(-3px); opacity: 1; } }
+
+    @media (prefers-reduced-motion: reduce) {
+        .ar-ghost, .ar-guide-arrow { animation: none; }
+    }
+
     #arHint {
         background: rgba(0,0,0,.62); backdrop-filter: blur(8px);
         border-radius: 14px; padding: 13px 20px; font-size: 15px; font-weight: 500;
-        line-height: 1.45; max-width: 22em;
+        line-height: 1.45; max-width: 22em; margin: 0;
     }
     .ar-topbar {
         position: fixed; top: 0; left: 0; right: 0; z-index: 12;
@@ -248,10 +303,34 @@ $scanConfig = [
     <?php endif; ?>
 </div>
 
-<!-- Scanning guidance -->
-<div id="arStatus">
-    <div class="ar-reticle"></div>
-    <p id="arHint">Point your camera at the photo</p>
+<!-- Scanning guidance.
+     --ar-target-aspect is the compiled target's own width/height, so the
+     brackets are the shape of the photo being looked for, not an arbitrary
+     square: filling them is the same action as framing the photo properly. -->
+<div id="arStatus"<?= $isAdminTest ? ' class="has-topbar"' : '' ?> style="--ar-target-aspect:<?= $aspect > 0 ? round($aspect, 4) : 1 ?>">
+    <div class="ar-guide-head">
+        <h2><?= $isMulti ? 'Find your Living Photo' : 'Point at your photo' ?></h2>
+        <p>
+            <?php if ($photoUrl !== ''): ?>
+                Line the real photo up with the faded one, until it fills the corners
+            <?php else: ?>
+                Hold your phone straight on, so the printed photo fills the corners
+            <?php endif; ?>
+        </p>
+    </div>
+    <div class="ar-reticle">
+        <span class="ar-corner ar-corner-tl"></span>
+        <span class="ar-corner ar-corner-tr"></span>
+        <span class="ar-corner ar-corner-bl"></span>
+        <span class="ar-corner ar-corner-br"></span>
+        <?php if ($photoUrl !== ''): ?>
+            <img class="ar-ghost" src="<?= e($photoUrl) ?>" alt="" aria-hidden="true">
+        <?php endif; ?>
+    </div>
+    <div class="ar-guide-foot">
+        <span class="ar-guide-arrow" aria-hidden="true">&#9650;</span>
+        <p id="arHint">Point your camera at the photo</p>
+    </div>
 </div>
 
 <!-- Errors -->
