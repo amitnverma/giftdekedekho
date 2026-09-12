@@ -362,17 +362,52 @@ $scanConfig = [
             rgba(255,255,255,0) 46%);
     }
 
-    /* The frame arriving, rather than appearing. The recipient has just held a
-       phone up to a photo; a hard cut to a video reads as a page loading, while
-       a short settle reads as the picture coming to life. */
-    .ar-frame.is-visible { animation: arFrameIn 620ms cubic-bezier(.2,.8,.25,1) both; }
+    /* Two states, not one.
+       is-visible lays the frame out so the video inside it can decode and play;
+       is-ready is what actually shows it, and waits until the video reports its
+       dimensions. The frame takes its size from the video, so revealing it
+       first drew an empty gold box a few centimetres across whenever the file
+       still had to load — which is exactly what a recipient saw on re-scan.
+       Hiding with opacity rather than display is deliberate: a display:none
+       video does not reliably start on a phone. */
+    .ar-frame.is-visible { opacity: 0; }
+    .ar-frame.is-visible.is-ready {
+        animation: arFrameIn 620ms cubic-bezier(.2,.8,.25,1) both;
+    }
     @keyframes arFrameIn {
         from { opacity: 0; transform: scale(.9) translateY(2.2vmin); }
         to   { opacity: 1; transform: none; }
     }
     @media (prefers-reduced-motion: reduce) {
-        .ar-frame.is-visible { animation: none; }
+        .ar-frame.is-visible.is-ready { animation: none; opacity: 1; }
     }
+
+    /* Shown while the video loads, so the wait is never a bare empty screen. */
+    #arLoading {
+        position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+        z-index: 31; display: none; align-items: center; gap: 11px;
+        font-size: 14.5px; color: rgba(255,255,255,.9);
+        background: rgba(0,0,0,.5); backdrop-filter: blur(8px);
+        border-radius: 999px; padding: 12px 20px; white-space: nowrap;
+    }
+    #arLoading.is-on { display: flex; }
+    .ar-spinner {
+        width: 17px; height: 17px; border-radius: 50%; flex: none;
+        border: 2px solid rgba(255,255,255,.3); border-top-color: #fff;
+        animation: arSpin 800ms linear infinite;
+    }
+    @keyframes arSpin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .ar-spinner { animation-duration: 2s; } }
+
+    /* If the file will not load at all, say so and hand over the direct link
+       rather than leaving an empty frame on screen. */
+    #arVideoError {
+        position: absolute; inset: 0; z-index: 36; display: none;
+        flex-direction: column; align-items: center; justify-content: center;
+        text-align: center; padding: 28px; gap: 16px;
+    }
+    #arVideoError.is-on { display: flex; }
+    #arVideoError p { margin: 0; font-size: 15.5px; line-height: 1.55; color: #e7e7ee; max-width: 24em; }
 
     /* Both players are hidden by default — the module shows exactly one, so an
        empty <video> never stacks above an iframe. */
@@ -569,6 +604,11 @@ $scanConfig = [
         <!-- Outside the moulding on purpose, so it hangs below the frame rather
              than covering the picture or the player's own controls. -->
         <button id="arUnmute" type="button">🔊 Tap for sound</button>
+    </div>
+    <div id="arLoading"><span class="ar-spinner" aria-hidden="true"></span>Opening your video…</div>
+    <div id="arVideoError">
+        <p>Your video could not be loaded. Check your connection and try again.</p>
+        <button class="ar-btn" type="button" data-retry-video>Try again</button>
     </div>
     <div id="arTapToPlay">
         <div class="ar-play-ring">▶</div>

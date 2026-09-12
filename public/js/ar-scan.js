@@ -84,6 +84,8 @@ export function initScanner(config) {
     frame: document.getElementById('arFrame'),
     unmute: document.getElementById('arUnmute'),
     torch: document.getElementById('arTorch'),
+    loading: document.getElementById('arLoading'),
+    videoError: document.getElementById('arVideoError'),
   };
 
   let mindarThree = null;
@@ -97,6 +99,10 @@ export function initScanner(config) {
   // until the camera starts, and stays null where there is no torch to offer.
   let torchTrack = null;
   let torchOn = false;
+  // The URL currently loaded into the <video>. Assigning .src reloads the media
+  // even when the URL is identical, so this is what makes a second scan of the
+  // same photo reuse the file already in memory instead of fetching it again.
+  let loadedVideoUrl = null;
 
   // One entry per target in the .mind file, in the same order. A single-frame
   // page supplies an array of one, so /scan and /scan/{slug} run identical code.
@@ -329,12 +335,51 @@ export function initScanner(config) {
   if (els.video) els.video.addEventListener('loadedmetadata', fitFrameToVideo);
 
   /**
+   * Show the frame. Held back until the video inside it has a size, because the
+   * frame is sized by its contents — see the two-state CSS.
+   */
+  function revealFrame() {
+    if (els.loading) els.loading.classList.remove('is-on');
+    if (els.frame) els.frame.classList.add('is-ready');
+  }
+
+  /**
+   * The video will not load at all. Say so and offer the direct link, rather
+   * than leaving an empty frame on screen with nothing in it.
+   */
+  function showVideoError() {
+    if (els.loading) els.loading.classList.remove('is-on');
+    if (els.frame) els.frame.classList.remove('is-ready');
+    if (els.videoError) els.videoError.classList.add('is-on');
+    showFallbackLink();
+  }
+
+  /**
    * Play a self-hosted or directly-linked video. Thanks to priming this starts
    * on its own, with sound, the instant the photo is recognised.
+   *
+   * The frame is only revealed once the file has reported its dimensions. A
+   * video with no metadata yet has no size, so showing the frame around it drew
+   * a tiny empty box — which is what a recipient saw every time the file had to
+   * be fetched, and permanently if the fetch failed.
    */
   function playUploadedVideo() {
-    fitFrameToVideo();
     els.video.style.display = 'block';
+
+    // HAVE_METADATA or better: dimensions are known, so nothing to wait for.
+    // This is the usual case on a re-scan now that the file is not reloaded.
+    if (els.video.readyState >= 1) {
+      fitFrameToVideo();
+      revealFrame();
+    } else {
+      if (els.loading) els.loading.classList.add('is-on');
+      els.video.addEventListener('loadedmetadata', () => {
+        fitFrameToVideo();
+        revealFrame();
+      }, { once: true });
+      els.video.addEventListener('error', showVideoError, { once: true });
+    }
+
     els.video.muted = false;
     const attempt = els.video.play();
     if (attempt && typeof attempt.catch === 'function') {
@@ -465,8 +510,12 @@ export function initScanner(config) {
     // embed on this domain, so it keeps an explicit tap and the escape link
     // rather than silently showing its own error screen.
     if (active.videoType === 'youtube') {
+      // An iframe is sized by the stylesheet, not by its contents, so there is
+      // nothing to wait for — unlike the <video> path.
+      revealFrame();
       playEmbedded();
     } else if (active.videoType === 'vimeo') {
+      revealFrame();
       buildEmbedIframe();
     } else {
       playUploadedVideo();
@@ -481,11 +530,16 @@ export function initScanner(config) {
     els.youtube.style.display = 'none';
     if (els.fallback) els.fallback.style.display = 'none';
     if (els.unmute) els.unmute.style.display = 'none';
-    if (els.frame) els.frame.classList.remove('is-visible');
+    if (els.loading) els.loading.classList.remove('is-on');
+    if (els.videoError) els.videoError.classList.remove('is-on');
+    if (els.frame) els.frame.classList.remove('is-visible', 'is-ready');
     if (els.video) {
       els.video.pause();
       els.video.style.display = 'none';
-      els.video.style.removeProperty('--ar-video-aspect');
+      // The src is deliberately left in place so a second scan replays from
+      // memory instead of refetching. Rewinding here is what makes that replay
+      // start at the beginning rather than resuming on the last frame.
+      if (els.video.readyState >= 1) els.video.currentTime = 0;
     }
     els.tapToPlay.style.display = 'none';
     hasMatched = false;
@@ -633,8 +687,19 @@ export function initScanner(config) {
 
           // Direct links and uploaded files both play from a URL in the
           // <video> element; embedded providers build an iframe instead.
+          //
+          // Only assigned when it actually changes. Setting .src resets the
+          // media element even when the URL is identical — readyState drops to
+          // nothing, the dimensions go to zero and the whole file is fetched
+          // again. On a second scan of the same photo that meant the frame
+          // reappeared empty while the video reloaded, and stayed empty if the
+          // reload failed. On /scan, where a different frame really can match,
+          // the URL differs and the load happens as before.
           if ((target.videoType === 'upload' || target.videoType === 'direct') && target.videoUrl) {
-            els.video.src = target.videoUrl;
+            if (loadedVideoUrl !== target.videoUrl) {
+              loadedVideoUrl = target.videoUrl;
+              els.video.src = target.videoUrl;
+            }
           }
 
           if (useOverlay) {
@@ -751,6 +816,21 @@ export function initScanner(config) {
     start(false);
   });
   els.closeBtn.addEventListener('click', closePlayer);
+
+  // The one place a genuine reload is wanted: the previous attempt failed, so
+  // there is nothing in memory worth reusing.
+  const retryVideo = els.videoError && els.videoError.querySelector('[data-retry-video]');
+  if (retryVideo) {
+    retryVideo.addEventListener('click', () => {
+      els.videoError.classList.remove('is-on');
+      if (els.fallback) els.fallback.style.display = 'none';
+      if (active && active.videoUrl) {
+        loadedVideoUrl = active.videoUrl;
+        els.video.src = active.videoUrl;
+      }
+      playUploadedVideo();
+    });
+  }
   els.error.querySelector('[data-retry]').addEventListener('click', () => {
     els.error.style.display = 'none';
     start(false);
