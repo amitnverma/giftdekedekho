@@ -19,14 +19,51 @@ import { MindARThree } from './vendor/mindar/mindar-image-three.prod.js';
 /**
  * Escalating guidance while nothing has matched yet. MindAR only tells us
  * "found" or "lost", so the useful signal for a stuck user is elapsed time.
+ *
+ * Worded for someone who has never seen the photo. The public page withholds it
+ * on purpose — it is the surprise — so no hint may ask the recipient to
+ * recognise the picture, only to aim at the frame they are standing in front of.
+ * The order follows what actually goes wrong, most common first: too far away,
+ * then angle, then light, then glare off the glass.
  */
 const HINTS = [
-  { after: 0,     text: 'Fit the whole photo inside the corners' },
-  { after: 6000,  text: 'Hold steady and fit the whole photo in the view' },
-  { after: 12000, text: 'Try moving a little closer' },
-  { after: 18000, text: 'More light helps — avoid glare and reflections on the glass' },
-  { after: 26000, text: 'Still nothing? Try holding the phone straight on, parallel to the photo' },
+  { after: 0,     text: 'Fill the box with the photo' },
+  { after: 5000,  text: 'Move closer, until the photo fills most of the box' },
+  { after: 11000, text: 'Hold the phone straight on, flat to the photo — not at an angle' },
+  // withTorch is used only when the camera actually offered a torch — on iOS
+  // there is no such button, and pointing at one would be a dead end.
+  { after: 17000, text: 'Try more light on the photo',
+    withTorch: 'Try more light on the photo, or tap the light button below' },
+  { after: 24000, text: 'Seeing a reflection? Step slightly to one side to clear the glare off the glass' },
+  { after: 32000, text: 'Still nothing? Take the frame somewhere brighter and hold the phone steady' },
 ];
+
+/**
+ * How many consecutive tracked frames before a match is announced.
+ *
+ * MindAR's default is 5 (so, six frames), which is a visible pause between
+ * pointing at the photo and anything happening — long enough that people move
+ * the phone again and lose the lock, which is the loop that makes scanning feel
+ * unreliable. Each pass is a real feature match, so a lower bar trades very
+ * little confidence for a much faster response.
+ *
+ * A recipient's own /scan/{slug} can afford the lowest setting: there is exactly
+ * one video it could possibly play, so a spurious match costs nothing but a
+ * video starting a moment early. The higher bar is kept where a wrong match
+ * would actually cost something — the scan-anything page, which could play a
+ * stranger's video, and the admin live test, where a match is what marks a
+ * frame verified and therefore printable.
+ */
+const WARMUP_FAST = 1;
+const WARMUP_CAREFUL = 3;
+
+/**
+ * How many consecutive missed frames before a match is dropped. Raised from
+ * MindAR's default of 5 because a hand-held phone drops frames constantly; the
+ * default let a brief wobble count as "lost", which in overlay mode paused the
+ * video mid-sentence.
+ */
+const MISS_TOLERANCE = 12;
 
 export function initScanner(config) {
   const els = {
@@ -46,6 +83,7 @@ export function initScanner(config) {
     fallback: document.getElementById('arFallback'),
     frame: document.getElementById('arFrame'),
     unmute: document.getElementById('arUnmute'),
+    torch: document.getElementById('arTorch'),
   };
 
   let mindarThree = null;
@@ -55,6 +93,10 @@ export function initScanner(config) {
   // Set while a first-touch listener is waiting to prime the video; see
   // primeOnFirstTouch(). Calling it detaches the listener.
   let cancelTouchPrime = null;
+  // The live camera track, kept so the torch can be switched back off. Null
+  // until the camera starts, and stays null where there is no torch to offer.
+  let torchTrack = null;
+  let torchOn = false;
 
   // One entry per target in the .mind file, in the same order. A single-frame
   // page supplies an array of one, so /scan and /scan/{slug} run identical code.
@@ -83,6 +125,8 @@ export function initScanner(config) {
     targetCount: targets.length,
     matchedSlug: null,
     videoPrimed: null,
+    torchAvailable: false,
+    torchOn: false,
   };
   window.__arDebug = debug;
 
@@ -132,7 +176,9 @@ export function initScanner(config) {
       const elapsed = Date.now() - startedAt;
       let current = HINTS[0].text;
       for (const hint of HINTS) {
-        if (elapsed >= hint.after) current = hint.text;
+        if (elapsed >= hint.after) {
+          current = (hint.withTorch && torchTrack) ? hint.withTorch : hint.text;
+        }
       }
       if (els.hint.textContent !== current) els.hint.textContent = current;
     }, 500);
@@ -142,6 +188,62 @@ export function initScanner(config) {
   function stopHints() {
     if (hintTimer) clearInterval(hintTimer);
     hintTimer = null;
+  }
+
+  // --------------------------------------------------------------------- torch
+
+  /**
+   * Offer the phone's torch, when the camera actually has one to offer.
+   *
+   * Light is the most common reason a real print will not match, and unlike
+   * distance or angle it is the one thing a recipient standing in a dim hallway
+   * cannot fix by moving. The button is only revealed once the track reports
+   * the capability, so it never appears as a dead control on iOS, where Safari
+   * exposes no torch to the web at all.
+   */
+  function setupTorch() {
+    if (!els.torch || !mindarThree || !mindarThree.video) return;
+
+    const stream = mindarThree.video.srcObject;
+    if (!stream || typeof stream.getVideoTracks !== 'function') return;
+
+    const track = stream.getVideoTracks()[0];
+    if (!track || typeof track.getCapabilities !== 'function') return;
+
+    let capabilities;
+    try {
+      capabilities = track.getCapabilities() || {};
+    } catch (err) {
+      // Some browsers throw here before the track has settled. No torch, then.
+      return;
+    }
+    if (!capabilities.torch) return;
+
+    torchTrack = track;
+    debug.torchAvailable = true;
+    renderDebug();
+
+    els.torch.style.display = 'inline-flex';
+    els.torch.onclick = () => setTorch(!torchOn);
+  }
+
+  function setTorch(on) {
+    if (!torchTrack) return;
+    torchTrack.applyConstraints({ advanced: [{ torch: on }] })
+      .then(() => {
+        torchOn = on;
+        els.torch.classList.toggle('is-on', on);
+        els.torch.setAttribute('aria-pressed', String(on));
+        const label = els.torch.querySelector('[data-label]');
+        if (label) label.textContent = on ? 'Turn off light' : 'Turn on light';
+        debug.torchOn = on;
+        renderDebug();
+      })
+      .catch(() => {
+        // Advertised but refused. Hide it rather than leave a button that lies.
+        torchTrack = null;
+        els.torch.style.display = 'none';
+      });
   }
 
   // ------------------------------------------------------------------ playback
@@ -353,6 +455,10 @@ export function initScanner(config) {
     els.player.style.display = 'flex';
     els.status.style.display = 'none';
     if (els.frame) els.frame.classList.add('is-visible');
+    // The camera is hidden behind the player now, so the torch is only heat and
+    // battery. Overlay playback deliberately keeps it: that mode is still
+    // tracking the photo and needs the light it was turned on for.
+    if (torchOn) setTorch(false);
 
     // Vimeo, uploaded files and direct links all start on their own the moment
     // the photo is recognised — no tap. YouTube is the exception: it refuses to
@@ -470,6 +576,14 @@ export function initScanner(config) {
         uiScanning: 'no',
         uiLoading: 'no',
         uiError: 'no',
+        // Announce a match sooner, and hold it through a shaky hand. The
+        // careful bar is for pages where a wrong match has a cost: /scan, which
+        // could play someone else's video, and the admin test, where a match
+        // marks the frame verified. config.verifyUrl is only set for the latter.
+        warmupTolerance: (targets.length > 1 || config.verifyUrl)
+          ? WARMUP_CAREFUL
+          : WARMUP_FAST,
+        missTolerance: MISS_TOLERANCE,
       });
 
       // One anchor per target in the .mind file. With a single frame that is a
@@ -590,6 +704,8 @@ export function initScanner(config) {
       debug.containerSize = els.container.clientWidth + 'x' + els.container.clientHeight;
       renderDebug();
 
+      // Needs the running stream, so it cannot happen before start().
+      setupTorch();
       startHints();
     } catch (err) {
       const name = (err && err.name) || '';
