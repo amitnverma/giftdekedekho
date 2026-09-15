@@ -59,6 +59,9 @@ $scanConfig = [
     'careful'   => $isMulti || $isAdminTest,
     // Count found photos on screen, so the recipient knows there are more.
     'showProgress' => $isSet,
+    // With more than one photo to point at, the video follows the camera:
+    // moving off a photo hides its video, moving onto another plays that one.
+    'followPhoto' => $photoCount > 1,
     // Arriving here means a QR sticker was deliberately scanned, so go straight
     // to the camera. Not on the scan-anything page, which would start a
     // multi-megabyte download unasked, and not on the admin test, where the
@@ -280,6 +283,18 @@ $scanConfig = [
         --ar-avail-h: calc(100vh - var(--ar-chrome) - var(--ar-pill) - env(safe-area-inset-top) - env(safe-area-inset-bottom));
         --ar-avail-h: calc(100dvh - var(--ar-chrome) - var(--ar-pill) - env(safe-area-inset-top) - env(safe-area-inset-bottom));
     }
+
+    /* Follow mode (several photos): the video follows the photo the camera is
+       on, so the camera has to stay visible around it — otherwise there is no
+       way to see which photo you are on, or aim at the next one. A dimmed
+       see-through wall and a little more margin, instead of an opaque one. */
+    #arPlayer { transition: opacity 220ms ease; }
+    #arPlayer.is-follow {
+        background: radial-gradient(ellipse at 50% 46%, rgba(12,10,8,.30) 0%, rgba(6,5,4,.70) 100%);
+        --ar-pad: 7vmin;
+    }
+    #arPlayer.is-leaving { opacity: 0; }
+    @media (prefers-reduced-motion: reduce) { #arPlayer { transition: none; } }
 
     /* The picture frame the video plays inside, built in the layers a real one
        has: lip, moulding, mount board, bevel, glass. Each is its own element so

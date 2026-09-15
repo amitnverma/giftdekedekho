@@ -66,6 +66,20 @@ const WARMUP_CAREFUL = 3;
  */
 const MISS_TOLERANCE = 12;
 
+/**
+ * Pages with several photos make the video follow the photo: moving the camera
+ * off a photo hides its video, and pointing at another plays that one, with
+ * nothing to close in between.
+ *
+ * MindAR only reports "lost" after MISS_TOLERANCE missed frames, so a wobble is
+ * already absorbed there. The grace period on top is for the camera briefly
+ * sliding off the edge of the print; coming back within it carries on as if
+ * the video never left. The fade is short enough that a switch between two
+ * photos reads as one movement rather than two separate events.
+ */
+const LOST_GRACE_MS = 300;
+const LEAVE_FADE_MS = 220;
+
 export function initScanner(config) {
   const els = {
     container: document.getElementById('arContainer'),
@@ -107,6 +121,12 @@ export function initScanner(config) {
   // even when the URL is identical, so this is what makes a second scan of the
   // same photo reuse the file already in memory instead of fetching it again.
   let loadedVideoUrl = null;
+  // See LOST_GRACE_MS. hideTimer runs while a lost photo's video waits out the
+  // grace period; leaveTimer while it fades away. Either one being set means
+  // the video is on its way out but can still be kept.
+  const followPhoto = !!config.followPhoto;
+  let hideTimer = null;
+  let leaveTimer = null;
 
   // One entry per target in the .mind file, in the same order. A single-frame
   // page supplies an array of one, so /scan and /scan/{slug} run identical code.
@@ -138,6 +158,7 @@ export function initScanner(config) {
     matchedSlug: null,
     matchedItemId: null,
     foundCount: 0,
+    followPhoto: !!config.followPhoto,
     videoPrimed: null,
     torchAvailable: false,
     torchOn: false,
@@ -195,6 +216,8 @@ export function initScanner(config) {
   }
 
   function startHints() {
+    // Never two timers fighting over the hint text.
+    stopHints();
     startedAt = Date.now();
     els.status.style.display = 'flex';
     const opening = openingHint();
@@ -536,14 +559,18 @@ export function initScanner(config) {
   }
 
   function showFullscreenPlayer() {
+    // The camera stays visible around the video, so the recipient can see
+    // which photo they are on and move to the next one.
+    els.player.classList.toggle('is-follow', followPhoto);
+    els.player.classList.remove('is-leaving');
     els.player.style.display = 'flex';
     els.status.style.display = 'none';
     if (els.frame) els.frame.classList.add('is-visible');
     if (els.next && config.showProgress) els.next.hidden = false;
     // The camera is hidden behind the player now, so the torch is only heat and
-    // battery. Overlay playback deliberately keeps it: that mode is still
-    // tracking the photo and needs the light it was turned on for.
-    if (torchOn) setTorch(false);
+    // battery. Overlay playback and follow mode deliberately keep it: both are
+    // still tracking the photo and need the light it was turned on for.
+    if (torchOn && !followPhoto) setTorch(false);
 
     // Vimeo, uploaded files and direct links all start on their own the moment
     // the photo is recognised — no tap. YouTube is the exception: it refuses to
@@ -562,7 +589,15 @@ export function initScanner(config) {
     }
   }
 
-  function closePlayer() {
+  /**
+   * Take the player off screen and stop what it is playing.
+   *
+   * @param {boolean} rewind Start from the beginning next time. The close
+   *        button rewinds; a photo the camera merely moved off does not, so
+   *        pointing back at it picks the video up where it left off.
+   */
+  function teardownPlayer(rewind) {
+    cancelDismiss();
     els.player.style.display = 'none';
     // Clearing innerHTML stops playback; hiding the container too keeps it from
     // sitting over the camera view as an invisible block on the next scan.
@@ -579,12 +614,38 @@ export function initScanner(config) {
       // The src is deliberately left in place so a second scan replays from
       // memory instead of refetching. Rewinding here is what makes that replay
       // start at the beginning rather than resuming on the last frame.
-      if (els.video.readyState >= 1) els.video.currentTime = 0;
+      if (rewind && els.video.readyState >= 1) els.video.currentTime = 0;
     }
     els.tapToPlay.style.display = 'none';
     if (els.next) els.next.hidden = true;
     hasMatched = false;
+  }
+
+  function closePlayer() {
+    teardownPlayer(true);
+    active = null;
     startHints();
+  }
+
+  /** The camera has been off the playing photo for the whole grace period: fade the video out. */
+  function dismissPlayer() {
+    hideTimer = null;
+    els.player.classList.add('is-leaving');
+    leaveTimer = setTimeout(() => {
+      leaveTimer = null;
+      teardownPlayer(false);
+      active = null;
+      startHints();
+    }, LEAVE_FADE_MS);
+  }
+
+  /** Keep a video that was on its way out. */
+  function cancelDismiss() {
+    if (hideTimer) clearTimeout(hideTimer);
+    if (leaveTimer) clearTimeout(leaveTimer);
+    hideTimer = null;
+    leaveTimer = null;
+    els.player.classList.remove('is-leaving');
   }
 
   /**
@@ -706,9 +767,23 @@ export function initScanner(config) {
         }
 
         anchor.onTargetFound = () => {
-          // Ignore a second target firing while a video is already playing.
-          if (hasMatched) return;
+          // Back on the photo whose video was on its way out: carry on as if
+          // the camera had never left it.
+          if (active === target && (hideTimer || leaveTimer)) {
+            cancelDismiss();
+            return;
+          }
 
+          if (hasMatched) {
+            // Ignore a second target firing while a video is already playing —
+            // unless the video follows the photo, where the camera arriving on
+            // another photo means that photo's video, straight away.
+            if (!followPhoto || active === target) return;
+            teardownPlayer(false);
+          }
+
+          // The admin test records each photo once, not on every re-find.
+          const firstFind = !found.has(index);
           active = target;
           hasMatched = true;
           found.add(index);
@@ -756,7 +831,7 @@ export function initScanner(config) {
           } else {
             showFullscreenPlayer();
           }
-          reportVerified(target);
+          if (firstFind) reportVerified(target);
         };
 
         anchor.onTargetLost = () => {
@@ -767,9 +842,12 @@ export function initScanner(config) {
             hasMatched = false;
             active = null;
             startHints();
+          } else if (followPhoto && hasMatched && active === target && !hideTimer && !leaveTimer) {
+            hideTimer = setTimeout(dismissPlayer, LOST_GRACE_MS);
           }
-          // Full-screen playback deliberately survives losing the target —
-          // people lower the phone once the video starts.
+          // On a single-photo frame full-screen playback deliberately survives
+          // losing the target — there is nothing else to point at, and people
+          // lower the phone once the video starts.
         };
       });
 
