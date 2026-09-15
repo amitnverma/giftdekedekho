@@ -23,6 +23,10 @@ class ArFrameService
     public const MAX_PHOTO_BYTES = 10 * 1024 * 1024;   // 10MB
     public const MAX_VIDEO_BYTES = 100 * 1024 * 1024;  // 100MB, matches the existing QR video limit
 
+    /** Limits on what a customer can upload from the product page. */
+    public const MAX_CUSTOMER_VIDEO_BYTES = 20 * 1024 * 1024;  // 20MB each
+    public const MAX_CUSTOMER_ITEMS = 5;
+
     private const PHOTO_MIMES = [
         'image/jpeg' => 'jpg',
         'image/jpg'  => 'jpg',
@@ -101,9 +105,9 @@ class ArFrameService
      *
      * @return array{ok: bool, path?: string, error?: string}
      */
-    public function storeVideo(array $file): array
+    public function storeVideo(array $file, int $maxBytes = self::MAX_VIDEO_BYTES): array
     {
-        $error = $this->uploadError($file, self::MAX_VIDEO_BYTES, 'video');
+        $error = $this->uploadError($file, $maxBytes, 'video');
         if ($error !== null) {
             return ['ok' => false, 'error' => $error];
         }

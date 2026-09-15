@@ -135,41 +135,44 @@ class CartController extends BaseController
                 continue;
             }
 
-            // Living Photo AR frame: needs both the photo to print and the video
-            // it should trigger, captured together so the admin queue has
-            // everything it needs without contacting the customer.
+            // Living Photo AR frame: one or more photo/video pairs. The files were
+            // already uploaded one at a time by uploadArMedia(); the form only
+            // carries the tokens it handed back.
             if ($type === 'ar_frame') {
                 require_once APP_PATH . '/services/ArFrameService.php';
-                $arService = new ArFrameService();
+                $uploads = $_SESSION['ar_uploads'] ?? [];
+                $rows = is_array($entry['items'] ?? null) ? array_values($entry['items']) : [];
+                $pairs = [];
 
-                $rawUrl = trim((string)($entry['video_url'] ?? ''));
-                $hasPhoto = !empty($_FILES['customization']['name'][$opt['id']]['file']);
+                foreach ($rows as $row) {
+                    $photoToken = is_array($row) ? (string)($row['photo'] ?? '') : '';
+                    $videoToken = is_array($row) ? (string)($row['video'] ?? '') : '';
+                    if ($photoToken === '' && $videoToken === '') {
+                        continue;
+                    }
+                    $photo = $uploads[$photoToken] ?? null;
+                    $video = $uploads[$videoToken] ?? null;
+                    $n = count($pairs) + 1;
+                    if (!$photo || $photo['kind'] !== 'photo' || $photo['option_id'] !== (int)$opt['id']) {
+                        flash('error', 'Please add the image for photo ' . $n . ' of "' . $opt['label'] . '".');
+                        redirect('/product/' . $product['slug']);
+                    }
+                    if (!$video || $video['kind'] !== 'video' || $video['option_id'] !== (int)$opt['id']) {
+                        flash('error', 'Please add the video for photo ' . $n . ' of "' . $opt['label'] . '".');
+                        redirect('/product/' . $product['slug']);
+                    }
+                    $pairs[] = ['photo' => $photo['path'], 'video' => $video['path']];
+                }
 
-                // Skip entirely when optional and left blank.
-                if (!$hasPhoto && $rawUrl === '' && !$opt['is_required']) {
+                if (empty($pairs)) {
+                    if ($opt['is_required']) {
+                        flash('error', 'Please add at least one image and its video for "' . $opt['label'] . '".');
+                        redirect('/product/' . $product['slug']);
+                    }
                     continue;
                 }
-
-                if (!$hasPhoto) {
-                    flash('error', 'Please upload the photo to print for "' . $opt['label'] . '".');
-                    redirect('/product/' . $product['slug']);
-                }
-
-                $videoUrl = $arService->normaliseYoutubeUrl($rawUrl);
-                if ($videoUrl === null) {
-                    flash('error', 'Please paste a valid YouTube video link for "' . $opt['label'] . '".');
-                    redirect('/product/' . $product['slug']);
-                }
-
-                $stored = $arService->storePhoto([
-                    'name' => $_FILES['customization']['name'][$opt['id']]['file'],
-                    'type' => $_FILES['customization']['type'][$opt['id']]['file'] ?? '',
-                    'tmp_name' => $_FILES['customization']['tmp_name'][$opt['id']]['file'],
-                    'error' => $_FILES['customization']['error'][$opt['id']]['file'],
-                    'size' => $_FILES['customization']['size'][$opt['id']]['file'],
-                ]);
-                if (empty($stored['ok'])) {
-                    flash('error', $stored['error']);
+                if (count($pairs) > ArFrameService::MAX_CUSTOMER_ITEMS) {
+                    flash('error', 'You can add up to ' . ArFrameService::MAX_CUSTOMER_ITEMS . ' photos to "' . $opt['label'] . '".');
                     redirect('/product/' . $product['slug']);
                 }
 
@@ -177,8 +180,8 @@ class CartController extends BaseController
                     'option_id' => (int)$opt['id'],
                     'option_type' => $type,
                     'label' => $opt['label'],
-                    'value' => $videoUrl,
-                    'photo' => $stored['path'],
+                    'value' => count($pairs) === 1 ? '1 photo with video' : count($pairs) . ' photos with videos',
+                    'items' => $pairs,
                     'extra_charge' => (float)$opt['extra_charge'],
                 ];
                 continue;
@@ -243,6 +246,65 @@ class CartController extends BaseController
         (new Cart())->add($productId, $quantity, $customization);
         flash('success', 'Added to cart successfully!');
         redirect('/cart');
+    }
+
+    /**
+     * Upload one image or video for a Living Photo AR frame option, as soon as
+     * the customer picks it. One file per request keeps each request under the
+     * server's post size — several 20MB videos in the cart form itself would
+     * arrive as an empty request.
+     *
+     * The stored path stays in the session behind a random token, so the cart
+     * form can only reference files this visitor uploaded.
+     */
+    public function uploadArMedia(): void
+    {
+        // A body over post_max_size arrives with $_POST and $_FILES empty,
+        // which would otherwise read as a CSRF failure.
+        if (empty($_POST) && empty($_FILES) && (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 0) {
+            jsonResponse(['ok' => false, 'error' => 'That file is larger than the server allows.'], 413);
+        }
+        if (!verifyCsrf()) {
+            jsonResponse(['ok' => false, 'error' => 'Your session expired. Please refresh the page and try again.'], 419);
+        }
+
+        $kind = (string)$this->input('kind');
+        $optionId = (int)$this->input('option_id');
+        if ($kind !== 'photo' && $kind !== 'video') {
+            jsonResponse(['ok' => false, 'error' => 'Unknown upload.'], 400);
+        }
+
+        $stmt = Database::getInstance()->prepare(
+            "SELECT o.id FROM product_customization_options o JOIN products p ON p.id = o.product_id
+             WHERE o.id = ? AND o.option_type = 'ar_frame' AND p.is_active = 1"
+        );
+        $stmt->execute([$optionId]);
+        if (!$stmt->fetch()) {
+            jsonResponse(['ok' => false, 'error' => 'This product no longer accepts uploads.'], 404);
+        }
+
+        $uploads = $_SESSION['ar_uploads'] ?? [];
+        if (count($uploads) >= 40) {
+            jsonResponse(['ok' => false, 'error' => 'Too many uploads. Please refresh the page and try again.'], 429);
+        }
+        if (empty($_FILES['file'])) {
+            jsonResponse(['ok' => false, 'error' => 'Please choose a file.'], 400);
+        }
+
+        require_once APP_PATH . '/services/ArFrameService.php';
+        $arService = new ArFrameService();
+        $stored = $kind === 'photo'
+            ? $arService->storePhoto($_FILES['file'])
+            : $arService->storeVideo($_FILES['file'], ArFrameService::MAX_CUSTOMER_VIDEO_BYTES);
+        if (empty($stored['ok'])) {
+            jsonResponse(['ok' => false, 'error' => $stored['error']], 422);
+        }
+
+        $token = bin2hex(random_bytes(16));
+        $uploads[$token] = ['kind' => $kind, 'option_id' => $optionId, 'path' => $stored['path']];
+        $_SESSION['ar_uploads'] = $uploads;
+
+        jsonResponse(['ok' => true, 'token' => $token]);
     }
 
     private function handlePhotoUpload(int $optionId): ?string

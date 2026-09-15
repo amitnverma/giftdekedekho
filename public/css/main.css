@@ -177,6 +177,44 @@ h1, h2, h3, h4 { margin: 0 0 12px; line-height: 1.25; }
 .engraving-preview { margin-top: 10px; padding: 18px; background: #fff; border: 1px dashed var(--color-border); border-radius: 8px; text-align: center; font-style: italic; color: var(--color-text); min-height: 28px; }
 .crop-preview-wrap img { max-width: 100%; margin-top: 10px; border-radius: 8px; }
 
+/* Living Photo AR frame: image + video rows */
+.ar-upload-help { font-size: 13px; color: var(--color-muted); margin: 0 0 12px; }
+.ar-upload-rows { display: flex; flex-direction: column; gap: 10px; }
+.ar-upload-row {
+  display: grid; grid-template-columns: auto 1fr 1fr 28px; align-items: center; gap: 8px;
+  padding: 10px; background: #fff; border: 1px solid var(--color-border); border-radius: 10px;
+}
+.ar-upload-num { width: 16px; text-align: center; font-weight: 600; color: var(--color-primary); }
+.customize-option .ar-upload-btn {
+  position: relative; overflow: hidden; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  margin: 0; padding: 9px 8px; border-radius: 8px; cursor: pointer; font-weight: 500; font-size: 14px; white-space: nowrap;
+  background: #fdf0f1; background: color-mix(in srgb, var(--color-primary) 8%, #fff); color: var(--color-primary);
+}
+.customize-option .ar-upload-btn:hover { background: color-mix(in srgb, var(--color-primary) 14%, #fff); }
+.ar-upload-btn:focus-within { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.customize-option .ar-upload-btn input[type=file] { position: absolute; left: 0; top: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; }
+.ar-upload-btn svg { width: 16px; height: 16px; flex: none; }
+.ar-upload-btn .req { color: inherit; margin-left: -3px; }
+.ar-upload-bar { position: absolute; left: 0; bottom: 0; height: 3px; width: 0; background: var(--color-primary); transition: width .15s; }
+.customize-option .ar-upload-btn.is-busy { cursor: progress; }
+.customize-option .ar-upload-btn.is-done { background: #ecfdf3; color: #067647; }
+.customize-option .ar-upload-btn.is-done .req { display: none; }
+.customize-option .ar-upload-btn.is-error { background: #fef3f2; color: #b42318; }
+.ar-upload-remove {
+  width: 28px; height: 28px; padding: 0; border: none; border-radius: 6px; background: none;
+  color: var(--color-muted); font-size: 20px; line-height: 1; cursor: pointer;
+}
+.ar-upload-remove:hover { background: var(--color-bg-alt); color: var(--color-text); }
+.ar-upload-msg, .ar-upload-error { grid-column: 1 / -1; margin: 0; font-size: 12px; color: #b42318; }
+.ar-upload-error { margin-top: 8px; font-size: 13px; }
+.ar-upload-msg:empty, .ar-upload-error:empty { display: none; }
+.ar-upload-add {
+  width: 100%; margin-top: 10px; padding: 8px 14px; background: none; border: 1px dashed var(--color-border); border-radius: 8px;
+  font: inherit; font-size: 14px; color: var(--color-text); cursor: pointer;
+}
+.ar-upload-add:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.ar-upload-note { display: block; margin-top: 8px; font-size: 12px; color: var(--color-muted); }
+
 /* Charm / image-choice picker grid */
 .charm-picker {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 10px;

@@ -274,6 +274,161 @@
     syncSubOption(sel);
   });
 
+  // ---- Living Photo AR frame: image + video rows, each file uploaded as soon as it's picked ----
+  document.querySelectorAll('[data-ar-upload]').forEach(function (box) {
+    var rowsEl = box.querySelector('.ar-upload-rows');
+    var template = box.querySelector('template');
+    var addBtn = box.querySelector('.ar-upload-add');
+    var errorEl = box.querySelector('.ar-upload-error');
+    var extraEl = box.querySelector('.ar-upload-extra');
+    var maxItems = parseInt(box.getAttribute('data-max-items'), 10) || 5;
+    var nextIndex = 0;
+    var kinds = {
+      photo: { label: 'Image', max: +box.getAttribute('data-max-photo-bytes'), types: ['image/jpeg', 'image/png'], typeError: 'Please choose a JPG or PNG image.' },
+      video: { label: 'Video', max: +box.getAttribute('data-max-video-bytes'), types: ['video/mp4', 'video/quicktime', 'video/webm'], typeError: 'Please choose an MP4, MOV or WebM video.' }
+    };
+    var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+
+    function rows() { return rowsEl.querySelectorAll('.ar-upload-row'); }
+
+    function refresh() {
+      var all = rows();
+      all.forEach(function (row, i) {
+        row.querySelector('.ar-upload-num').textContent = i + 1;
+        row.querySelector('.ar-upload-remove').hidden = all.length === 1;
+      });
+      addBtn.hidden = all.length >= maxItems;
+      if (extraEl) {
+        extraEl.value = box.querySelector('[data-token="photo"][value]:not([value=""])') ? '1' : '';
+        recalcCustomTotal();
+      }
+    }
+
+    function setState(btn, state, text, percent) {
+      btn.classList.remove('is-busy', 'is-done', 'is-error');
+      if (state) btn.classList.add('is-' + state);
+      btn.querySelector('.ar-upload-text').textContent = text;
+      btn.querySelector('.ar-upload-bar').style.width = state === 'busy' ? (percent || 0) + '%' : '0';
+    }
+
+    function upload(row, btn, file) {
+      var kind = btn.getAttribute('data-kind');
+      var spec = kinds[kind];
+      var tokenEl = row.querySelector('[data-token="' + kind + '"]');
+      var msgEl = row.querySelector('.ar-upload-msg');
+
+      if (btn._xhr) btn._xhr.abort();
+      tokenEl.setAttribute('value', '');
+      msgEl.textContent = '';
+      errorEl.textContent = '';
+
+      // Some phones report no type for .mov files — the server checks the real content either way.
+      if (file.type && spec.types.indexOf(file.type) === -1) {
+        setState(btn, 'error', spec.label);
+        msgEl.textContent = spec.typeError;
+        refresh();
+        return;
+      }
+      if (file.size > spec.max) {
+        setState(btn, 'error', spec.label);
+        msgEl.textContent = 'That ' + spec.label.toLowerCase() + ' is ' + (file.size / 1048576).toFixed(1) + 'MB. Maximum is ' + Math.round(spec.max / 1048576) + 'MB.';
+        refresh();
+        return;
+      }
+
+      var data = new FormData();
+      data.append('file', file);
+      data.append('kind', kind);
+      data.append('option_id', box.getAttribute('data-option-id'));
+
+      var xhr = new XMLHttpRequest();
+      btn._xhr = xhr;
+      xhr.open('POST', box.getAttribute('data-upload-url'));
+      if (csrfMeta) xhr.setRequestHeader('X-CSRF-Token', csrfMeta.getAttribute('content'));
+      xhr.upload.onprogress = function (e) {
+        if (e.lengthComputable) {
+          var pct = Math.round(e.loaded / e.total * 100);
+          setState(btn, 'busy', pct + '%', pct);
+        }
+      };
+      xhr.onload = function () {
+        btn._xhr = null;
+        var res = null;
+        try { res = JSON.parse(xhr.responseText); } catch (err) { /* non-JSON, e.g. a proxy's 413 page */ }
+        if (res && res.ok) {
+          tokenEl.setAttribute('value', res.token);
+          setState(btn, 'done', spec.label + ' ✓');
+          btn.title = file.name;
+        } else {
+          setState(btn, 'error', spec.label);
+          msgEl.textContent = (res && res.error) || (xhr.status === 413 ? 'That file is larger than the server allows.' : 'Upload failed. Please try again.');
+        }
+        refresh();
+      };
+      xhr.onerror = function () {
+        btn._xhr = null;
+        setState(btn, 'error', spec.label);
+        msgEl.textContent = 'Upload failed. Please check your connection and try again.';
+        refresh();
+      };
+      setState(btn, 'busy', '0%', 0);
+      xhr.send(data);
+    }
+
+    function addRow() {
+      var row = template.content.firstElementChild.cloneNode(true);
+      var index = nextIndex++;
+      var name = box.getAttribute('data-name');
+      row.querySelector('[data-token="photo"]').name = name + '[' + index + '][photo]';
+      row.querySelector('[data-token="video"]').name = name + '[' + index + '][video]';
+      row.querySelectorAll('.ar-upload-btn').forEach(function (btn) {
+        var input = btn.querySelector('input[type=file]');
+        input.addEventListener('change', function () {
+          var file = input.files[0];
+          input.value = ''; // the file itself is never part of the cart form
+          if (file) upload(row, btn, file);
+        });
+      });
+      row.querySelector('.ar-upload-remove').addEventListener('click', function () {
+        row.querySelectorAll('.ar-upload-btn').forEach(function (btn) { if (btn._xhr) btn._xhr.abort(); });
+        row.remove();
+        errorEl.textContent = '';
+        refresh();
+      });
+      rowsEl.appendChild(row);
+      refresh();
+    }
+
+    addBtn.addEventListener('click', addRow);
+    addRow();
+
+    var form = box.closest('form');
+    if (form) {
+      form.addEventListener('submit', function (e) {
+        var message = '';
+        var complete = 0;
+        if (box.querySelector('.ar-upload-btn.is-busy')) {
+          message = 'Please wait for your uploads to finish.';
+        } else {
+          rows().forEach(function (row, i) {
+            var hasPhoto = !!row.querySelector('[data-token="photo"]').getAttribute('value');
+            var hasVideo = !!row.querySelector('[data-token="video"]').getAttribute('value');
+            if (hasPhoto && hasVideo) complete++;
+            else if ((hasPhoto || hasVideo) && !message) message = 'Photo ' + (i + 1) + ' needs both an image and a video.';
+          });
+          if (!message && complete === 0 && box.getAttribute('data-required') === '1') {
+            message = 'Please add at least one image and its video.';
+          }
+        }
+        if (message) {
+          e.preventDefault();
+          errorEl.textContent = message;
+          box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      });
+    }
+  });
+
   recalcCustomTotal();
 
   // ---- Pincode checker ----

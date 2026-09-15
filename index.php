@@ -96,6 +96,10 @@ try {
             (new CartController())->add();
             break;
 
+        case $path === '/cart/ar-upload' && $method === 'POST':
+            (new CartController())->uploadArMedia();
+            break;
+
         case $path === '/cart/update' && $method === 'POST':
             (new CartController())->update();
             break;

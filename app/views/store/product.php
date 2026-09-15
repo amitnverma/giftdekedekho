@@ -145,23 +145,51 @@ $shareUrl = url('/product/' . $product['slug']);
                   it instantly plays your personal video. Our team will contact you after order confirmation to collect your video.
                 </p>
 
-              <?php elseif ($opt['option_type'] === 'ar_frame'): ?>
-                <p style="font-size:13px;color:var(--color-muted);margin:0 0 10px">
-                  Upload the photo we should print, and paste the YouTube link of the video it should play.
-                  Point any phone camera at the finished frame and your video starts — no app, no QR code, nothing printed on the photo.
+              <?php elseif ($opt['option_type'] === 'ar_frame'):
+                    require_once APP_PATH . '/services/ArFrameService.php'; ?>
+                <p class="ar-upload-help">
+                  Add each photo we should print with the video it should play. Point a phone camera at the finished photo and its video starts.
                 </p>
-                <label style="font-weight:500;font-size:13px;display:block;margin-bottom:4px">Photo to print</label>
-                <input type="file" id="<?= $inputId ?>" class="photo-upload-input" name="<?= $fieldName ?>[file]"
-                       accept="image/jpeg,image/png" <?= $opt['is_required'] ? 'required' : '' ?>>
-                <small style="color:var(--color-muted);display:block;margin-bottom:10px">
-                  JPG or PNG, max 10MB. Sharp, detailed photos work best — very plain or blurry photos may not trigger reliably.
-                </small>
-                <div class="crop-preview-wrap" data-crop-for="<?= $inputId ?>"></div>
-                <label style="font-weight:500;font-size:13px;display:block;margin-bottom:4px">YouTube video link</label>
-                <input type="url" name="<?= $fieldName ?>[video_url]" placeholder="https://www.youtube.com/watch?v=…"
-                       <?= $opt['extra_charge'] > 0 ? 'data-extra="' . (float)$opt['extra_charge'] . '"' : '' ?>
-                       <?= $opt['is_required'] ? 'required' : '' ?>>
-                <small style="color:var(--color-muted)">Make sure the video is Public or Unlisted — Private videos will not play for the recipient.</small>
+                <div class="ar-upload" data-ar-upload
+                     data-upload-url="<?= e(url('/cart/ar-upload')) ?>"
+                     data-option-id="<?= (int)$opt['id'] ?>"
+                     data-name="<?= $fieldName ?>[items]"
+                     data-required="<?= $opt['is_required'] ? '1' : '0' ?>"
+                     data-max-items="<?= ArFrameService::MAX_CUSTOMER_ITEMS ?>"
+                     data-max-photo-bytes="<?= ArFrameService::MAX_PHOTO_BYTES ?>"
+                     data-max-video-bytes="<?= ArFrameService::MAX_CUSTOMER_VIDEO_BYTES ?>">
+                  <?php if ((float)$opt['extra_charge'] > 0): ?>
+                    <input type="hidden" class="ar-upload-extra" value="" data-extra="<?= (float)$opt['extra_charge'] ?>">
+                  <?php endif; ?>
+                  <div class="ar-upload-rows"></div>
+                  <p class="ar-upload-error" role="alert"></p>
+                  <button type="button" class="ar-upload-add">+ Add another photo</button>
+                  <small class="ar-upload-note">
+                    Image: JPG or PNG, max <?= (int)(ArFrameService::MAX_PHOTO_BYTES / 1048576) ?>MB · Video: MP4, MOV or WebM, max <?= (int)(ArFrameService::MAX_CUSTOMER_VIDEO_BYTES / 1048576) ?>MB each.
+                    Sharp, detailed photos work best.
+                  </small>
+                  <template>
+                    <div class="ar-upload-row">
+                      <span class="ar-upload-num">1</span>
+                      <label class="ar-upload-btn" data-kind="photo">
+                        <input type="file" accept="image/jpeg,image/png">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+                        <span class="ar-upload-text">Image</span><span class="req">*</span>
+                        <span class="ar-upload-bar"></span>
+                      </label>
+                      <label class="ar-upload-btn" data-kind="video">
+                        <input type="file" accept="video/mp4,video/quicktime,video/webm">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="m22 8-6 4 6 4V8Z"/></svg>
+                        <span class="ar-upload-text">Video</span><span class="req">*</span>
+                        <span class="ar-upload-bar"></span>
+                      </label>
+                      <input type="hidden" data-token="photo">
+                      <input type="hidden" data-token="video">
+                      <button type="button" class="ar-upload-remove" aria-label="Remove this photo">&times;</button>
+                      <p class="ar-upload-msg"></p>
+                    </div>
+                  </template>
+                </div>
 
               <?php else: ?>
                 <input type="text" id="<?= $inputId ?>" name="<?= $fieldName ?>[value]" <?= $opt['extra_charge'] > 0 ? 'data-extra="' . (float)$opt['extra_charge'] . '"' : '' ?> placeholder="Enter your choice…" <?= $opt['is_required'] ? 'required' : '' ?>>

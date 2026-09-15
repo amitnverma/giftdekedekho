@@ -318,7 +318,26 @@ class CheckoutController extends BaseController
             $arService = new ArFrameService();
 
             foreach ($customization as $entry) {
-                if (($entry['option_type'] ?? '') !== 'ar_frame' || empty($entry['photo'])) {
+                if (($entry['option_type'] ?? '') !== 'ar_frame') {
+                    continue;
+                }
+
+                // Photos and videos the customer uploaded from the product page.
+                if (!empty($entry['items']) && is_array($entry['items'])) {
+                    $items = [];
+                    foreach ($entry['items'] as $pair) {
+                        if (!empty($pair['photo']) && !empty($pair['video'])) {
+                            $items[] = ['photo_path' => $pair['photo'], 'video_type' => 'upload', 'video_path' => $pair['video']];
+                        }
+                    }
+                    if (!empty($items)) {
+                        $arService->createFrame(['channel' => 'online', 'order_item_id' => $orderItemId], $items);
+                    }
+                    continue;
+                }
+
+                // Carts filled before uploads existed: one photo and a YouTube link.
+                if (empty($entry['photo'])) {
                     continue;
                 }
                 $arService->createFrame([

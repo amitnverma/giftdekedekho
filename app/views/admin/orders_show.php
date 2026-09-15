@@ -148,6 +148,20 @@ foreach ($order['items'] as $item) {
                                                 <?php endif; ?>
                                                 <strong style="color:#b45309;"><?= e($c['value'] ?? '') ?></strong>
                                             </span>
+                                        <?php elseif (($c['option_type'] ?? '') === 'ar_frame' && !empty($c['items']) && is_array($c['items'])):
+                                            require_once APP_PATH . '/services/ArFrameService.php'; ?>
+                                            <?= e($c['value'] ?? '') ?>
+                                            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;">
+                                                <?php foreach (array_values($c['items']) as $n => $pair): ?>
+                                                    <div style="font-size:11px;text-align:center;">
+                                                        <a href="<?= e(ArFrameService::fileUrl($pair['photo'] ?? '')) ?>" target="_blank">
+                                                            <img src="<?= e(ArFrameService::fileUrl($pair['photo'] ?? '')) ?>" alt="Photo <?= $n + 1 ?>"
+                                                                 style="width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid #d1d5db;display:block;">
+                                                        </a>
+                                                        <a href="<?= e(ArFrameService::fileUrl($pair['video'] ?? '')) ?>" target="_blank">Video <?= $n + 1 ?></a>
+                                                    </div>
+                                                <?php endforeach; ?>
+                                            </div>
                                         <?php elseif (($c['option_type'] ?? '') === 'text_engraving'): ?>
                                             <span style="font-weight:700;font-family:serif;letter-spacing:1px;color:#b45309;">&ldquo;<?= e($c['value'] ?? '') ?>&rdquo;</span>
                                         <?php elseif (is_bool($c['value'] ?? null) || $c['value'] === true): ?>
