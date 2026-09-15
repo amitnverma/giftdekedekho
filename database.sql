@@ -370,9 +370,10 @@ CREATE TABLE IF NOT EXISTS `ar_frames` (
   `order_item_id`       INT UNSIGNED DEFAULT NULL,
   `customer_name`       VARCHAR(120) DEFAULT NULL,
   `customer_phone`      VARCHAR(15)  DEFAULT NULL,
-  `photo_path`          VARCHAR(500) NOT NULL,
-  `target_path`         VARCHAR(500) DEFAULT NULL,
-  `video_type`          ENUM('youtube','upload') NOT NULL DEFAULT 'youtube',
+  `photo_path`          VARCHAR(500) DEFAULT NULL,            -- legacy single photo; photos live in ar_frame_items
+  `target_path`         VARCHAR(500) DEFAULT NULL,            -- the file the scan page loads (all photos)
+  `target_items`        JSON DEFAULT NULL,                    -- ar_frame_items.id at each index of target_path
+  `video_type`          ENUM('youtube','vimeo','direct','upload') NOT NULL DEFAULT 'youtube',
   `video_url`           VARCHAR(500) DEFAULT NULL,
   `video_path`          VARCHAR(500) DEFAULT NULL,
   `playback_mode`       ENUM('fullscreen','overlay') NOT NULL DEFAULT 'fullscreen',
@@ -397,6 +398,32 @@ CREATE TABLE IF NOT EXISTS `ar_frames` (
     REFERENCES `order_items` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_arf_created_by` FOREIGN KEY (`created_by`)
     REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------
+-- Table: ar_frame_items  (the photos behind one Living Photo QR sticker)
+-- ----------------------------
+-- Each photo plays its own video and has its own target and live test.
+CREATE TABLE IF NOT EXISTS `ar_frame_items` (
+  `id`                  INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `frame_id`            INT UNSIGNED NOT NULL,
+  `sort_order`          SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+  `photo_path`          VARCHAR(500) NOT NULL,               -- relative to public/uploads
+  `target_path`         VARCHAR(500) DEFAULT NULL,           -- this photo's own compiled .mind
+  `video_type`          ENUM('youtube','vimeo','direct','upload') NOT NULL DEFAULT 'youtube',
+  `video_url`           VARCHAR(500) DEFAULT NULL,
+  `video_path`          VARCHAR(500) DEFAULT NULL,
+  `playback_mode`       ENUM('fullscreen','overlay') NOT NULL DEFAULT 'fullscreen',
+  `trackability_score`  SMALLINT UNSIGNED DEFAULT NULL,
+  `trackability_flag`   ENUM('poor','fair','good') DEFAULT NULL,
+  `trackability_json`   JSON DEFAULT NULL,
+  `verified_at`         DATETIME DEFAULT NULL,               -- this photo passed the live scan test
+  `created_at`          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_arfi_frame` (`frame_id`, `sort_order`),
+  CONSTRAINT `fk_arfi_frame` FOREIGN KEY (`frame_id`)
+    REFERENCES `ar_frames` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET FOREIGN_KEY_CHECKS = 1;

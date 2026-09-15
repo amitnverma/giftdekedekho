@@ -96,10 +96,13 @@ $flagBadge = ['good' => 'admin-badge-green', 'fair' => 'admin-badge-yellow', 'po
             <tbody>
             <?php foreach ($frames as $f): ?>
                 <tr>
-                    <td>
-                        <?php $photo = ArFrameService::fileUrl($f['photo_path']); ?>
+                    <td style="white-space:nowrap">
+                        <?php $photo = ArFrameService::fileUrl($f['first_photo']); ?>
                         <?php if ($photo !== ''): ?>
                             <img class="admin-thumb" src="<?= e($photo) ?>" alt="" loading="lazy">
+                        <?php endif; ?>
+                        <?php if ((int)$f['item_count'] > 1): ?>
+                            <span class="admin-badge admin-badge-gray" title="<?= (int)$f['item_count'] ?> photos on one sticker">+<?= (int)$f['item_count'] - 1 ?></span>
                         <?php endif; ?>
                     </td>
                     <td>
@@ -123,18 +126,22 @@ $flagBadge = ['good' => 'admin-badge-green', 'fair' => 'admin-badge-yellow', 'po
                         <?php endif; ?>
                     </td>
                     <td>
-                        <?php if ($f['trackability_flag'] === null): ?>
+                        <?php // The weakest photo — a frame is only as scannable as that. ?>
+                        <?php if ($f['min_flag'] === null): ?>
                             <span class="admin-muted">—</span>
                         <?php else: ?>
-                            <span class="admin-badge <?= $flagBadge[$f['trackability_flag']] ?? 'admin-badge-gray' ?>">
-                                <?= (int)$f['trackability_score'] ?>/100
+                            <span class="admin-badge <?= $flagBadge[$f['min_flag']] ?? 'admin-badge-gray' ?>"
+                                  <?= (int)$f['item_count'] > 1 ? 'title="Weakest of ' . (int)$f['item_count'] . ' photos"' : '' ?>>
+                                <?= (int)$f['min_score'] ?>/100
                             </span>
                         <?php endif; ?>
                     </td>
                     <td>
                         <?php if (!empty($f['verified_at'])): ?>
                             <span class="admin-badge admin-badge-green" title="<?= e($f['verified_at']) ?>">Passed</span>
-                        <?php elseif (!empty($f['target_path'])): ?>
+                        <?php elseif ((int)$f['target_count'] > 0 && (int)$f['item_count'] > 1): ?>
+                            <span class="admin-badge admin-badge-yellow"><?= (int)$f['verified_count'] ?>/<?= (int)$f['item_count'] ?> tested</span>
+                        <?php elseif ((int)$f['target_count'] > 0): ?>
                             <span class="admin-badge admin-badge-yellow">Not tested</span>
                         <?php else: ?>
                             <span class="admin-muted">—</span>

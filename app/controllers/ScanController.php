@@ -2,22 +2,21 @@
 /**
  * Public Living Photo scanner.
  *
- * /scan/{slug}  — scans against one frame's target. Preferred: matching against
- *                 a single target is faster and far more reliable than searching
- *                 every active frame, and it stays that way as the catalogue grows.
- * /scan         — the evergreen URL. There is no reliable way to match against
- *                 every target at once on a phone, so this explains where to find
- *                 the personal link rather than pretending to scan everything.
+ * /scan/{slug}  — scans against one frame's photos. Preferred: matching against
+ *                 a handful of targets is faster and far more reliable than
+ *                 searching every active frame, and it stays that way as the
+ *                 catalogue grows.
+ * /scan         — the evergreen URL, matching every active photo at once.
  */
 class ScanController extends BaseController
 {
     /**
      * The evergreen /scan URL: opens the camera and matches against every active
-     * frame at once, so a recipient can scan without knowing their code.
+     * photo at once, so a recipient can scan without knowing their code.
      *
-     * The per-frame /scan/{slug} link on the printed card stays the reliable
-     * path — it loads a single target, so it is smaller and faster regardless of
-     * how many frames exist.
+     * The per-frame /scan/{slug} link on the sticker stays the reliable path —
+     * it loads only that frame's targets, so it is smaller and faster regardless
+     * of how many frames exist.
      */
     public function index(): void
     {
@@ -38,15 +37,15 @@ class ScanController extends BaseController
 
         // One entry per target, indexed the same way the browser reports a match.
         $targets = [];
-        foreach ($bundle['frames'] as $frame) {
-            $targets[] = $service->browserTarget($frame);
+        foreach ($bundle['targets'] as $row) {
+            $targets[] = $service->browserTarget($row, (string)$row['slug']);
         }
 
         renderRaw('store/scan_page', [
             'frame' => null,
             'targets' => $targets,
             'targetUrl' => ArFrameService::fileUrl($bundle['path']),
-            'photoUrl' => '',
+            'photoUrls' => [],
             'isAdminTest' => false,
             'verifyUrl' => null,
             'backUrl' => null,
@@ -90,24 +89,24 @@ class ScanController extends BaseController
             $this->invalid('This Living Photo link is no longer available.');
             return;
         }
-        if (empty($frame['target_path'])) {
+
+        // Every photo of the frame that is ready, in the order of the one target
+        // file that holds them all.
+        $scan = $service->frameScan($frame);
+        $playable = $scan === null ? [] : array_filter($scan['targets'], fn($t) => $t['videoType'] !== null);
+        if (!$playable) {
             $this->invalid('This Living Photo is still being prepared. Please try again a little later.');
             return;
         }
 
-        $playback = $service->playback($frame);
-        if ($playback === null) {
-            $this->invalid('This Living Photo is still being prepared. Please try again a little later.');
-            return;
-        }
-
-        // Single frame expressed in the same shape as the scan-all page, so the
-        // view and the browser module have exactly one code path.
+        // Expressed in the same shape as the scan-all page, so the view and the
+        // browser module have exactly one code path. No photo URLs: the photos
+        // are the surprise, and the public page never shows them.
         renderRaw('store/scan_page', [
             'frame' => $frame,
-            'targets' => [$service->browserTarget($frame)],
-            'targetUrl' => ArFrameService::fileUrl($frame['target_path']),
-            'photoUrl' => ArFrameService::fileUrl($frame['photo_path']),
+            'targets' => $scan['targets'],
+            'targetUrl' => $scan['targetUrl'],
+            'photoUrls' => [],
             'isAdminTest' => false,
             'verifyUrl' => null,
             'backUrl' => null,

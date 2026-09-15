@@ -131,8 +131,20 @@ class AdminRouter
             case preg_match('#^/ar-frames/(\d+)/status$#', $path, $m) === 1:
                 (new AdminArFrameController())->updateStatus((int)$m[1]);
                 break;
-            case preg_match('#^/ar-frames/(\d+)/replace-photo$#', $path, $m) === 1:
-                (new AdminArFrameController())->replacePhoto((int)$m[1]);
+            case preg_match('#^/ar-frames/(\d+)/items$#', $path, $m) === 1:
+                (new AdminArFrameController())->addItem((int)$m[1]);
+                break;
+            case preg_match('#^/ar-frames/(\d+)/items/(\d+)/replace-photo$#', $path, $m) === 1:
+                (new AdminArFrameController())->replaceItemPhoto((int)$m[1], (int)$m[2]);
+                break;
+            case preg_match('#^/ar-frames/(\d+)/items/(\d+)/video$#', $path, $m) === 1:
+                (new AdminArFrameController())->updateItemVideo((int)$m[1], (int)$m[2]);
+                break;
+            case preg_match('#^/ar-frames/(\d+)/items/(\d+)/generate-target$#', $path, $m) === 1:
+                (new AdminArFrameController())->generateItemTarget((int)$m[1], (int)$m[2]);
+                break;
+            case preg_match('#^/ar-frames/(\d+)/items/(\d+)/delete$#', $path, $m) === 1:
+                (new AdminArFrameController())->deleteItem((int)$m[1], (int)$m[2]);
                 break;
             case preg_match('#^/ar-frames/(\d+)/details$#', $path, $m) === 1:
                 (new AdminArFrameController())->updateDetails((int)$m[1]);

@@ -23,6 +23,7 @@ require __DIR__ . '/../config/database.php';
 require __DIR__ . '/../app/helpers.php';
 require __DIR__ . '/../app/models/BaseModel.php';
 require __DIR__ . '/../app/models/ArFrame.php';
+require __DIR__ . '/../app/models/ArFrameItem.php';
 require __DIR__ . '/../app/services/ArTargetService.php';
 require __DIR__ . '/../app/services/ArFrameService.php';
 
@@ -235,8 +236,12 @@ function printUrls(array $frame): void
     out('    scan page   ' . $base . '/scan/' . $frame['slug']);
     out('    admin frame ' . $base . '/admin/ar-frames/' . $frame['id']);
     out('    live test   ' . $base . '/admin/ar-frames/' . $frame['id'] . '/live-test');
-    out('    the photo   ' . ArFrameService::fileUrl($frame['photo_path']));
-    out('    Open "the photo" on your phone, then hold the phone up to your webcam.');
+    $service = new ArFrameService();
+    $items = $service->items($frame);
+    foreach ($items as $position => $item) {
+        out('    photo ' . ($position + 1) . '     ' . ArFrameService::fileUrl($item['photo_path']));
+    }
+    out('    Open a photo on your phone, then hold the phone up to your webcam.');
 
     $ip = lanIp();
     if ($ip !== null) {
@@ -247,9 +252,12 @@ function printUrls(array $frame): void
     }
 
     out("\n  \033[1mNo camera at all\033[0m — proves recognition headlessly");
-    $photo = (new ArFrameService())->absolutePath((string)$frame['photo_path']);
+    // verify-match reads only the first entry of a .mind file, so point it at a
+    // photo's own target rather than the frame's combined one.
+    $first = $items[0] ?? [];
+    $photo = $service->absolutePath((string)($first['photo_path'] ?? ''));
     out('    node tools/mindar-compile/verify-match.mjs \\');
-    out('      public/uploads/' . $frame['target_path'] . ' \\');
+    out('      public/uploads/' . ($first['target_path'] ?? $frame['target_path']) . ' \\');
     out('      ' . ($photo ?? 'path/to/photo.jpg'));
     out('');
 }
@@ -270,9 +278,8 @@ function cmdClean(): int
 
     $service = new ArFrameService();
     foreach ($rows as $row) {
-        $service->deleteFile($row['photo_path']);
-        $service->deleteFile($row['target_path']);
-        $service->deleteFile($row['video_path']);
+        // Only the files this frame's own rows point at — never a wildcard.
+        $service->deleteFrameFiles($row);
         $db->prepare('DELETE FROM ar_frames WHERE id = ?')->execute([$row['id']]);
         ok('Removed ' . $row['slug']);
     }

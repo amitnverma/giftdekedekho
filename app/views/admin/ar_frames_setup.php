@@ -1,6 +1,7 @@
 <?php
 /**
- * Shown when the ar_frames table has not been created yet.
+ * Shown when an AR frames migration has not been run yet — the original table,
+ * or the later multi-photo one.
  *
  * Deployment ships code without running migrations, so this state is expected
  * on a fresh deploy rather than exceptional. Says exactly what to run instead of
@@ -8,11 +9,11 @@
  */
 ?>
 <div class="admin-alert admin-alert-error">
-    <strong>Setup not finished — the AR frames table does not exist yet.</strong>
+    <strong>Setup not finished — <?= e($setupTitle ?? 'the AR frames table does not exist yet.') ?></strong>
 </div>
 
 <div class="admin-card admin-mt" style="max-width:760px">
-    <h3 class="admin-card-title">1 · Create the database table</h3>
+    <h3 class="admin-card-title">1 · Run the database migration</h3>
     <p class="admin-help-text" style="margin-top:0">
         Deployment updates the code but does not run migrations. Run this once on the server,
         from the site directory:

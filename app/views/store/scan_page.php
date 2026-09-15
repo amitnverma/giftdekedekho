@@ -15,11 +15,23 @@ $isAdminTest = !empty($isAdminTest);
 $frame = $frame ?? null;
 // $frame is null on the scan-anything page, which matches every active frame.
 $isMulti = $frame === null;
-$metrics = !empty($frame['trackability_json']) ? json_decode($frame['trackability_json'], true) : null;
+$photoUrls = $photoUrls ?? [];
+$photoCount = count($targets);
+// One sticker, several photos: the recipient has more than one thing to find.
+$isSet = !$isMulti && $photoCount > 1;
+
+// The viewfinder takes the photo's shape. With several photos that only works
+// when they share one; otherwise a neutral square is more honest than
+// guessing which photo the phone is about to be pointed at.
 $aspect = 1.0;
-if ($metrics && !empty($metrics['compiled_width']) && !empty($metrics['compiled_height'])) {
-    $aspect = (float)$metrics['compiled_width'] / (float)$metrics['compiled_height'];
+$aspects = array_values(array_filter(array_column($targets, 'aspect')));
+if ($aspects && count($aspects) === $photoCount) {
+    $spread = max($aspects) / min($aspects);
+    if ($spread <= 1.02) {
+        $aspect = (float)$aspects[0];
+    }
 }
+$anyPoor = in_array('poor', array_column($targets, 'trackabilityFlag'), true);
 
 // ?debug=1 shows a live diagnostic overlay. Deliberately available on the public
 // page too: when a recipient reports "nothing happens", this is the only way to
@@ -33,16 +45,20 @@ $showDebug = isset($_GET['debug']) && $_GET['debug'] === '1';
 //
 // The admin live test still shows it: there is no surprise to protect there,
 // and the tester has to know which photo to point the phone at.
-$revealPhoto = $isAdminTest && $photoUrl !== '';
+$revealPhoto = $isAdminTest && $photoUrls;
 
 $scanConfig = [
     'targetUrl' => $targetUrl,
     // Index in this array is the anchor index MindAR reports on a match, so a
     // single frame and the scan-anything bundle share one code path.
     'targets'   => $targets,
-    'aspect'    => $aspect,
     'verifyUrl' => $isAdminTest ? $verifyUrl : null,
     'csrf'      => $isAdminTest ? $csrf : null,
+    // A wrong match costs something on /scan (a stranger's video) and in the
+    // admin test (it marks a photo verified), so those wait for a surer lock.
+    'careful'   => $isMulti || $isAdminTest,
+    // Count found photos on screen, so the recipient knows there are more.
+    'showProgress' => $isSet,
     // Arriving here means a QR sticker was deliberately scanned, so go straight
     // to the camera. Not on the scan-anything page, which would start a
     // multi-megabyte download unasked, and not on the admin test, where the
@@ -86,6 +102,17 @@ $scanConfig = [
         width: 140px; height: 140px; object-fit: cover; border-radius: 14px;
         margin-bottom: 22px; border: 2px solid rgba(255,255,255,.22);
     }
+    /* Admin test with several photos: all of them, smaller, in one row. */
+    .ar-thumbs { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 14px; }
+    .ar-thumbs .ar-thumb { width: 72px; height: 72px; margin: 0; border-radius: 10px; }
+
+    /* How many of a frame's photos have been found. */
+    .ar-progress {
+        display: inline-block; margin: 10px 0 0; padding: 6px 13px; border-radius: 999px;
+        font-size: 13px; font-weight: 700; letter-spacing: .01em;
+        background: rgba(0,0,0,.55); backdrop-filter: blur(8px);
+    }
+    .ar-progress[hidden] { display: none; }
 
     /* Scanning guidance over the live camera */
     #arStatus {
@@ -441,6 +468,14 @@ $scanConfig = [
         width: 40px; height: 40px; border-radius: 50%; border: 0; cursor: pointer;
         background: rgba(255,255,255,.22); color: #fff; font-size: 20px; line-height: 1; font-family: inherit;
     }
+    /* Back to the camera for the next photo. Mirrors the close button, so it is
+       where a thumb already is and never covers the video. */
+    #arNext {
+        position: absolute; top: calc(14px + env(safe-area-inset-top)); left: 14px; z-index: 33;
+        height: 40px; padding: 0 16px; border-radius: 999px; border: 0; cursor: pointer;
+        background: rgba(255,255,255,.22); color: #fff; font-size: 14px; font-weight: 600; font-family: inherit;
+    }
+    #arNext[hidden] { display: none; }
     #arTapToPlay {
         position: absolute; inset: 0; z-index: 32; display: none;
         flex-direction: column; align-items: center; justify-content: center;
@@ -494,12 +529,20 @@ $scanConfig = [
      happens — it is the gesture that lets the video play with sound later. -->
 <div class="ar-panel" id="arIntro">
     <?php if ($revealPhoto): ?>
-        <img class="ar-thumb" src="<?= e($photoUrl) ?>" alt="">
+        <?php if (count($photoUrls) === 1): ?>
+            <img class="ar-thumb" src="<?= e($photoUrls[0]) ?>" alt="">
+        <?php else: ?>
+            <div class="ar-thumbs">
+                <?php foreach ($photoUrls as $url): ?>
+                    <img class="ar-thumb" src="<?= e($url) ?>" alt="">
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
         <!-- Labelled explicitly. Without this, someone holding a phone reads the
              thumbnail as the thing to scan — which would mean pointing the phone
              at its own screen. -->
         <p style="font-size:12px;color:#8b8b95;margin:0 0 18px;letter-spacing:.02em">
-            ↑ This is the photo to look for — not the thing to scan
+            ↑ <?= count($photoUrls) === 1 ? 'This is the photo' : 'These are the photos' ?> to look for — not the thing to scan
         </p>
     <?php endif; ?>
     <h1><?= $isAdminTest ? 'Live scan test' : 'Your Living Photo' ?></h1>
@@ -507,7 +550,16 @@ $scanConfig = [
         <?php if ($isAdminTest): ?>
             Open this page <strong>on a phone</strong>, then point it at the photo shown on your computer
             screen (use "Show photo full-screen" on the frame page) or at a printed proof.
-            The frame is only marked verified when a real match fires — it cannot be printed or handed over until then.
+            <?php if ($isSet): ?>
+                Scan <strong>each of the <?= $photoCount ?> photos</strong> in turn — every one has to match before the
+                frame can be printed or handed over.
+            <?php else: ?>
+                The frame is only marked verified when a real match fires — it cannot be printed or handed over until then.
+            <?php endif; ?>
+        <?php elseif ($isSet): ?>
+            Your gift has <strong><?= $photoCount ?> photos</strong>. Point your camera at any of them and its video
+            will start playing — then come back and find the next one.
+            Nothing to install — just allow camera access.
         <?php else: ?>
             Point your camera at the <strong>photo in your frame</strong> and the video will start playing.
             Nothing to install — just allow camera access.
@@ -521,9 +573,9 @@ $scanConfig = [
     <?php endif; ?>
     <button class="ar-btn" id="arStart" type="button">Start camera</button>
     <?php // $frame is null on the scan-anything page, which has no single frame. ?>
-    <?php if (!$isAdminTest && ($frame['trackability_flag'] ?? null) === 'poor'): ?>
+    <?php if (!$isAdminTest && !$isMulti && $anyPoor): ?>
         <p style="margin-top:18px;font-size:13px;color:#f5b400">
-            Tip: this photo is quite plain, so it may need good light and a steady hand.
+            Tip: <?= $isSet ? 'some of these photos are' : 'this photo is' ?> quite plain, so it may need good light and a steady hand.
         </p>
     <?php endif; ?>
 </div>
@@ -539,22 +591,26 @@ $scanConfig = [
      it) rather than asking them to recognise an image. -->
 <div id="arStatus"<?= $isAdminTest ? ' class="has-topbar"' : '' ?> style="--ar-target-aspect:<?= $aspect > 0 ? round($aspect, 4) : 1 ?>">
     <div class="ar-guide-head">
-        <h2><?= $isMulti ? 'Find your Living Photo' : 'Point at your framed photo' ?></h2>
+        <h2><?= $isMulti ? 'Find your Living Photo' : ($isSet ? 'Point at any of your photos' : 'Point at your framed photo') ?></h2>
         <p>
-            <?php if ($revealPhoto): ?>
+            <?php if ($revealPhoto && count($photoUrls) === 1): ?>
                 Line the real photo up with the faded one, until it fills the corners
             <?php else: ?>
                 Hold the phone straight on and fill the box with the photo. It doesn't have to be exact.
             <?php endif; ?>
         </p>
+        <?php if ($isSet): ?>
+            <p class="ar-progress" id="arProgress" hidden></p>
+        <?php endif; ?>
     </div>
     <div class="ar-reticle">
         <span class="ar-corner ar-corner-tl"></span>
         <span class="ar-corner ar-corner-tr"></span>
         <span class="ar-corner ar-corner-bl"></span>
         <span class="ar-corner ar-corner-br"></span>
-        <?php if ($revealPhoto): ?>
-            <img class="ar-ghost" src="<?= e($photoUrl) ?>" alt="" aria-hidden="true">
+        <?php // A faded guide only makes sense when there is one photo to line up with. ?>
+        <?php if ($revealPhoto && count($photoUrls) === 1): ?>
+            <img class="ar-ghost" src="<?= e($photoUrls[0]) ?>" alt="" aria-hidden="true">
         <?php else: ?>
             <span class="ar-sweep-track" aria-hidden="true"><span class="ar-sweep"></span></span>
             <span class="ar-silhouette" aria-hidden="true">
@@ -587,6 +643,9 @@ $scanConfig = [
 <!-- Player -->
 <div id="arPlayer">
     <button id="arClose" type="button" aria-label="Close video">×</button>
+    <?php if ($isSet): ?>
+        <button id="arNext" type="button" hidden>← Scan another photo</button>
+    <?php endif; ?>
     <!-- The video plays inside a picture frame, so the moment reads as the
          gift coming alive rather than a media player taking over the screen.
          src is set by the module once a match identifies which frame it is. -->

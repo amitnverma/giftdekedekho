@@ -7,6 +7,12 @@
  * target generation exist exactly once. The only difference between channels is
  * *when* generateTarget() is called: immediately at the counter for walk-ins,
  * whenever an admin works the queue for online orders.
+ *
+ * A frame is the gift and its QR sticker. What the recipient points the camera
+ * at are its items — one or more photos, each playing its own video. Each item
+ * compiles to its own target; the frame's target is those merged into one file,
+ * because the scan page can load only one, and `target_items` records which item
+ * is at which index of it.
  */
 class ArFrameService
 {
@@ -39,11 +45,22 @@ class ArFrameService
         'youtube-nocookie.com', 'www.youtube-nocookie.com',
     ];
 
+    /** Columns that describe one photo/video pair rather than the frame as a whole. */
+    private const ITEM_COLUMNS = [
+        'photo_path', 'target_path', 'video_type', 'video_url', 'video_path', 'playback_mode',
+        'trackability_score', 'trackability_flag', 'trackability_json', 'verified_at',
+    ];
+
+    /** Statuses the pipeline may still move a frame between on its own. */
+    private const PRE_PRINT_STATUSES = ['pending_setup', 'target_generated', 'verified'];
+
     private ArFrame $frames;
+    private ArFrameItem $items;
 
     public function __construct()
     {
         $this->frames = new ArFrame();
+        $this->items = new ArFrameItem();
     }
 
     // ---------------------------------------------------------------- uploads
@@ -259,44 +276,56 @@ class ArFrameService
     }
 
     /**
-     * The browser-side descriptor for one frame: what to play and how.
+     * The browser-side descriptor for one photo: what to play and how.
      *
      * Built here rather than in each controller so the public scan page, the
      * scan-anything page and the admin live test cannot drift apart. Index order
      * in the caller's array is the anchor index MindAR reports on a match.
      *
-     * @return array{slug: string, videoType: ?string, youtubeId: ?string, vimeoId: ?string, videoUrl: ?string, watchUrl: ?string, playbackMode: string}
+     * @param array|null $item An item row (or, before the migration, a frame row —
+     *                         the columns are the same). Null keeps an index that
+     *                         no longer has an item behind it.
      */
-    public function browserTarget(array $frame): array
+    public function browserTarget(?array $item, string $slug): array
     {
-        $playback = $this->playback($frame);
+        $playback = $item === null ? null : $this->playback($item);
 
-        // A recognised frame with no playable video is kept in the list so the
-        // anchor indexes still line up with the compiled bundle.
+        $metrics = !empty($item['trackability_json']) ? json_decode((string)$item['trackability_json'], true) : null;
+        $aspect = null;
+        if (is_array($metrics) && !empty($metrics['compiled_width']) && !empty($metrics['compiled_height'])) {
+            $aspect = round((float)$metrics['compiled_width'] / (float)$metrics['compiled_height'], 4);
+        }
+
+        $target = [
+            'slug' => $slug,
+            'itemId' => (int)($item['id'] ?? 0),
+            // The photo's own shape, for the overlay plane and the viewfinder.
+            'aspect' => $aspect,
+            'trackabilityFlag' => $item['trackability_flag'] ?? null,
+            'playbackMode' => (string)($item['playback_mode'] ?? 'fullscreen'),
+            'videoType' => null,
+            'youtubeId' => null,
+            'vimeoId' => null,
+            'videoUrl' => null,
+            'watchUrl' => null,
+        ];
+
+        // A recognised photo with no playable video is kept in the list so the
+        // anchor indexes still line up with the compiled file.
         if ($playback === null) {
-            return [
-                'slug' => (string)($frame['slug'] ?? ''),
-                'videoType' => null,
-                'youtubeId' => null,
-                'vimeoId' => null,
-                'videoUrl' => null,
-                'watchUrl' => null,
-                'playbackMode' => (string)($frame['playback_mode'] ?? 'fullscreen'),
-            ];
+            return $target;
         }
 
         $playsInVideoElement = in_array($playback['type'], ['upload', 'direct'], true);
 
-        return [
-            'slug' => (string)($frame['slug'] ?? ''),
+        return array_merge($target, [
             'videoType' => $playback['type'],
             'youtubeId' => $playback['youtube_id'] ?? null,
             'vimeoId' => $playback['vimeo_id'] ?? null,
             'videoUrl' => $playsInVideoElement ? $playback['url'] : null,
             // Somewhere to send the recipient if the embed refuses to play.
             'watchUrl' => $playback['url'],
-            'playbackMode' => (string)($frame['playback_mode'] ?? 'fullscreen'),
-        ];
+        ]);
     }
 
     /** Human label for a stored video type. */
@@ -350,45 +379,97 @@ class ArFrameService
 
     // ------------------------------------------------------------ persistence
 
-    /**
-     * Create a frame row, allocating its public slug.
-     *
-     * @param array $attrs Caller-supplied columns; channel and photo_path required.
-     */
-    public function createFrame(array $attrs): int
+    /** Whether the multi-photo schema (ar_frame_items) has been migrated in. */
+    public function itemsReady(): bool
     {
+        return $this->frames->itemsReady();
+    }
+
+    /**
+     * Create a frame row, allocating its public slug, together with its photos.
+     *
+     * Item columns may be given either in $items or, for a single photo, mixed
+     * into $attrs — they are split out here. Before the multi-photo migration has
+     * run there is nowhere to put a second photo, so the first one is stored on
+     * the frame row the way it always was.
+     *
+     * @param array $attrs Frame columns; channel required.
+     * @param array[] $items One array of item columns per photo.
+     */
+    public function createFrame(array $attrs, array $items = []): int
+    {
+        $inline = array_intersect_key($attrs, array_flip(self::ITEM_COLUMNS));
+        $attrs = array_diff_key($attrs, $inline);
+        if (!empty($inline['photo_path'])) {
+            array_unshift($items, $inline);
+        }
+
         $data = array_merge([
             'slug'          => $this->frames->generateUniqueSlug(),
             'channel'       => 'online',
-            'video_type'    => 'youtube',
-            'playback_mode' => 'fullscreen',
             'status'        => 'pending_setup',
             'is_active'     => 1,
         ], $attrs);
 
-        return $this->frames->create($data);
+        if (!$this->itemsReady()) {
+            return $this->frames->create(array_merge(
+                ['video_type' => 'youtube', 'playback_mode' => 'fullscreen'],
+                $data,
+                $items[0] ?? []
+            ));
+        }
+
+        $frameId = $this->frames->create($data);
+        foreach ($items as $item) {
+            $this->addItem($frameId, $item);
+        }
+        return $frameId;
+    }
+
+    /** Attach one photo/video pair to a frame. Its target still has to be generated. */
+    public function addItem(int $frameId, array $attrs): int
+    {
+        $data = array_intersect_key($attrs, array_flip(array_merge(self::ITEM_COLUMNS, ['sort_order'])));
+        return $this->items->create(array_merge(
+            ['video_type' => 'youtube', 'playback_mode' => 'fullscreen'],
+            $data,
+            ['frame_id' => $frameId]
+        ));
     }
 
     /**
-     * The shared target-generation step: compile the frame's photo into a .mind
-     * file, record the trackability result, and advance the status.
+     * A frame's photos, in scan order.
      *
-     * Called synchronously from the walk-in flow (a customer is waiting) and
-     * on demand from the online queue. Identical either way.
-     *
-     * @return array{ok: bool, error?: string, detail?: string|null, score?: int, flag?: string, advice?: string}
+     * Before the migration a frame's single photo lives on the frame row itself;
+     * it is presented as a one-item list (with id 0) so callers need one code path.
      */
-    public function generateTarget(int $frameId): array
+    public function items(array $frame): array
     {
-        $frame = $this->frames->find($frameId);
-        if (!$frame) {
-            return ['ok' => false, 'error' => 'That AR frame no longer exists.'];
+        if ($this->itemsReady()) {
+            return $this->items->forFrame((int)$frame['id']);
         }
         if (empty($frame['photo_path'])) {
-            return ['ok' => false, 'error' => 'This frame has no photo yet. Add the customer photo first.'];
+            return [];
+        }
+        $item = array_intersect_key($frame, array_flip(self::ITEM_COLUMNS));
+        return [array_merge($item, ['id' => 0, 'frame_id' => (int)$frame['id'], 'sort_order' => 0])];
+    }
+
+    /**
+     * Compile one photo into its own target and record the trackability result.
+     *
+     * Does not rebuild the frame's combined target — callers compiling several
+     * photos in a row call refreshFrame() once at the end instead.
+     *
+     * @return array{ok: bool, error?: string, detail?: string|null, score?: int, flag?: string, metrics?: array}
+     */
+    public function compileItem(array $frame, array $item): array
+    {
+        if (empty($item['photo_path'])) {
+            return ['ok' => false, 'error' => 'This photo slot has no photo yet.'];
         }
 
-        $photoAbs = $this->absolutePath($frame['photo_path']);
+        $photoAbs = $this->absolutePath($item['photo_path']);
         if ($photoAbs === null || !is_file($photoAbs)) {
             return ['ok' => false, 'error' => 'The customer photo is missing from storage.'];
         }
@@ -396,40 +477,259 @@ class ArFrameService
         require_once APP_PATH . '/services/ArTargetService.php';
         $compiler = new ArTargetService();
 
-        $targetRel = self::TARGET_DIR . '/' . $frame['slug'] . '.mind';
+        $targetRel = self::TARGET_DIR . '/' . $frame['slug'] . '-' . (int)$item['id'] . '.mind';
         $result = $compiler->compile($photoAbs, UPLOAD_PATH . '/' . $targetRel);
 
         if (empty($result['ok'])) {
             // Regenerating after a failure must not leave a stale target behind
-            // that would make the frame look ready when it isn't.
-            $this->frames->update($frameId, [
+            // that would make the photo look ready when it isn't.
+            $this->items->update((int)$item['id'], [
                 'target_path'        => null,
                 'trackability_score' => null,
                 'trackability_flag'  => null,
-                'status'             => 'pending_setup',
                 'verified_at'        => null,
             ]);
+            if (($item['target_path'] ?? null) !== $targetRel) {
+                $this->deleteFile($item['target_path'] ?? null);
+            }
             return $result;
         }
 
-        // A new target invalidates any earlier live test — the printed photo and
-        // the tracking data have both changed, so it must be re-verified.
-        $this->frames->update($frameId, [
+        // A new target invalidates any earlier live test — the tracking data has
+        // changed, so it must be re-verified.
+        $this->items->update((int)$item['id'], [
             'target_path'        => $targetRel,
             'trackability_score' => $result['score'],
             'trackability_flag'  => $result['flag'],
             'trackability_json'  => json_encode($result['metrics']),
-            'status'             => 'target_generated',
             'verified_at'        => null,
         ]);
+        // Frames migrated from the single-photo schema kept their target under the
+        // frame's slug; once replaced it belongs to nothing.
+        if (!empty($item['target_path']) && $item['target_path'] !== $targetRel) {
+            $this->deleteFile($item['target_path']);
+        }
 
-        $result['advice'] = ArTargetService::trackabilityAdvice($result['flag']);
         return $result;
     }
 
     /**
-     * Record a successful live camera test. This is the gate that lets a frame
-     * advance toward print/handover.
+     * The shared target-generation step for a whole frame: compile its photos,
+     * then rebuild the combined target the scan page loads.
+     *
+     * Called synchronously from the walk-in flow (a customer is waiting) and
+     * on demand from the online queue. Identical either way.
+     *
+     * @param bool $onlyMissing Skip photos that already have a target.
+     * @return array{ok: bool, error?: string, compiled?: int, failures?: array, score?: int, flag?: string, advice?: string, metrics?: array}
+     */
+    public function generateTarget(int $frameId, bool $onlyMissing = false): array
+    {
+        $frame = $this->frames->find($frameId);
+        if (!$frame) {
+            return ['ok' => false, 'error' => 'That AR frame no longer exists.'];
+        }
+        if (!$this->itemsReady()) {
+            return ['ok' => false, 'error' => 'Run the multi-photo migration (migrations/2026_09_14_ar_frame_items.sql) first.'];
+        }
+
+        $items = $this->items->forFrame($frameId);
+        if (!$items) {
+            return ['ok' => false, 'error' => 'This frame has no photos yet. Add the customer photo first.'];
+        }
+
+        $compiled = 0;
+        $failures = [];
+        $worst = null;
+        $metrics = null;
+
+        foreach ($items as $position => $item) {
+            if ($onlyMissing && !empty($item['target_path'])) {
+                continue;
+            }
+            $result = $this->compileItem($frame, $item);
+            if (empty($result['ok'])) {
+                $failures[] = [
+                    'position' => $position + 1,
+                    'error' => $result['error'],
+                    'detail' => $result['detail'] ?? null,
+                ];
+                continue;
+            }
+            $compiled++;
+            $metrics = $metrics ?? $result['metrics'];
+            if ($worst === null || $result['score'] < $worst['score']) {
+                $worst = ['score' => $result['score'], 'flag' => $result['flag'], 'position' => $position + 1];
+            }
+        }
+
+        $refresh = $this->refreshFrame($frameId);
+
+        $summary = [
+            'ok' => !$failures && !empty($refresh['ok']),
+            'compiled' => $compiled,
+            'total' => count($items),
+            'failures' => $failures,
+            'metrics' => $metrics ?? [],
+        ];
+        if ($worst !== null) {
+            $summary += $worst;
+            $summary['advice'] = ArTargetService::trackabilityAdvice($worst['flag']);
+        }
+        if ($failures) {
+            $first = $failures[0];
+            $summary['error'] = (count($items) > 1 ? 'Photo ' . $first['position'] . ': ' : '') . $first['error'];
+            $summary['detail'] = $first['detail'];
+        } elseif (empty($refresh['ok'])) {
+            $summary['error'] = $refresh['error'];
+        }
+        return $summary;
+    }
+
+    /**
+     * Bring a frame's combined target and status in line with its photos.
+     * Call after anything that adds, removes, compiles or verifies a photo.
+     *
+     * @return array{ok: bool, error?: string}
+     */
+    public function refreshFrame(int $frameId): array
+    {
+        $frame = $this->frames->find($frameId);
+        if (!$frame) {
+            return ['ok' => false, 'error' => 'That AR frame no longer exists.'];
+        }
+        $items = $this->items->forFrame($frameId);
+
+        $result = $this->rebuildFrameTarget($frame, $items);
+        $this->syncFrameStatus($this->frames->find($frameId), $items);
+        return $result;
+    }
+
+    /**
+     * Point the frame at a target file containing every photo that is ready.
+     *
+     * Photos still waiting for a target are left out rather than holding the
+     * others back: adding a photo to a frame that is already with the customer
+     * must not stop the existing ones scanning while the new one is prepared.
+     */
+    private function rebuildFrameTarget(array $frame, array $items): array
+    {
+        $ready = [];
+        foreach ($items as $item) {
+            $abs = empty($item['target_path']) ? null : $this->absolutePath((string)$item['target_path']);
+            if ($abs !== null && is_file($abs)) {
+                $ready[$abs] = $item;
+            }
+        }
+
+        $setRel = self::TARGET_DIR . '/' . $frame['slug'] . '-set.mind';
+
+        if (count($ready) <= 1) {
+            $only = $ready ? reset($ready) : null;
+            $this->frames->update((int)$frame['id'], [
+                'target_path'  => $only['target_path'] ?? null,
+                'target_items' => $only ? json_encode([(int)$only['id']]) : null,
+            ]);
+            $this->deleteFile($setRel);
+            return ['ok' => true];
+        }
+
+        require_once APP_PATH . '/services/ArTargetService.php';
+        $result = (new ArTargetService())->bundle(array_keys($ready), UPLOAD_PATH . '/' . $setRel);
+        if (empty($result['ok'])) {
+            // The previous file and its index map still agree with each other, so
+            // leave both: a photo that has since been removed just stops playing,
+            // rather than every photo on the frame going dark.
+            return ['ok' => false, 'error' => 'Could not combine the photos into one scan target: '
+                . ($result['error'] ?? 'unknown error')];
+        }
+
+        // The bundler reports each entry it wrote, in file order.
+        $ids = [];
+        foreach (($result['included'] ?? []) as $abs) {
+            if (isset($ready[$abs])) {
+                $ids[] = (int)$ready[$abs]['id'];
+            }
+        }
+
+        $this->frames->update((int)$frame['id'], [
+            'target_path'  => $setRel,
+            'target_items' => json_encode($ids),
+        ]);
+        return ['ok' => true];
+    }
+
+    /**
+     * Derive the frame's status and verified_at from its photos.
+     *
+     * The frame is verified only when every photo has passed its own live test —
+     * one photo matching proves nothing about the others. Once printed, the
+     * status is the admin's to move, so it is left alone.
+     */
+    private function syncFrameStatus(array $frame, array $items): void
+    {
+        $total = count($items);
+        $withTarget = 0;
+        $verified = 0;
+        $latest = null;
+        foreach ($items as $item) {
+            if (empty($item['target_path'])) {
+                continue;
+            }
+            $withTarget++;
+            if (!empty($item['verified_at'])) {
+                $verified++;
+                $latest = max($latest ?? '', $item['verified_at']);
+            }
+        }
+
+        $allVerified = $total > 0 && $verified === $total;
+        $data = ['verified_at' => $allVerified ? ($frame['verified_at'] ?: $latest) : null];
+
+        if (in_array($frame['status'], self::PRE_PRINT_STATUSES, true)) {
+            if ($total === 0 || $withTarget < $total) {
+                $data['status'] = 'pending_setup';
+            } else {
+                $data['status'] = $allVerified ? 'verified' : 'target_generated';
+            }
+        }
+
+        $this->frames->update((int)$frame['id'], $data);
+    }
+
+    /**
+     * Record a successful live scan of one photo.
+     *
+     * @return array{ok: bool, verified?: int, total?: int, error?: string}
+     */
+    public function markItemVerified(int $frameId, int $itemId): array
+    {
+        if (!$this->itemsReady()) {
+            return $this->markVerified($frameId)
+                ? ['ok' => true, 'verified' => 1, 'total' => 1]
+                : ['ok' => false, 'error' => 'Generate the target before testing.'];
+        }
+
+        $item = $this->items->findForFrame($frameId, $itemId);
+        if (!$item || empty($item['target_path'])) {
+            return ['ok' => false, 'error' => 'That photo has no target to test.'];
+        }
+        $this->items->update($itemId, ['verified_at' => date('Y-m-d H:i:s')]);
+
+        $frame = $this->frames->find($frameId);
+        $items = $this->items->forFrame($frameId);
+        $this->syncFrameStatus($frame, $items);
+
+        return [
+            'ok' => true,
+            'verified' => count(array_filter($items, fn($i) => !empty($i['verified_at']) && !empty($i['target_path']))),
+            'total' => count($items),
+        ];
+    }
+
+    /**
+     * Record a passed live test for the whole frame — every photo that has a
+     * target. This is the gate that lets a frame advance toward print/handover.
      */
     public function markVerified(int $frameId): bool
     {
@@ -437,10 +737,109 @@ class ArFrameService
         if (!$frame || empty($frame['target_path'])) {
             return false;
         }
-        return $this->frames->update($frameId, [
-            'verified_at' => date('Y-m-d H:i:s'),
-            'status'      => 'verified',
-        ]);
+
+        if (!$this->itemsReady()) {
+            return $this->frames->update($frameId, [
+                'verified_at' => date('Y-m-d H:i:s'),
+                'status'      => 'verified',
+            ]);
+        }
+
+        $this->items->markAllVerified($frameId);
+        $this->syncFrameStatus($frame, $this->items->forFrame($frameId));
+        return true;
+    }
+
+    /** Remove one photo, its files, and its place in the frame's target. */
+    public function deleteItem(int $frameId, array $item): void
+    {
+        $this->deleteFile($item['photo_path'] ?? null);
+        $this->deleteFile($item['target_path'] ?? null);
+        $this->deleteFile($item['video_path'] ?? null);
+        $this->items->delete((int)$item['id']);
+        $this->refreshFrame($frameId);
+    }
+
+    /**
+     * Delete every file a frame owns: each photo's files and the combined target.
+     * The rows are the caller's to remove.
+     */
+    public function deleteFrameFiles(array $frame): void
+    {
+        foreach ($this->items($frame) as $item) {
+            $this->deleteFile($item['photo_path'] ?? null);
+            $this->deleteFile($item['target_path'] ?? null);
+            $this->deleteFile($item['video_path'] ?? null);
+        }
+        // The frame row's own columns: the combined target, plus the single photo
+        // a frame from before the migration kept here.
+        $this->deleteFile($frame['target_path'] ?? null);
+        $this->deleteFile($frame['photo_path'] ?? null);
+        $this->deleteFile($frame['video_path'] ?? null);
+    }
+
+    // ------------------------------------------------------------- scan pages
+
+    /**
+     * What a frame's own scan page loads: one target file, and one browser
+     * descriptor per entry in it, in file order.
+     *
+     * @return array{targetUrl: string, targets: array[], items: array[]}|null null when nothing is scannable yet
+     */
+    public function frameScan(array $frame): ?array
+    {
+        if (empty($frame['target_path'])) {
+            return null;
+        }
+        $slug = (string)$frame['slug'];
+        $items = $this->items($frame);
+
+        if (!$this->itemsReady()) {
+            return [
+                'targetUrl' => self::fileUrl($frame['target_path']),
+                'targets'   => array_map(fn($item) => $this->browserTarget($item, $slug), $items),
+                'items'     => $items,
+            ];
+        }
+
+        $byId = [];
+        foreach ($items as $item) {
+            $byId[(int)$item['id']] = $item;
+        }
+
+        $ids = json_decode((string)($frame['target_items'] ?? ''), true);
+        if (!is_array($ids)) {
+            // Only possible if the migration's final UPDATE did not run: the
+            // frame's target is then still its one photo's own file.
+            $ids = [];
+            foreach ($items as $item) {
+                if (($item['target_path'] ?? null) === $frame['target_path']) {
+                    $ids = [(int)$item['id']];
+                    break;
+                }
+            }
+        }
+        if (!$ids) {
+            return null;
+        }
+
+        $targets = [];
+        $ordered = [];
+        foreach ($ids as $id) {
+            $item = $byId[(int)$id] ?? null;
+            // A missing item keeps its slot, or every later photo would play the
+            // video of the one before it.
+            $targets[] = $this->browserTarget($item, $slug);
+            if ($item !== null) {
+                $ordered[] = $item;
+            }
+        }
+
+        return [
+            'targetUrl' => self::fileUrl($frame['target_path']),
+            'targets'   => $targets,
+            'items'     => $ordered,
+        ];
     }
 
     // --------------------------------------------------------- scan-all bundle
@@ -448,17 +847,16 @@ class ArFrameService
     public const BUNDLE_FILE = self::TARGET_DIR . '/all-frames.mind';
     public const BUNDLE_MANIFEST = self::TARGET_DIR . '/all-frames.json';
 
-    /** Past this many frames the bundle gets heavy on mobile data (~464KB each). */
+    /** Past this many photos the bundle gets heavy on mobile data (~464KB each). */
     public const BUNDLE_WARN_AT = 25;
 
     /**
      * Frames the public "scan anything" page can recognise: active, and with a
-     * compiled target. Ordered by id so the anchor index a browser reports stays
-     * stable between rebuilds for frames that have not changed.
+     * compiled target.
      */
     public function scannableFrames(): array
     {
-        $sql = "SELECT id, slug, target_path, video_type, video_url, video_path, playback_mode, photo_path
+        $sql = "SELECT id, slug, target_path
                 FROM ar_frames
                 WHERE is_active = 1 AND target_path IS NOT NULL AND target_path <> ''
                 ORDER BY id ASC";
@@ -466,30 +864,57 @@ class ArFrameService
     }
 
     /**
+     * Every photo the scan-anything page can recognise, each with its frame's
+     * slug. Ordered by id so the anchor index a browser reports stays stable
+     * between rebuilds for photos that have not changed.
+     *
+     * `bundle_key` is unique across both schemas, so a bundle built before the
+     * migration is never read back as if it listed items.
+     */
+    public function scannableTargets(): array
+    {
+        if (!$this->itemsReady()) {
+            return $this->frames->rawQuery(
+                "SELECT f.*, CONCAT('f', f.id) AS bundle_key
+                 FROM ar_frames f
+                 WHERE f.is_active = 1 AND f.target_path IS NOT NULL AND f.target_path <> ''
+                 ORDER BY f.id ASC"
+            );
+        }
+
+        return $this->frames->rawQuery(
+            "SELECT i.*, f.slug, CONCAT('i', i.id) AS bundle_key
+             FROM ar_frame_items i
+             JOIN ar_frames f ON f.id = i.frame_id
+             WHERE f.is_active = 1 AND i.target_path IS NOT NULL AND i.target_path <> ''
+             ORDER BY i.id ASC"
+        );
+    }
+
+    /**
      * Build (or reuse) the combined target file used by /scan.
      *
      * Rebuilt lazily rather than on every frame change: the manifest records
-     * which frames went in and when, so a rebuild happens only when the set has
-     * actually changed. Merging is milliseconds, so this is cheap enough to
-     * check on each visit.
+     * which photos went in, so a rebuild happens only when the set has actually
+     * changed. Merging is milliseconds, so this is cheap enough to check on each
+     * visit.
      *
-     * @return array{ok: bool, error?: string, path?: string, frames?: array, count?: int, bytes?: int, rebuilt?: bool}
+     * @return array{ok: bool, error?: string, path?: string, targets?: array, count?: int, bytes?: int, rebuilt?: bool}
      */
     public function scanBundle(): array
     {
-        $frames = $this->scannableFrames();
-        if (!$frames) {
+        $rows = $this->scannableTargets();
+        if (!$rows) {
             return ['ok' => false, 'error' => 'No Living Photos are ready to scan yet.', 'count' => 0];
         }
 
         $bundleAbs = UPLOAD_PATH . '/' . self::BUNDLE_FILE;
         $manifestAbs = UPLOAD_PATH . '/' . self::BUNDLE_MANIFEST;
 
-        // Fingerprint the set: ids plus the newest change. Any add, removal,
-        // deactivation or regenerated target changes this.
+        // Any add, removal, deactivation or regenerated target changes this.
         $fingerprint = md5(json_encode(array_map(
-            fn($f) => [$f['id'], $f['target_path']],
-            $frames
+            fn($r) => [$r['bundle_key'], $r['target_path']],
+            $rows
         )));
 
         $manifest = is_file($manifestAbs)
@@ -501,41 +926,45 @@ class ArFrameService
             && is_file($bundleAbs);
 
         if (!$fresh) {
-            $result = $this->rebuildBundle($frames, $bundleAbs, $manifestAbs, $fingerprint);
+            $result = $this->rebuildBundle($rows, $bundleAbs, $manifestAbs, $fingerprint);
             if (empty($result['ok'])) {
                 return $result;
             }
             $manifest = $result['manifest'];
         }
 
-        // Only the frames that actually made it into the file, in file order —
+        // Only the photos that actually made it into the file, in file order —
         // that index is what the browser reports on a match.
+        $byKey = [];
+        foreach ($rows as $r) {
+            $byKey[$r['bundle_key']] = $r;
+        }
         $included = [];
-        foreach (($manifest['frames'] ?? []) as $id) {
-            foreach ($frames as $f) {
-                if ((int)$f['id'] === (int)$id) { $included[] = $f; break; }
+        foreach (($manifest['entries'] ?? []) as $key) {
+            if (isset($byKey[$key])) {
+                $included[] = $byKey[$key];
             }
         }
 
         return [
             'ok' => true,
             'path' => self::BUNDLE_FILE,
-            'frames' => $included,
+            'targets' => $included,
             'count' => count($included),
             'bytes' => is_file($bundleAbs) ? filesize($bundleAbs) : 0,
             'rebuilt' => !$fresh,
         ];
     }
 
-    private function rebuildBundle(array $frames, string $bundleAbs, string $manifestAbs, string $fingerprint): array
+    private function rebuildBundle(array $rows, string $bundleAbs, string $manifestAbs, string $fingerprint): array
     {
         $paths = [];
         $byPath = [];
-        foreach ($frames as $frame) {
-            $abs = $this->absolutePath((string)$frame['target_path']);
+        foreach ($rows as $row) {
+            $abs = $this->absolutePath((string)$row['target_path']);
             if ($abs !== null && is_file($abs)) {
                 $paths[] = $abs;
-                $byPath[$abs] = (int)$frame['id'];
+                $byPath[$abs] = $row['bundle_key'];
             }
         }
         if (!$paths) {
@@ -550,14 +979,14 @@ class ArFrameService
 
         // The bundler reports what it actually included and in what order, which
         // may differ from the request if a file was unreadable.
-        $includedIds = [];
+        $entries = [];
         foreach (($result['included'] ?? []) as $abs) {
-            if (isset($byPath[$abs])) { $includedIds[] = $byPath[$abs]; }
+            if (isset($byPath[$abs])) { $entries[] = $byPath[$abs]; }
         }
 
         $manifest = [
             'fingerprint' => $fingerprint,
-            'frames' => $includedIds,
+            'entries' => $entries,
             'built_at' => date('c'),
             'bytes' => $result['metrics']['bytes'] ?? null,
         ];
@@ -621,20 +1050,21 @@ class ArFrameService
     /**
      * The playable video URL for the public page, plus how to play it.
      *
+     * @param array $item An item row, or a frame row from before the migration.
      * @return array{type: string, url: string, youtube_id?: string}|null
      */
-    public function playback(array $frame): ?array
+    public function playback(array $item): ?array
     {
-        $type = (string)($frame['video_type'] ?? '');
+        $type = (string)($item['video_type'] ?? '');
 
         if ($type === 'upload') {
-            if (empty($frame['video_path'])) {
+            if (empty($item['video_path'])) {
                 return null;
             }
-            return ['type' => 'upload', 'url' => self::fileUrl($frame['video_path'])];
+            return ['type' => 'upload', 'url' => self::fileUrl($item['video_path'])];
         }
 
-        if (empty($frame['video_url'])) {
+        if (empty($item['video_url'])) {
             return null;
         }
 
@@ -642,7 +1072,7 @@ class ArFrameService
         // directly in the database cannot inject an arbitrary embed or URL.
         switch ($type) {
             case 'vimeo':
-                $id = $this->vimeoId((string)$frame['video_url']);
+                $id = $this->vimeoId((string)$item['video_url']);
                 return $id === null ? null : [
                     'type' => 'vimeo',
                     'url' => 'https://vimeo.com/' . $id,
@@ -650,12 +1080,12 @@ class ArFrameService
                 ];
 
             case 'direct':
-                $url = $this->directVideoUrl((string)$frame['video_url']);
+                $url = $this->directVideoUrl((string)$item['video_url']);
                 return $url === null ? null : ['type' => 'direct', 'url' => $url];
 
             case 'youtube':
             default:
-                $id = $this->youtubeId((string)$frame['video_url']);
+                $id = $this->youtubeId((string)$item['video_url']);
                 return $id === null ? null : [
                     'type' => 'youtube',
                     'url' => 'https://www.youtube.com/watch?v=' . $id,
@@ -665,8 +1095,8 @@ class ArFrameService
     }
 
     /**
-     * Delete the files a frame owns. Used when replacing a photo so old
-     * targets don't accumulate.
+     * Delete a file the frame owns, if it is inside the uploads directory. Used
+     * when replacing a photo so old targets don't accumulate.
      */
     public function deleteFile(?string $stored): void
     {

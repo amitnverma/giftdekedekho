@@ -47,12 +47,13 @@ const HINTS = [
  * unreliable. Each pass is a real feature match, so a lower bar trades very
  * little confidence for a much faster response.
  *
- * A recipient's own /scan/{slug} can afford the lowest setting: there is exactly
- * one video it could possibly play, so a spurious match costs nothing but a
- * video starting a moment early. The higher bar is kept where a wrong match
- * would actually cost something — the scan-anything page, which could play a
+ * A recipient's own /scan/{slug} can afford the lowest setting: every video it
+ * could play belongs to that gift, so a spurious match costs at most a video
+ * starting a moment early, or a sibling photo's video that one tap on "Scan
+ * another photo" corrects. The higher bar is kept where a wrong match would
+ * actually cost something — the scan-anything page, which could play a
  * stranger's video, and the admin live test, where a match is what marks a
- * frame verified and therefore printable.
+ * photo verified and therefore printable. The page decides: config.careful.
  */
 const WARMUP_FAST = 1;
 const WARMUP_CAREFUL = 3;
@@ -86,6 +87,9 @@ export function initScanner(config) {
     torch: document.getElementById('arTorch'),
     loading: document.getElementById('arLoading'),
     videoError: document.getElementById('arVideoError'),
+    // Only present when a frame has more than one photo.
+    progress: document.getElementById('arProgress'),
+    next: document.getElementById('arNext'),
   };
 
   let mindarThree = null;
@@ -109,6 +113,8 @@ export function initScanner(config) {
   const targets = Array.isArray(config.targets) ? config.targets : [];
   // Which target matched — playback reads from this rather than global config.
   let active = null;
+  // Indexes of the photos matched so far on this visit, for the progress count.
+  const found = new Set();
 
   /**
    * Live diagnostics, always collected and exposed on window.__arDebug.
@@ -130,6 +136,8 @@ export function initScanner(config) {
     secureContext: window.isSecureContext,
     targetCount: targets.length,
     matchedSlug: null,
+    matchedItemId: null,
+    foundCount: 0,
     videoPrimed: null,
     torchAvailable: false,
     torchOn: false,
@@ -174,21 +182,52 @@ export function initScanner(config) {
     els.startBtn.disabled = false;
   }
 
+  /**
+   * The first thing to say on the camera screen. Back from a video with photos
+   * still to find, the useful instruction is to move on — not to fill the box
+   * with a photo they have just successfully scanned.
+   */
+  function openingHint() {
+    if (config.showProgress && found.size > 0 && found.size < targets.length) {
+      return 'Now point at another photo';
+    }
+    return HINTS[0].text;
+  }
+
   function startHints() {
     startedAt = Date.now();
     els.status.style.display = 'flex';
+    const opening = openingHint();
     hintTimer = setInterval(() => {
       if (hasMatched) return;
       const elapsed = Date.now() - startedAt;
-      let current = HINTS[0].text;
+      let current = opening;
       for (const hint of HINTS) {
-        if (elapsed >= hint.after) {
+        if (hint.after > 0 && elapsed >= hint.after) {
           current = (hint.withTorch && torchTrack) ? hint.withTorch : hint.text;
         }
       }
       if (els.hint.textContent !== current) els.hint.textContent = current;
     }, 500);
-    els.hint.textContent = HINTS[0].text;
+    els.hint.textContent = opening;
+  }
+
+  /**
+   * "2 of 3 photos found", for a frame with several photos. Without it nothing
+   * on screen says there is more than one video to find, and the recipient
+   * stops after the first.
+   */
+  function updateProgress() {
+    if (!config.showProgress || !els.progress) return;
+    const total = targets.length;
+    if (found.size === 0) {
+      els.progress.textContent = total + ' photos to find';
+    } else if (found.size < total) {
+      els.progress.textContent = found.size + ' of ' + total + ' photos found';
+    } else {
+      els.progress.textContent = 'All ' + total + ' photos found — scan any to watch again';
+    }
+    els.progress.hidden = false;
   }
 
   function stopHints() {
@@ -500,6 +539,7 @@ export function initScanner(config) {
     els.player.style.display = 'flex';
     els.status.style.display = 'none';
     if (els.frame) els.frame.classList.add('is-visible');
+    if (els.next && config.showProgress) els.next.hidden = false;
     // The camera is hidden behind the player now, so the torch is only heat and
     // battery. Overlay playback deliberately keeps it: that mode is still
     // tracking the photo and needs the light it was turned on for.
@@ -542,6 +582,7 @@ export function initScanner(config) {
       if (els.video.readyState >= 1) els.video.currentTime = 0;
     }
     els.tapToPlay.style.display = 'none';
+    if (els.next) els.next.hidden = true;
     hasMatched = false;
     startHints();
   }
@@ -551,7 +592,7 @@ export function initScanner(config) {
    * the camera view. Only available for uploaded files — a YouTube iframe cannot
    * be used as a WebGL texture, so those always play full-screen.
    */
-  function buildOverlayPlane(anchor) {
+  function buildOverlayPlane(anchor, target) {
     // Uses els.video directly. A module runs in strict mode, so the alias this
     // previously assigned to had to be declared — losing that declaration threw
     // a ReferenceError while the anchors were being built, which surfaced to the
@@ -561,7 +602,8 @@ export function initScanner(config) {
     els.video.playsInline = true;
 
     const texture = new THREE.VideoTexture(els.video);
-    const geometry = new THREE.PlaneGeometry(1, 1 / (config.aspect || 1));
+    // Each photo's own shape — photos in one frame need not share one.
+    const geometry = new THREE.PlaneGeometry(1, 1 / (target.aspect || 1));
     const material = new THREE.MeshBasicMaterial({ map: texture });
     const plane = new THREE.Mesh(geometry, material);
     anchor.group.add(plane);
@@ -570,10 +612,10 @@ export function initScanner(config) {
   // ----------------------------------------------------------------- reporting
 
   /**
-   * Admin live-test only: record that a real match happened, which is what
-   * unlocks printing/handover for this frame.
+   * Admin live-test only: record that a real match happened on this photo.
+   * Once every photo of the frame has one, printing/handover is unlocked.
    */
-  function reportVerified() {
+  function reportVerified(target) {
     if (!config.verifyUrl) return;
 
     fetch(config.verifyUrl, {
@@ -582,7 +624,8 @@ export function initScanner(config) {
         'Content-Type': 'application/x-www-form-urlencoded',
         'X-CSRF-Token': config.csrf,
       },
-      body: 'csrf_token=' + encodeURIComponent(config.csrf),
+      body: 'csrf_token=' + encodeURIComponent(config.csrf) +
+        '&item_id=' + encodeURIComponent(target.itemId || 0),
     })
       .then((res) => res.json())
       .then((data) => {
@@ -634,15 +677,12 @@ export function initScanner(config) {
         // careful bar is for pages where a wrong match has a cost: /scan, which
         // could play someone else's video, and the admin test, where a match
         // marks the frame verified. config.verifyUrl is only set for the latter.
-        warmupTolerance: (targets.length > 1 || config.verifyUrl)
-          ? WARMUP_CAREFUL
-          : WARMUP_FAST,
+        warmupTolerance: config.careful ? WARMUP_CAREFUL : WARMUP_FAST,
         missTolerance: MISS_TOLERANCE,
       });
 
-      // One anchor per target in the .mind file. With a single frame that is a
-      // loop of one; on /scan it is every active frame, and whichever fires
-      // tells us which customer's video to play.
+      // One anchor per target in the .mind file: one per photo of this frame,
+      // or on /scan every active photo. Whichever fires says which video to play.
       targets.forEach((target, index) => {
         const anchor = mindarThree.addAnchor(index);
 
@@ -657,7 +697,7 @@ export function initScanner(config) {
           && (target.videoType === 'upload' || target.videoType === 'direct');
         if (useOverlay) {
           try {
-            buildOverlayPlane(anchor);
+            buildOverlayPlane(anchor, target);
           } catch (overlayErr) {
             useOverlay = false;   // fall back to full-screen for this frame
             debug.overlayErrors = (debug.overlayErrors || 0) + 1;
@@ -671,8 +711,12 @@ export function initScanner(config) {
 
           active = target;
           hasMatched = true;
+          found.add(index);
+          updateProgress();
           debug.targetFoundCount++;
           debug.matchedSlug = target.slug || null;
+          debug.matchedItemId = target.itemId || null;
+          debug.foundCount = found.size;
           renderDebug();
           stopHints();
           // Whatever gesture was going to prime the video is now moot, and a
@@ -712,7 +756,7 @@ export function initScanner(config) {
           } else {
             showFullscreenPlayer();
           }
-          reportVerified();
+          reportVerified(target);
         };
 
         anchor.onTargetLost = () => {
@@ -772,6 +816,7 @@ export function initScanner(config) {
       // Needs the running stream, so it cannot happen before start().
       setupTorch();
       startHints();
+      updateProgress();
     } catch (err) {
       const name = (err && err.name) || '';
       const detail = (err && err.message) || '';
@@ -816,6 +861,7 @@ export function initScanner(config) {
     start(false);
   });
   els.closeBtn.addEventListener('click', closePlayer);
+  if (els.next) els.next.addEventListener('click', closePlayer);
 
   // The one place a genuine reload is wanted: the previous attempt failed, so
   // there is nothing in memory worth reusing.

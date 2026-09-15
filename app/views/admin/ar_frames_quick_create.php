@@ -3,14 +3,67 @@
  * Quick Create — the counter flow for walk-in customers.
  *
  * Deliberately one screen and no order object: payment is cash/card and happens
- * entirely outside this system. Submitting compiles the target synchronously
- * (about 5 seconds) and drops straight onto the frame's page with the
- * trackability verdict and the live-test button, so the whole thing can be done
- * while the customer waits.
+ * entirely outside this system. Submitting compiles every photo's target
+ * synchronously (about 5 seconds each) and drops straight onto the frame's page
+ * with the trackability verdict and the live-test steps, so the whole thing can
+ * be done while the customer waits.
  *
- * The file input uses capture="environment" so a phone or tablet at the counter
+ * One frame can hold several photos, each with its own video, all behind one
+ * QR sticker. Rows are added in the browser from a template; the server ignores
+ * any row left completely blank.
+ *
+ * The file inputs use capture="environment" so a phone or tablet at the counter
  * offers the camera directly.
  */
+
+/** One photo + video row. $key is the array index, or a placeholder inside the template. */
+$itemRow = function (string $key) {
+    ?>
+    <div class="admin-card" data-item-row style="margin-bottom:14px;box-shadow:none;border:1px solid var(--admin-border)">
+        <div class="admin-flex-between" style="margin-bottom:8px">
+            <h3 class="admin-card-title" style="margin:0" data-item-title>Photo</h3>
+            <button type="button" class="admin-btn admin-btn-sm" data-remove-item>Remove</button>
+        </div>
+
+        <div class="admin-form-row">
+            <label class="admin-label-hint">Photo to print</label>
+            <input type="file" name="item_photo[<?= $key ?>]" accept="image/jpeg,image/png" capture="environment" data-photo-input>
+            <div data-photo-preview style="display:none;margin-top:10px">
+                <img alt="Selected photo" style="max-width:200px;max-height:200px;border-radius:10px;border:1px solid var(--admin-border)">
+            </div>
+        </div>
+
+        <div class="admin-form-row">
+            <label class="admin-label-hint">Video it plays</label>
+            <select name="items[<?= $key ?>][video_type]" data-video-type>
+                <option value="link">Video link (YouTube, Vimeo or direct file)</option>
+                <option value="upload">Upload a video file</option>
+            </select>
+        </div>
+
+        <div class="admin-form-row" data-ar-video="link">
+            <input type="url" name="items[<?= $key ?>][video_url]" placeholder="https://www.youtube.com/watch?v=…">
+            <p class="admin-help-text">
+                YouTube, Vimeo, or a direct https link to an .mp4 / .webm / .mov file.
+                Check the video is Public or Unlisted — a Private one will not play for the recipient.
+            </p>
+        </div>
+
+        <div class="admin-form-row" data-ar-video="upload" style="display:none">
+            <label class="admin-label-hint">Video file (MP4/MOV/WebM, max 100MB)</label>
+            <input type="file" name="item_video[<?= $key ?>]" accept="video/mp4,video/quicktime,video/webm">
+        </div>
+
+        <div class="admin-form-row" style="margin-bottom:0">
+            <label class="admin-label-hint">Playback mode</label>
+            <select name="items[<?= $key ?>][playback_mode]">
+                <option value="fullscreen">Full-screen takeover (recommended)</option>
+                <option value="overlay">AR overlay on the photo</option>
+            </select>
+        </div>
+    </div>
+    <?php
+};
 ?>
 
 <?php if (!$compiler['ok']): ?>
@@ -21,61 +74,34 @@
 <?php endif; ?>
 
 <div class="admin-callout">
-    <strong>Counter flow:</strong> take or upload the photo → paste the video link → save.
-    The AR target is built immediately and checked for trackability, then you run the live scan test
-    with the customer present. Only hand the frame over once that test passes.
+    <strong>Counter flow:</strong> take or upload each photo → paste the video it should play → save.
+    Every photo shares one QR sticker; scanning a photo plays its own video. The AR targets are built
+    immediately and checked for trackability, then you run the live scan test on every photo with the
+    customer present. Only hand the frame over once that test passes.
     <br><br>
     No payment is recorded here — cash/card is handled outside this system.
 </div>
 
 <div class="admin-card admin-mt" style="max-width:720px">
-    <form method="post" action="<?= url('/admin/ar-frames/quick-create') ?>" enctype="multipart/form-data" class="admin-form">
+    <form method="post" action="<?= url('/admin/ar-frames/quick-create') ?>" enctype="multipart/form-data" class="admin-form" id="arQuickForm">
         <?= csrfField() ?>
 
-        <h3 class="admin-card-title">Photo to print</h3>
-        <div class="admin-form-row">
-            <input type="file" name="photo" id="arQuickPhoto" accept="image/jpeg,image/png" capture="environment" required>
-            <p class="admin-help-text">
-                JPG or PNG, at least 240×240, max 10MB. Sharp, detailed, high-contrast photos track best —
-                plain backgrounds, heavy blur and very dark photos are the usual failures.
-            </p>
-            <div id="arQuickPreview" style="display:none;margin-top:10px">
-                <img alt="Selected photo" style="max-width:260px;max-height:260px;border-radius:10px;border:1px solid var(--admin-border)">
-            </div>
-        </div>
+        <h3 class="admin-card-title">Photos &amp; videos</h3>
+        <p class="admin-help-text" style="margin-top:0">
+            JPG or PNG, at least 240×240, max 10MB each. Sharp, detailed, high-contrast photos track best —
+            plain backgrounds, heavy blur and very dark photos are the usual failures. Photos that look alike
+            (the same people, the same background) are harder to tell apart, so choose visibly different ones.
+        </p>
 
-        <hr class="admin-hr">
+        <div id="arItems"><?php $itemRow('0'); ?></div>
 
-        <h3 class="admin-card-title">Video to play</h3>
-        <div class="admin-form-row">
-            <label class="admin-label-hint">Video source</label>
-            <select name="video_type" id="arQuickVideoType">
-                <option value="link">Video link (YouTube, Vimeo or direct file)</option>
-                <option value="upload">Upload a video file</option>
-            </select>
-        </div>
+        <template id="arItemTemplate"><?php $itemRow('__KEY__'); ?></template>
 
-        <div class="admin-form-row" data-ar-video="link">
-            <label class="admin-label-hint">Video link</label>
-            <input type="url" name="video_url" value="<?= old('video_url') ?>" placeholder="https://www.youtube.com/watch?v=…">
-            <p class="admin-help-text">
-                YouTube, Vimeo, or a direct https link to an .mp4 / .webm / .mov file.
-                Check the video is Public or Unlisted — a Private one will not play for the recipient.
-            </p>
-        </div>
-
-        <div class="admin-form-row" data-ar-video="upload" style="display:none">
-            <label class="admin-label-hint">Video file (MP4/MOV/WebM, max 100MB)</label>
-            <input type="file" name="video" accept="video/mp4,video/quicktime,video/webm">
-        </div>
-
-        <div class="admin-form-row">
-            <label class="admin-label-hint">Playback mode</label>
-            <select name="playback_mode">
-                <option value="fullscreen">Full-screen takeover (recommended)</option>
-                <option value="overlay">AR overlay on the photo</option>
-            </select>
-        </div>
+        <button type="button" class="admin-btn" id="arAddItem">+ Add another photo</button>
+        <p class="admin-help-text">
+            Up to <?= (int)$maxItems ?> photos per frame. Uploaded video files are sent together in one save, and the
+            server accepts <?= e($uploadLimit) ?> in total — for several videos, links are the safer choice.
+        </p>
 
         <hr class="admin-hr">
 
@@ -95,43 +121,84 @@
 
         <div class="admin-form-actions">
             <button class="admin-btn admin-btn-primary" type="submit" id="arQuickSubmit" <?= $compiler['ok'] ? '' : 'disabled' ?>>
-                Create frame &amp; build target
+                Create frame &amp; build targets
             </button>
-            <span class="admin-muted" style="font-size:13px;margin-left:10px" id="arQuickHint">Takes about 5 seconds</span>
+            <span class="admin-muted" style="font-size:13px;margin-left:10px" id="arQuickHint">About 5 seconds per photo</span>
         </div>
     </form>
 </div>
 
 <script>
 (function () {
-    var typeSelect = document.getElementById('arQuickVideoType');
-    function syncVideoRows() {
-        document.querySelectorAll('[data-ar-video]').forEach(function (row) {
-            row.style.display = row.getAttribute('data-ar-video') === typeSelect.value ? '' : 'none';
+    var maxItems = <?= (int)$maxItems ?>;
+    var list = document.getElementById('arItems');
+    var template = document.getElementById('arItemTemplate');
+    var addButton = document.getElementById('arAddItem');
+    // Array keys only need to be unique, not consecutive, so a removed row
+    // never has to renumber the others.
+    var nextKey = 1;
+
+    function rows() { return list.querySelectorAll('[data-item-row]'); }
+
+    function renumber() {
+        var all = rows();
+        all.forEach(function (row, index) {
+            row.querySelector('[data-item-title]').textContent = all.length > 1 ? 'Photo ' + (index + 1) : 'Photo';
+            row.querySelector('[data-remove-item]').style.display = all.length > 1 ? '' : 'none';
+        });
+        addButton.disabled = all.length >= maxItems;
+    }
+
+    function wire(row) {
+        var select = row.querySelector('[data-video-type]');
+        function syncVideo() {
+            row.querySelectorAll('[data-ar-video]').forEach(function (field) {
+                field.style.display = field.getAttribute('data-ar-video') === select.value ? '' : 'none';
+            });
+        }
+        select.addEventListener('change', syncVideo);
+        syncVideo();
+
+        // Immediate thumbnail so staff can see they grabbed the right photo.
+        var input = row.querySelector('[data-photo-input]');
+        var preview = row.querySelector('[data-photo-preview]');
+        input.addEventListener('change', function () {
+            var file = input.files && input.files[0];
+            if (!file) { preview.style.display = 'none'; return; }
+            preview.querySelector('img').src = URL.createObjectURL(file);
+            preview.style.display = '';
+        });
+
+        row.querySelector('[data-remove-item]').addEventListener('click', function () {
+            row.remove();
+            renumber();
         });
     }
-    typeSelect.addEventListener('change', syncVideoRows);
-    syncVideoRows();
 
-    // Immediate thumbnail so staff can see they grabbed the right photo.
-    var fileInput = document.getElementById('arQuickPhoto');
-    var preview = document.getElementById('arQuickPreview');
-    fileInput.addEventListener('change', function () {
-        var file = fileInput.files && fileInput.files[0];
-        if (!file) { preview.style.display = 'none'; return; }
-        preview.querySelector('img').src = URL.createObjectURL(file);
-        preview.style.display = '';
+    addButton.addEventListener('click', function () {
+        if (rows().length >= maxItems) return;
+        var html = template.innerHTML.replace(/__KEY__/g, String(nextKey++));
+        var holder = document.createElement('div');
+        holder.innerHTML = html.trim();
+        var row = holder.firstElementChild;
+        list.appendChild(row);
+        wire(row);
+        renumber();
     });
+
+    rows().forEach(wire);
+    renumber();
 
     // Compilation is synchronous — make it obvious the page is working rather
     // than letting someone double-submit and queue a second compile.
-    var form = fileInput.closest('form');
+    var form = document.getElementById('arQuickForm');
     var submit = document.getElementById('arQuickSubmit');
     var hint = document.getElementById('arQuickHint');
     form.addEventListener('submit', function () {
+        var count = rows().length;
         submit.disabled = true;
-        submit.textContent = 'Building AR target…';
-        hint.textContent = 'Analysing the photo — this takes a few seconds, please don’t close the page.';
+        submit.textContent = count > 1 ? 'Building ' + count + ' AR targets…' : 'Building AR target…';
+        hint.textContent = 'Analysing the photos — this takes a few seconds each, please don’t close the page.';
     });
 })();
 </script>

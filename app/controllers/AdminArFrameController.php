@@ -8,6 +8,9 @@
  *
  * Both call the same ArFrameService for photo handling and target generation,
  * and both produce frames served by the same public /scan/{slug} page.
+ *
+ * A frame holds one or more photos, each with its own video. They share the
+ * frame's QR sticker; each photo has its own target and its own live test.
  */
 class AdminArFrameController extends BaseController
 {
@@ -32,12 +35,14 @@ class AdminArFrameController extends BaseController
     private const QR_PIXEL_SIZE = 12;
 
     private ArFrame $frames;
+    private ArFrameItem $items;
     private ArFrameService $service;
 
     public function __construct()
     {
         require_once APP_PATH . '/services/ArFrameService.php';
         $this->frames = new ArFrame();
+        $this->items = new ArFrameItem();
         $this->service = new ArFrameService();
     }
 
@@ -73,13 +78,13 @@ class AdminArFrameController extends BaseController
     /**
      * Size of the public "scan anything" bundle.
      *
-     * Every active frame's target is downloaded by /scan, so this grows with the
+     * Every active photo's target is downloaded by /scan, so this grows with the
      * catalogue. Reported here rather than left to surprise a customer on mobile
-     * data — the per-frame link printed on each card is unaffected either way.
+     * data — the per-frame link printed on each sticker is unaffected either way.
      */
     private function scanAllStatus(): array
     {
-        $count = count($this->service->scannableFrames());
+        $count = count($this->service->scannableTargets());
         $bytes = $count * 464 * 1024;   // measured average per compiled target
 
         return [
@@ -101,73 +106,76 @@ class AdminArFrameController extends BaseController
             redirect('/admin/ar-frames');
         }
 
+        $items = $this->service->items($frame);
+        $playback = [];
+        foreach ($items as $item) {
+            $playback[(int)$item['id']] = $this->service->playback($item);
+        }
+
         $this->viewAdmin('admin/ar_frames_show', [
             'metaTitle'    => 'AR Frame ' . $frame['slug'],
             'frame'        => $frame,
-            'playback'     => $this->service->playback($frame),
+            'items'        => $items,
+            'playback'     => $playback,
             'transitions'  => ArFrame::allowedTransitions($frame),
             'scanUrl'      => ArFrameService::scanUrl($frame['slug']),
             'phoneTestUrl' => $this->phoneTestUrl($frame['slug']),
             'compiler'     => $this->compilerStatus(),
+            'maxItems'     => ArFrameItem::MAX_PER_FRAME,
+            'uploadLimit'  => (string)ini_get('post_max_size'),
         ]);
     }
 
     // ------------------------------------------------- shared pipeline actions
 
     /**
-     * Generate (or regenerate) the .mind target for a frame. Used by both the
-     * online queue and the walk-in flow.
+     * Generate targets for a frame's photos. Used by both the online queue and
+     * the walk-in flow. With only_missing set, photos that already have a target
+     * are left as they are.
      */
     public function generateTarget(int $id): void
     {
         $this->requireAdmin();
         $this->requireCsrf();
+        $frame = $this->findFrameOrRedirect($id);
 
-        $frame = $this->frames->find($id);
-        if (!$frame) {
-            flash('error', 'That AR frame was not found.');
-            redirect('/admin/ar-frames');
+        $onlyMissing = (bool)$this->input('only_missing');
+        $pending = array_filter(
+            $this->service->items($frame),
+            fn($item) => !$onlyMissing || empty($item['target_path'])
+        );
+
+        if (!$this->throttleGeneration(max(1, count($pending)))) {
+            flash('error', 'Too many target generations in a short time. Please wait a minute and try again.');
+            redirect('/admin/ar-frames/' . $id);
         }
+
+        @set_time_limit(30 + 20 * count($pending));
+        $this->flashGeneration($this->service->generateTarget($id, $onlyMissing), 'Target generated.');
+        redirect('/admin/ar-frames/' . $id);
+    }
+
+    /** Regenerate the target for one photo, then rebuild the frame's combined target. */
+    public function generateItemTarget(int $id, int $itemId): void
+    {
+        $this->requireAdmin();
+        $this->requireCsrf();
+        $frame = $this->findFrameOrRedirect($id);
+        $item = $this->findItemOrRedirect($id, $itemId);
 
         if (!$this->throttleGeneration()) {
             flash('error', 'Too many target generations in a short time. Please wait a minute and try again.');
             redirect('/admin/ar-frames/' . $id);
         }
 
-        $result = $this->service->generateTarget($id);
-
-        if (empty($result['ok'])) {
-            $message = $result['error'];
-            if (!empty($result['detail']) && ENVIRONMENT === 'development') {
-                $message .= ' (' . $result['detail'] . ')';
-            }
-            flash('error', $message);
-            redirect('/admin/ar-frames/' . $id);
-        }
-
-        if ($result['flag'] === 'good') {
-            flash('success', sprintf(
-                'Target generated. Trackability %d/100 — %s Now run the live scan test.',
-                $result['score'],
-                $result['advice']
-            ));
-        } else {
-            // Not an error: the target exists and may well work. But the whole
-            // point of checking is to catch a weak photo before printing.
-            flash('error', sprintf(
-                'Target generated, but trackability is only %d/100 (%s). %s',
-                $result['score'],
-                strtoupper($result['flag']),
-                $result['advice']
-            ));
-        }
-
-        redirect('/admin/ar-frames/' . $id);
+        $this->compileAndFlash($frame, $item, 'Target regenerated.');
+        redirect('/admin/ar-frames/' . $id . '#item-' . $itemId);
     }
 
     /**
      * Recorded by the live-test page (JSON) once MindAR reports a real match
-     * against the frame's own target. This is the gate that unlocks printing.
+     * against one of the frame's photos. Every photo has to pass before the
+     * frame can be printed.
      */
     public function verify(int $id): void
     {
@@ -189,13 +197,25 @@ class AdminArFrameController extends BaseController
             jsonResponse(['ok' => false, 'message' => 'Generate the target before testing.'], 422);
         }
 
-        if (!$this->service->markVerified($id)) {
-            jsonResponse(['ok' => false, 'message' => 'Could not record the test result.'], 500);
+        $result = $this->service->markItemVerified($id, (int)$this->input('item_id', 0));
+        if (empty($result['ok'])) {
+            jsonResponse(['ok' => false, 'message' => $result['error'] ?? 'Could not record the test result.'], 422);
+        }
+
+        if ($result['verified'] >= $result['total']) {
+            $message = $result['total'] > 1
+                ? 'All ' . $result['total'] . ' photos passed the live scan test. This frame is ready to print.'
+                : 'Live scan test passed. This frame is ready to print.';
+        } else {
+            $message = 'That photo passed — ' . $result['verified'] . ' of ' . $result['total']
+                . ' verified. Close the video and scan the next photo.';
         }
 
         jsonResponse([
             'ok' => true,
-            'message' => 'Live scan test passed. This frame is ready to print.',
+            'message' => $message,
+            'verified' => $result['verified'],
+            'total' => $result['total'],
             'redirect' => url('/admin/ar-frames/' . $id),
         ]);
     }
@@ -209,20 +229,21 @@ class AdminArFrameController extends BaseController
      * signed in on, instead of requiring a second login on the phone.
      *
      * Requires an explicit tick: this is the gate that lets a frame be printed,
-     * so it must not be possible to clear by accident.
+     * so it must not be possible to clear by accident. It covers every photo, so
+     * it is refused while any photo still has no target to have been tested.
      */
     public function confirmTest(int $id): void
     {
         $this->requireAdmin();
         $this->requireCsrf();
+        $frame = $this->findFrameOrRedirect($id);
 
-        $frame = $this->frames->find($id);
-        if (!$frame) {
-            flash('error', 'That AR frame was not found.');
-            redirect('/admin/ar-frames');
-        }
-        if (empty($frame['target_path'])) {
-            flash('error', 'Generate the target before recording a live test.');
+        $items = $this->service->items($frame);
+        $untargeted = count(array_filter($items, fn($item) => empty($item['target_path'])));
+        if (!$items || empty($frame['target_path']) || $untargeted > 0) {
+            flash('error', $untargeted > 0
+                ? 'Generate a target for every photo before recording the live test.'
+                : 'Generate the target before recording a live test.');
             redirect('/admin/ar-frames/' . $id);
         }
         if (!$this->input('confirmed')) {
@@ -244,12 +265,7 @@ class AdminArFrameController extends BaseController
     {
         $this->requireAdmin();
         $this->requireCsrf();
-
-        $frame = $this->frames->find($id);
-        if (!$frame) {
-            flash('error', 'That AR frame was not found.');
-            redirect('/admin/ar-frames');
-        }
+        $frame = $this->findFrameOrRedirect($id);
 
         $next = (string)$this->input('status', '');
         if (!in_array($next, ArFrame::allowedTransitions($frame), true)) {
@@ -267,137 +283,182 @@ class AdminArFrameController extends BaseController
     /**
      * Delete a frame and the files it owns.
      *
-     * Permanent, and it breaks the scan link printed on that customer's card —
+     * Permanent, and it breaks the scan link printed on that customer's sticker —
      * so the confirmation in the UI names the slug and says so plainly. Use the
      * "Scan link active" toggle instead when a frame should merely stop working
      * but stay on record.
      *
-     * The scan-anything bundle is keyed on a fingerprint of the frames it
+     * The scan-anything bundle is keyed on a fingerprint of the photos it
      * contains, so removing one rebuilds it automatically on the next visit.
      */
     public function delete(int $id): void
     {
         $this->requireAdmin();
         $this->requireCsrf();
-
-        $frame = $this->frames->find($id);
-        if (!$frame) {
-            flash('error', 'That AR frame was not found.');
-            redirect('/admin/ar-frames');
-        }
+        $frame = $this->findFrameOrRedirect($id);
 
         // Files first: if the row went first and this failed, the files would be
-        // orphaned with nothing left pointing at them.
-        $this->service->deleteFile($frame['photo_path']);
-        $this->service->deleteFile($frame['target_path']);
-        $this->service->deleteFile($frame['video_path']);
+        // orphaned with nothing left pointing at them. Item rows go with the
+        // frame row (ON DELETE CASCADE).
+        $this->service->deleteFrameFiles($frame);
         $this->service->deleteFile($this->stickerQrPath($frame['slug']));
 
         $this->frames->delete($id);
 
-        flash('success', 'AR frame ' . $frame['slug'] . ' deleted, along with its photo and target.');
+        flash('success', 'AR frame ' . $frame['slug'] . ' deleted, along with its photos and targets.');
         redirect('/admin/ar-frames');
     }
 
-    /** Replace the customer photo (e.g. after a poor trackability warning). */
-    public function replacePhoto(int $id): void
+    /** Update the frame-wide details: customer reference, notes, and the kill switch. */
+    public function updateDetails(int $id): void
     {
         $this->requireAdmin();
         $this->requireCsrf();
+        $this->findFrameOrRedirect($id);
 
-        $frame = $this->frames->find($id);
-        if (!$frame) {
-            flash('error', 'That AR frame was not found.');
-            redirect('/admin/ar-frames');
+        $this->frames->update($id, [
+            'customer_name'  => $this->nullIfBlank((string)$this->input('customer_name', '')),
+            'customer_phone' => $this->nullIfBlank((string)$this->input('customer_phone', '')),
+            'notes'          => $this->nullIfBlank((string)$this->input('notes', '')),
+            'is_active'      => $this->input('is_active') ? 1 : 0,
+        ]);
+        flash('success', 'Frame details updated.');
+        redirect('/admin/ar-frames/' . $id);
+    }
+
+    // -------------------------------------------------------------- photos
+
+    /**
+     * Add another photo and the video it plays. Compiled straight away, like
+     * the walk-in flow, so the page comes back ready for the live test.
+     */
+    public function addItem(int $id): void
+    {
+        $this->requireAdmin();
+        $this->requireCsrf();
+        $frame = $this->findFrameOrRedirect($id);
+
+        if ($this->items->countForFrame($id) >= ArFrameItem::MAX_PER_FRAME) {
+            flash('error', 'A frame can hold at most ' . ArFrameItem::MAX_PER_FRAME . ' photos.');
+            redirect('/admin/ar-frames/' . $id);
         }
+
+        $video = $this->videoFromInput($_POST, $_FILES['video'] ?? null, null);
+        if (empty($video['ok'])) {
+            flash('error', $video['error']);
+            redirect('/admin/ar-frames/' . $id . '#add-photo');
+        }
+
+        $photo = $this->service->storePhoto($_FILES['photo'] ?? []);
+        if (empty($photo['ok'])) {
+            $this->service->deleteFile($video['stored'] ?? null);
+            flash('error', $photo['error']);
+            redirect('/admin/ar-frames/' . $id . '#add-photo');
+        }
+
+        $itemId = $this->service->addItem($id, array_merge($video['data'], ['photo_path' => $photo['path']]));
+        $item = $this->items->find($itemId);
+
+        if (!$this->throttleGeneration()) {
+            flash('error', 'Photo added, but too many targets were generated in a short time. '
+                . 'Wait a minute, then use "Generate missing targets".');
+            redirect('/admin/ar-frames/' . $id . '#item-' . $itemId);
+        }
+
+        $this->compileAndFlash($frame, $item, 'Photo added and its target generated.');
+        redirect('/admin/ar-frames/' . $id . '#item-' . $itemId);
+    }
+
+    /** Replace one photo (e.g. after a poor trackability warning) and recompile it. */
+    public function replaceItemPhoto(int $id, int $itemId): void
+    {
+        $this->requireAdmin();
+        $this->requireCsrf();
+        $frame = $this->findFrameOrRedirect($id);
+        $item = $this->findItemOrRedirect($id, $itemId);
 
         $stored = $this->service->storePhoto($_FILES['photo'] ?? []);
         if (empty($stored['ok'])) {
             flash('error', $stored['error']);
-            redirect('/admin/ar-frames/' . $id);
+            redirect('/admin/ar-frames/' . $id . '#item-' . $itemId);
         }
 
-        $oldPhoto = $frame['photo_path'];
-        $oldTarget = $frame['target_path'];
-
         // A new photo invalidates the old target and any earlier live test.
-        $this->frames->update($id, [
+        $this->items->update($itemId, [
             'photo_path'         => $stored['path'],
             'target_path'        => null,
             'trackability_score' => null,
             'trackability_flag'  => null,
             'trackability_json'  => null,
             'verified_at'        => null,
-            'status'             => 'pending_setup',
         ]);
-        $this->service->deleteFile($oldPhoto);
-        $this->service->deleteFile($oldTarget);
+        $this->service->deleteFile($item['photo_path']);
+        $this->service->deleteFile($item['target_path']);
+        $item = $this->items->find($itemId);
 
-        flash('success', 'Photo replaced. Generate the target again to continue.');
-        redirect('/admin/ar-frames/' . $id);
+        if (!$this->throttleGeneration()) {
+            $this->service->refreshFrame($id);
+            flash('error', 'Photo replaced, but too many targets were generated in a short time. '
+                . 'Wait a minute, then regenerate its target.');
+            redirect('/admin/ar-frames/' . $id . '#item-' . $itemId);
+        }
+
+        $this->compileAndFlash($frame, $item, 'Photo replaced and its target regenerated.');
+        redirect('/admin/ar-frames/' . $id . '#item-' . $itemId);
     }
 
-    /** Update the video, playback mode, notes and customer reference. */
-    public function updateDetails(int $id): void
+    /** Change the video one photo plays, and how it plays. */
+    public function updateItemVideo(int $id, int $itemId): void
     {
         $this->requireAdmin();
         $this->requireCsrf();
+        $this->findFrameOrRedirect($id);
+        $item = $this->findItemOrRedirect($id, $itemId);
 
-        $frame = $this->frames->find($id);
-        if (!$frame) {
-            flash('error', 'That AR frame was not found.');
-            redirect('/admin/ar-frames');
+        $video = $this->videoFromInput($_POST, $_FILES['video'] ?? null, $item);
+        if (empty($video['ok'])) {
+            flash('error', $video['error']);
+            redirect('/admin/ar-frames/' . $id . '#item-' . $itemId);
         }
 
-        $data = [
-            'customer_name'  => $this->nullIfBlank((string)$this->input('customer_name', '')),
-            'customer_phone' => $this->nullIfBlank((string)$this->input('customer_phone', '')),
-            'notes'          => $this->nullIfBlank((string)$this->input('notes', '')),
-            'playback_mode'  => $this->input('playback_mode') === 'overlay' ? 'overlay' : 'fullscreen',
-            'is_active'      => $this->input('is_active') ? 1 : 0,
-        ];
-
-        $videoType = $this->input('video_type') === 'upload' ? 'upload' : 'link';
-
-        if ($videoType === 'link') {
-            // One field for every provider — the source is detected from the URL.
-            $source = $this->service->detectVideoSource((string)$this->input('video_url', ''));
-            if ($source === null) {
-                flash('error', self::VIDEO_URL_HELP);
-                redirect('/admin/ar-frames/' . $id);
-            }
-            $data['video_type'] = $source['type'];
-            $data['video_url'] = $source['url'];
-        } else {
-            $data['video_type'] = 'upload';
-            // Only replace the file when a new one was actually chosen.
-            if (!empty($_FILES['video']['name'])) {
-                $stored = $this->service->storeVideo($_FILES['video']);
-                if (empty($stored['ok'])) {
-                    flash('error', $stored['error']);
-                    redirect('/admin/ar-frames/' . $id);
-                }
-                $old = $frame['video_path'];
-                $data['video_path'] = $stored['path'];
-                $this->service->deleteFile($old);
-            } elseif (empty($frame['video_path'])) {
-                flash('error', 'Please choose a video file to upload.');
-                redirect('/admin/ar-frames/' . $id);
-            }
+        $this->items->update($itemId, $video['data']);
+        if (!empty($video['stored']) && !empty($item['video_path']) && $item['video_path'] !== $video['stored']) {
+            $this->service->deleteFile($item['video_path']);
         }
 
-        $this->frames->update($id, $data);
-        flash('success', 'Frame details updated.');
+        flash('success', 'Video updated.');
+        redirect('/admin/ar-frames/' . $id . '#item-' . $itemId);
+    }
+
+    /**
+     * Remove one photo from a frame. The last one cannot be removed — a frame
+     * with nothing to scan is just a broken sticker; replace it, or delete the
+     * frame.
+     */
+    public function deleteItem(int $id, int $itemId): void
+    {
+        $this->requireAdmin();
+        $this->requireCsrf();
+        $this->findFrameOrRedirect($id);
+        $item = $this->findItemOrRedirect($id, $itemId);
+
+        if ($this->items->countForFrame($id) <= 1) {
+            flash('error', 'A frame needs at least one photo. Replace this one instead, or delete the whole frame.');
+            redirect('/admin/ar-frames/' . $id);
+        }
+
+        $this->service->deleteItem($id, $item);
+        flash('success', 'Photo removed, along with its video and target.');
         redirect('/admin/ar-frames/' . $id);
     }
 
     // ------------------------------------------------- walk-in (Quick Create)
 
     /**
-     * One-page counter flow. On submit it stores the photo, creates the frame
-     * and compiles the target synchronously — the customer is standing there, so
-     * a queue would be useless. The response lands on the detail page with the
-     * trackability verdict and the live-test button ready.
+     * One-page counter flow. On submit it stores the photos, creates the frame
+     * and compiles every target synchronously — the customer is standing there,
+     * so a queue would be useless. The response lands on the detail page with
+     * the trackability verdict and the live-test button ready.
      */
     public function quickCreate(): void
     {
@@ -406,80 +467,105 @@ class AdminArFrameController extends BaseController
 
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             $this->viewAdmin('admin/ar_frames_quick_create', [
-                'metaTitle' => 'Quick Create (Walk-in)',
-                'compiler'  => $this->compilerStatus(),
+                'metaTitle'   => 'Quick Create (Walk-in)',
+                'compiler'    => $this->compilerStatus(),
+                'maxItems'    => ArFrameItem::MAX_PER_FRAME,
+                'uploadLimit' => (string)ini_get('post_max_size'),
             ]);
             return;
         }
 
         $this->requireCsrf();
 
-        $videoType = $this->input('video_type') === 'upload' ? 'upload' : 'link';
-        $videoUrl = null;
-        $videoPath = null;
+        $rows = is_array($_POST['items'] ?? null) ? $_POST['items'] : [];
 
-        // Validate the video before touching the photo, so a bad link doesn't
-        // leave an orphaned upload behind.
-        if ($videoType === 'link') {
-            $source = $this->service->detectVideoSource((string)$this->input('video_url', ''));
-            if ($source === null) {
-                $this->quickCreateError(self::VIDEO_URL_HELP);
+        // Drop rows left completely blank — the form always offers an empty one.
+        $keys = [];
+        foreach ($rows as $key => $row) {
+            $hasPhoto = !empty($_FILES['item_photo']['name'][$key]);
+            $hasLink = trim((string)($row['video_url'] ?? '')) !== '';
+            $hasFile = !empty($_FILES['item_video']['name'][$key]);
+            if ($hasPhoto || $hasLink || $hasFile) {
+                $keys[] = $key;
             }
-            $videoType = $source['type'];
-            $videoUrl = $source['url'];
         }
 
-        $photo = $this->service->storePhoto($_FILES['photo'] ?? []);
-        if (empty($photo['ok'])) {
-            $this->quickCreateError($photo['error']);
+        if (!$keys) {
+            $this->quickCreateError('Add at least one photo and the video it should play.');
+        }
+        if (count($keys) > ArFrameItem::MAX_PER_FRAME) {
+            $this->quickCreateError('A frame can hold at most ' . ArFrameItem::MAX_PER_FRAME . ' photos.');
         }
 
-        if ($videoType === 'upload') {
-            $video = $this->service->storeVideo($_FILES['video'] ?? []);
+        // Validate every link and photo before storing anything, so one bad row
+        // doesn't leave the others' uploads orphaned.
+        foreach ($keys as $position => $key) {
+            $label = count($keys) > 1 ? 'Photo ' . ($position + 1) . ': ' : '';
+            if (empty($_FILES['item_photo']['name'][$key])) {
+                $this->quickCreateError($label . 'Please choose the photo to print.');
+            }
+            $row = $rows[$key];
+            if (($row['video_type'] ?? '') !== 'upload' && $this->service->detectVideoSource((string)($row['video_url'] ?? '')) === null) {
+                $this->quickCreateError($label . self::VIDEO_URL_HELP);
+            }
+        }
+
+        $items = [];
+        $stored = [];
+        foreach ($keys as $position => $key) {
+            $label = count($keys) > 1 ? 'Photo ' . ($position + 1) . ': ' : '';
+
+            $photo = $this->service->storePhoto($this->fileAt('item_photo', $key));
+            if (empty($photo['ok'])) {
+                $this->discardAndFail($stored, $label . $photo['error']);
+            }
+            $stored[] = $photo['path'];
+
+            $video = $this->videoFromInput($rows[$key], $this->fileAt('item_video', $key), null);
             if (empty($video['ok'])) {
-                $this->service->deleteFile($photo['path']);
-                $this->quickCreateError($video['error']);
+                $this->discardAndFail($stored, $label . $video['error']);
             }
-            $videoPath = $video['path'];
+            if (!empty($video['stored'])) {
+                $stored[] = $video['stored'];
+            }
+
+            $items[] = array_merge($video['data'], ['photo_path' => $photo['path']]);
         }
 
-        if (!$this->throttleGeneration()) {
-            $this->service->deleteFile($photo['path']);
-            if ($videoPath !== null) {
-                $this->service->deleteFile($videoPath);
-            }
-            $this->quickCreateError('Too many target generations in a short time. Please wait a minute and try again.');
+        if (!$this->throttleGeneration(count($items))) {
+            $this->discardAndFail($stored, 'Too many target generations in a short time. Please wait a minute and try again.');
         }
 
         $id = $this->service->createFrame([
             'channel'        => 'in_store',
-            'photo_path'     => $photo['path'],
-            'video_type'     => $videoType,
-            'video_url'      => $videoUrl,
-            'video_path'     => $videoPath,
-            'playback_mode'  => $this->input('playback_mode') === 'overlay' ? 'overlay' : 'fullscreen',
             'customer_name'  => $this->nullIfBlank((string)$this->input('customer_name', '')),
             'customer_phone' => $this->nullIfBlank((string)$this->input('customer_phone', '')),
             'notes'          => $this->nullIfBlank((string)$this->input('notes', '')),
             'created_by'     => currentUserId(),
-        ]);
+        ], $items);
 
+        @set_time_limit(30 + 20 * count($items));
         $result = $this->service->generateTarget($id);
+        $slug = $this->frames->find($id)['slug'];
 
         if (empty($result['ok'])) {
-            flash('error', $result['error'] . ' The frame was saved — replace the photo and generate again.');
+            flash('error', $result['error'] . ' The frame was saved — replace that photo and generate again.');
             redirect('/admin/ar-frames/' . $id);
         }
 
+        $photos = count($items) > 1 ? count($items) . ' targets' : 'target';
         if ($result['flag'] === 'good') {
             flash('success', sprintf(
-                'Frame %s created and target generated in seconds. Trackability %d/100. Run the live scan test now, before the customer leaves.',
-                $this->frames->find($id)['slug'],
-                $result['score']
+                'Frame %s created and %s generated. Trackability %d/100%s. Run the live scan test now, before the customer leaves.',
+                $slug,
+                $photos,
+                $result['score'],
+                count($items) > 1 ? ' for the weakest photo' : ''
             ));
         } else {
             flash('error', sprintf(
-                'Heads up: trackability is only %d/100 (%s). %s Swap the photo now while the customer is still here.',
+                'Heads up: %strackability is only %d/100 (%s). %s Swap the photo now while the customer is still here.',
+                count($items) > 1 ? 'photo ' . $result['position'] . "'s " : '',
                 $result['score'],
                 strtoupper($result['flag']),
                 $result['advice']
@@ -495,29 +581,34 @@ class AdminArFrameController extends BaseController
         $this->setOld([
             'customer_name'  => (string)$this->input('customer_name', ''),
             'customer_phone' => (string)$this->input('customer_phone', ''),
-            'video_url'      => (string)$this->input('video_url', ''),
             'notes'          => (string)$this->input('notes', ''),
         ]);
         redirect('/admin/ar-frames/quick-create');
+    }
+
+    /** Remove files already stored for a Quick Create that is being abandoned. */
+    private function discardAndFail(array $stored, string $message): void
+    {
+        foreach ($stored as $path) {
+            $this->service->deleteFile($path);
+        }
+        $this->quickCreateError($message);
     }
 
     // ------------------------------------------------------------ live test
 
     /**
      * The admin-facing live scan test: the same MindAR camera page the customer
-     * gets, but wired to report a successful match back to verify().
+     * gets, but wired to report each successful match back to verify().
      */
     public function liveTest(int $id): void
     {
         $this->requireAdmin();
         if ($this->schemaMissing()) return;
+        $frame = $this->findFrameOrRedirect($id);
 
-        $frame = $this->frames->find($id);
-        if (!$frame) {
-            flash('error', 'That AR frame was not found.');
-            redirect('/admin/ar-frames');
-        }
-        if (empty($frame['target_path'])) {
+        $scan = $this->service->frameScan($frame);
+        if ($scan === null) {
             flash('error', 'Generate the target before running the live scan test.');
             redirect('/admin/ar-frames/' . $id);
         }
@@ -525,15 +616,15 @@ class AdminArFrameController extends BaseController
         // Rendered with no admin chrome: this page is held up to a phone camera,
         // and it reuses the public scan view so the test exercises the real thing.
         renderRaw('store/scan_page', [
-            'frame'      => $frame,
-            'targets'    => [$this->service->browserTarget($frame)],
-            'targetUrl'  => ArFrameService::fileUrl($frame['target_path']),
-            'photoUrl'   => ArFrameService::fileUrl($frame['photo_path']),
+            'frame'       => $frame,
+            'targets'     => $scan['targets'],
+            'targetUrl'   => $scan['targetUrl'],
+            'photoUrls'   => array_map(fn($item) => ArFrameService::fileUrl($item['photo_path']), $scan['items']),
             'isAdminTest' => true,
-            'verifyUrl'  => url('/admin/ar-frames/' . $id . '/verify'),
-            'backUrl'    => url('/admin/ar-frames/' . $id),
-            'csrf'       => csrfToken(),
-            'siteName'   => siteSetting('site_name', SITE_NAME),
+            'verifyUrl'   => url('/admin/ar-frames/' . $id . '/verify'),
+            'backUrl'     => url('/admin/ar-frames/' . $id),
+            'csrf'        => csrfToken(),
+            'siteName'    => siteSetting('site_name', SITE_NAME),
         ]);
     }
 
@@ -541,23 +632,31 @@ class AdminArFrameController extends BaseController
      * Full-screen photo, to scan during the live test.
      *
      * Before printing there is no physical photo to point a camera at. Put this
-     * on the biggest screen available and scan it with the phone — the frame's
-     * own photo is the target, so this is a faithful stand-in for the print.
+     * on the biggest screen available and scan it with the phone — the photo is
+     * the target, so this is a faithful stand-in for the print. ?item= picks
+     * which photo; the page links on to the others.
      */
     public function photo(int $id): void
     {
         $this->requireAdmin();
         if ($this->schemaMissing()) return;
+        $frame = $this->findFrameOrRedirect($id);
 
-        $frame = $this->frames->find($id);
-        if (!$frame) {
-            flash('error', 'That AR frame was not found.');
-            redirect('/admin/ar-frames');
+        $items = $this->service->items($frame);
+        $wanted = (int)$this->input('item', 0);
+        $position = 0;
+        foreach ($items as $index => $item) {
+            if ((int)$item['id'] === $wanted) {
+                $position = $index;
+                break;
+            }
         }
 
         renderRaw('admin/ar_frame_photo', [
-            'frame' => $frame,
-            'backUrl' => url('/admin/ar-frames/' . $id),
+            'frame'    => $frame,
+            'items'    => $items,
+            'position' => $position,
+            'backUrl'  => url('/admin/ar-frames/' . $id),
         ]);
     }
 
@@ -585,8 +684,8 @@ class AdminArFrameController extends BaseController
      *
      * The sticker goes on the physical frame, so it replaces the site-wide
      * camera button as the way in: scanning it opens this frame's own
-     * /scan/{slug} page, which is the same camera the button used to open — only
-     * pre-aimed at one target instead of the whole catalogue.
+     * /scan/{slug} page — the camera, pre-aimed at every photo in this frame and
+     * nothing else.
      *
      * The PNG is embedded in the page rather than linked, so what was on screen
      * is exactly what reaches the printer.
@@ -595,12 +694,7 @@ class AdminArFrameController extends BaseController
     {
         $this->requireAdmin();
         if ($this->schemaMissing()) return;
-
-        $frame = $this->frames->find($id);
-        if (!$frame) {
-            flash('error', 'That AR frame was not found.');
-            redirect('/admin/ar-frames');
-        }
+        $frame = $this->findFrameOrRedirect($id);
 
         require_once APP_PATH . '/services/QrCodeService.php';
         $scanUrl = ArFrameService::scanUrl($frame['slug']);
@@ -633,6 +727,140 @@ class AdminArFrameController extends BaseController
     }
 
     // ----------------------------------------------------------------- helpers
+
+    private function findFrameOrRedirect(int $id): array
+    {
+        $frame = $this->frames->find($id);
+        if (!$frame) {
+            flash('error', 'That AR frame was not found.');
+            redirect('/admin/ar-frames');
+        }
+        return $frame;
+    }
+
+    private function findItemOrRedirect(int $frameId, int $itemId): array
+    {
+        $item = $this->items->findForFrame($frameId, $itemId);
+        if (!$item) {
+            flash('error', 'That photo is not part of this frame.');
+            redirect('/admin/ar-frames/' . $frameId);
+        }
+        return $item;
+    }
+
+    /**
+     * Read one photo's video fields.
+     *
+     * One field for every provider when it is a link — the source is detected
+     * from the URL. An upload keeps the file already attached unless a new one
+     * was chosen.
+     *
+     * @param array      $input    video_type, video_url, playback_mode
+     * @param array|null $file     one $_FILES entry for an uploaded video
+     * @param array|null $existing the item being edited, if any
+     * @return array{ok: bool, data?: array, stored?: string, error?: string} stored is a newly saved file
+     */
+    private function videoFromInput(array $input, ?array $file, ?array $existing): array
+    {
+        $data = [
+            'playback_mode' => ($input['playback_mode'] ?? '') === 'overlay' ? 'overlay' : 'fullscreen',
+        ];
+
+        if (($input['video_type'] ?? '') !== 'upload') {
+            $source = $this->service->detectVideoSource((string)($input['video_url'] ?? ''));
+            if ($source === null) {
+                return ['ok' => false, 'error' => self::VIDEO_URL_HELP];
+            }
+            $data['video_type'] = $source['type'];
+            $data['video_url'] = $source['url'];
+            return ['ok' => true, 'data' => $data];
+        }
+
+        $data['video_type'] = 'upload';
+        if (!empty($file['name'])) {
+            $stored = $this->service->storeVideo($file);
+            if (empty($stored['ok'])) {
+                return ['ok' => false, 'error' => $stored['error']];
+            }
+            $data['video_path'] = $stored['path'];
+            return ['ok' => true, 'data' => $data, 'stored' => $stored['path']];
+        }
+        if (empty($existing['video_path'])) {
+            return ['ok' => false, 'error' => 'Please choose a video file to upload.'];
+        }
+        return ['ok' => true, 'data' => $data];
+    }
+
+    /** One file out of a PHP multi-file field (name="field[key]"), shaped like a single $_FILES entry. */
+    private function fileAt(string $field, $key): array
+    {
+        $files = $_FILES[$field] ?? null;
+        if (!is_array($files) || !isset($files['name'][$key])) {
+            return ['error' => UPLOAD_ERR_NO_FILE];
+        }
+        return [
+            'name'     => $files['name'][$key],
+            'type'     => $files['type'][$key] ?? '',
+            'tmp_name' => $files['tmp_name'][$key] ?? '',
+            'error'    => $files['error'][$key] ?? UPLOAD_ERR_NO_FILE,
+            'size'     => $files['size'][$key] ?? 0,
+        ];
+    }
+
+    /** Compile one photo, rebuild the frame's target, and report the verdict. */
+    private function compileAndFlash(array $frame, array $item, string $successLead): void
+    {
+        $result = $this->service->compileItem($frame, $item);
+        $refresh = $this->service->refreshFrame((int)$frame['id']);
+
+        if (!empty($result['ok'])) {
+            $result['advice'] = ArTargetService::trackabilityAdvice($result['flag']);
+            if (empty($refresh['ok'])) {
+                $result['ok'] = false;
+                $result['error'] = $refresh['error'];
+            }
+        }
+        $this->flashGeneration($result, $successLead);
+    }
+
+    private function flashGeneration(array $result, string $successLead): void
+    {
+        if (empty($result['ok'])) {
+            $message = $result['error'] ?? 'Target generation failed.';
+            if (!empty($result['detail']) && ENVIRONMENT === 'development') {
+                $message .= ' (' . $result['detail'] . ')';
+            }
+            flash('error', $message);
+            return;
+        }
+
+        if (!isset($result['score'])) {
+            flash('success', 'Every photo already has a target.');
+            return;
+        }
+
+        $which = !empty($result['position']) && ($result['total'] ?? 1) > 1 ? ' (weakest: photo ' . $result['position'] . ')' : '';
+        if ($result['flag'] === 'good') {
+            flash('success', sprintf(
+                '%s Trackability %d/100%s — %s Now run the live scan test.',
+                $successLead,
+                $result['score'],
+                $which,
+                $result['advice']
+            ));
+        } else {
+            // Not an error: the target exists and may well work. But the whole
+            // point of checking is to catch a weak photo before printing.
+            flash('error', sprintf(
+                '%s But trackability is only %d/100 (%s)%s. %s',
+                $successLead,
+                $result['score'],
+                strtoupper($result['flag']),
+                $which,
+                $result['advice']
+            ));
+        }
+    }
 
     /**
      * A scan URL a phone on the same network can actually open, for local
@@ -667,25 +895,35 @@ class AdminArFrameController extends BaseController
     }
 
     /**
-     * Renders setup instructions when the migration has not been run, and
-     * reports whether it did so.
+     * Renders setup instructions when a migration has not been run, and reports
+     * whether it did so.
      *
      * Deployment ships code without migrations, so on a fresh deploy this is
      * the expected first state — not an exception. Callers `return` on true.
+     * The public scan pages keep working from the old single-photo columns in
+     * the meantime; only the admin waits.
      */
     private function schemaMissing(): bool
     {
-        if ($this->frames->tableExists()) {
+        $siteRoot = BASE_PATH;
+
+        if (!$this->frames->tableExists()) {
+            $migration = 'migrations/2026_07_29_ar_frames.sql';
+            $title = 'the AR frames table does not exist yet.';
+        } elseif (!$this->frames->itemsReady()) {
+            $migration = 'migrations/2026_09_14_ar_frame_items.sql';
+            $title = 'the multi-photo migration has not been run yet.';
+        } else {
             return false;
         }
 
-        $siteRoot = BASE_PATH;
         $this->viewAdmin('admin/ar_frames_setup', [
             'metaTitle' => 'AR Frames — Setup Required',
+            'setupTitle' => $title,
             'compiler' => $this->compilerStatus(),
             'migrationCommand' =>
                 "cd {$siteRoot}\n" .
-                "mysql -u <db_user> -p <db_name> < migrations/2026_07_29_ar_frames.sql",
+                "php tools/run-migration.php {$migration}",
             'npmCommand' => "cd {$siteRoot}/tools/mindar-compile\nnpm ci",
         ]);
         return true;
@@ -705,12 +943,12 @@ class AdminArFrameController extends BaseController
     }
 
     /**
-     * Session-scoped rate limit on target generation. Kept in the session rather
-     * than a new table because this endpoint is already behind admin auth — the
-     * limit is here to stop a stuck finger from pegging the CPU, not to stop an
-     * anonymous attacker.
+     * Session-scoped rate limit on target generation, counted per photo
+     * compiled. Kept in the session rather than a new table because this
+     * endpoint is already behind admin auth — the limit is here to stop a stuck
+     * finger from pegging the CPU, not to stop an anonymous attacker.
      */
-    private function throttleGeneration(): bool
+    private function throttleGeneration(int $count = 1): bool
     {
         $now = time();
         $recent = array_values(array_filter(
@@ -718,12 +956,14 @@ class AdminArFrameController extends BaseController
             fn($t) => ($now - (int)$t) < self::GENERATE_WINDOW_SECONDS
         ));
 
-        if (count($recent) >= self::GENERATE_LIMIT) {
+        if (count($recent) + $count > self::GENERATE_LIMIT) {
             $_SESSION['ar_generate_times'] = $recent;
             return false;
         }
 
-        $recent[] = $now;
+        for ($i = 0; $i < $count; $i++) {
+            $recent[] = $now;
+        }
         $_SESSION['ar_generate_times'] = $recent;
         return true;
     }

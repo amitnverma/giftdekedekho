@@ -41,6 +41,27 @@ class ArFrame extends BaseModel
         return $exists;
     }
 
+    /**
+     * Whether the multi-photo migration (2026_09_14_ar_frame_items) has run.
+     *
+     * Checks the column the migration adds after creating ar_frame_items, so a
+     * true here means both are present. Until then frames keep their one photo
+     * on this row, and the public scan pages go on working from it.
+     */
+    public function itemsReady(): bool
+    {
+        static $ready = null;
+        if ($ready === null) {
+            try {
+                $ready = $this->tableExists()
+                    && $this->db->query("SHOW COLUMNS FROM ar_frames LIKE 'target_items'")->fetch() !== false;
+            } catch (Throwable $e) {
+                $ready = false;
+            }
+        }
+        return $ready;
+    }
+
     public function findBySlug(string $slug): ?array
     {
         $stmt = $this->db->prepare('SELECT * FROM ar_frames WHERE slug = ? LIMIT 1');
@@ -101,7 +122,20 @@ class ArFrame extends BaseModel
     {
         [$where, $params] = $this->buildWhere($filters);
 
+        // Per-frame photo summary for the queue: the first photo as a thumbnail,
+        // how many there are, how many passed the live test, and the weakest
+        // trackability — a frame is only as scannable as its worst photo.
         $sql = "SELECT f.*,
+                       (SELECT i.photo_path FROM ar_frame_items i WHERE i.frame_id = f.id
+                         ORDER BY i.sort_order, i.id LIMIT 1) AS first_photo,
+                       (SELECT COUNT(*) FROM ar_frame_items i WHERE i.frame_id = f.id) AS item_count,
+                       (SELECT COUNT(*) FROM ar_frame_items i WHERE i.frame_id = f.id
+                         AND i.target_path IS NOT NULL) AS target_count,
+                       (SELECT COUNT(*) FROM ar_frame_items i WHERE i.frame_id = f.id
+                         AND i.target_path IS NOT NULL AND i.verified_at IS NOT NULL) AS verified_count,
+                       (SELECT MIN(i.trackability_score) FROM ar_frame_items i WHERE i.frame_id = f.id) AS min_score,
+                       (SELECT i.trackability_flag FROM ar_frame_items i WHERE i.frame_id = f.id
+                         AND i.trackability_score IS NOT NULL ORDER BY i.trackability_score ASC LIMIT 1) AS min_flag,
                        oi.order_id,
                        oi.product_name_snapshot,
                        COALESCE(u.name, o.guest_email, f.customer_name) AS display_customer,
