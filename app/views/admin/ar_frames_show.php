@@ -299,12 +299,19 @@ $videoFields = function (?array $item) {
                 <?= e(ArFrame::statusLabel($frame['status'])) ?> — nothing further to do.
             </p>
         <?php endif; ?>
+        <?php $scannable = !empty($frame['target_path']); ?>
+        <?php if (!$scannable): ?>
+            <div class="admin-alert admin-alert-error" style="margin-bottom:10px">
+                <strong>This sticker will not scan yet.</strong> No target has been generated, so scanning it
+                shows &ldquo;still being prepared&rdquo;. Generate the target above first, then print.
+            </div>
+        <?php endif; ?>
         <p class="admin-help-text" style="margin-bottom:6px">
             The sticker goes on the frame itself and is how the customer gets in — scanning it opens this
             frame's camera page directly<?= $isSet ? ', ready for any of its photos' : '' ?>. The card is the paper
             backup, for anyone who loses the sticker.
         </p>
-        <a class="admin-btn admin-btn-sm admin-btn-primary" href="<?= url($frameUrl . '/sticker') ?>" target="_blank">
+        <a class="admin-btn admin-btn-sm <?= $scannable ? 'admin-btn-primary' : '' ?>" href="<?= url($frameUrl . '/sticker') ?>" target="_blank">
             🏷 QR sticker to print
         </a>
         <a class="admin-btn admin-btn-sm" href="<?= url($frameUrl . '/card') ?>" target="_blank">

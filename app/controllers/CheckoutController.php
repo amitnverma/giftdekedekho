@@ -302,6 +302,9 @@ class CheckoutController extends BaseController
      * deliberately not done here — the customer isn't waiting, and a ~5s compile
      * has no business sitting inside a checkout request.
      */
+    /** Frames created by this request, waiting for their targets to be compiled. */
+    private array $newArFrameIds = [];
+
     private function createArFrames(int $orderItemId, ?string $customizationJson): void
     {
         if (empty($customizationJson)) {
@@ -331,7 +334,9 @@ class CheckoutController extends BaseController
                         }
                     }
                     if (!empty($items)) {
-                        $arService->createFrame(['channel' => 'online', 'order_item_id' => $orderItemId], $items);
+                        $this->queueTargetGeneration(
+                            $arService->createFrame(['channel' => 'online', 'order_item_id' => $orderItemId], $items)
+                        );
                     }
                     continue;
                 }
@@ -340,19 +345,77 @@ class CheckoutController extends BaseController
                 if (empty($entry['photo'])) {
                     continue;
                 }
-                $arService->createFrame([
+                $this->queueTargetGeneration($arService->createFrame([
                     'channel' => 'online',
                     'order_item_id' => $orderItemId,
                     'photo_path' => $entry['photo'],
                     'video_type' => 'youtube',
                     'video_url' => $entry['value'] ?? null,
-                ]);
+                ]));
             }
         } catch (Throwable $e) {
             // A frame can always be created by hand from the admin queue, so
             // this must never take an otherwise-valid order down with it.
             error_log('AR frame creation error: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Compile the targets for the frames this order created, once the customer's
+     * page has been sent.
+     *
+     * A photo is only scannable after its target is compiled — until then the
+     * sticker says the Living Photo is "still being prepared". Doing it here is
+     * what makes an online order behave like one built at the counter, where
+     * Quick Create compiles on the spot.
+     *
+     * It costs seconds per photo, so it runs from the shutdown handler, after
+     * the response has been handed back on servers that allow it (nginx/PHP-FPM
+     * does). Checkout itself never waits. If the host cannot detach, or a
+     * compile fails, the frame simply stays in the admin queue with its
+     * "Generate targets" button, and tools/ar-generate-pending.php catches it.
+     */
+    private function queueTargetGeneration(int $frameId): void
+    {
+        if ($frameId <= 0) {
+            return;
+        }
+
+        $this->newArFrameIds[] = $frameId;
+        if (count($this->newArFrameIds) > 1) {
+            return; // the handler registered for the first frame takes them all
+        }
+
+        register_shutdown_function(function (): void {
+            $ids = $this->newArFrameIds;
+            $this->newArFrameIds = [];
+            if (!$ids) {
+                return;
+            }
+
+            @ignore_user_abort(true);
+            if (function_exists('fastcgi_finish_request')) {
+                @fastcgi_finish_request();
+            } elseif (function_exists('litespeed_finish_request')) {
+                @litespeed_finish_request();
+            }
+            @set_time_limit(0);
+
+            try {
+                require_once APP_PATH . '/services/ArFrameService.php';
+                $service = new ArFrameService();
+                foreach ($ids as $id) {
+                    $result = $service->generateTarget((int)$id, true);
+                    if (empty($result['ok'])) {
+                        error_log('AR target generation for frame ' . $id . ' failed: ' . ($result['error'] ?? 'unknown error'));
+                    }
+                }
+            } catch (Throwable $e) {
+                // The order is already placed; a frame without a target is a
+                // queue item for the admin, not a failed purchase.
+                error_log('AR target generation error: ' . $e->getMessage());
+            }
+        });
     }
 
     private function sendOrderNotifications(int $orderId): void
