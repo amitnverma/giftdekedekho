@@ -150,6 +150,12 @@ $shareUrl = url('/product/' . $product['slug']);
                 <p class="ar-upload-help">
                   Add each photo we should print with the video it should play. Point a phone camera at the finished photo and its video starts.
                 </p>
+                <?php if (!isLoggedIn()): ?>
+                <div class="ar-upload-login">
+                  <p>Please log in or create an account to upload your photos and videos — so they stay safe with your order.</p>
+                  <a class="btn btn-primary btn-sm" href="<?= e(url('/account/login') . '?redirect=' . urlencode('/product/' . $product['slug'])) ?>">Log in / Register to upload</a>
+                </div>
+                <?php else: ?>
                 <div class="ar-upload" data-ar-upload
                      data-upload-url="<?= e(url('/cart/ar-upload')) ?>"
                      data-option-id="<?= (int)$opt['id'] ?>"
@@ -190,6 +196,7 @@ $shareUrl = url('/product/' . $product['slug']);
                     </div>
                   </template>
                 </div>
+                <?php endif; ?>
 
               <?php else: ?>
                 <input type="text" id="<?= $inputId ?>" name="<?= $fieldName ?>[value]" <?= $opt['extra_charge'] > 0 ? 'data-extra="' . (float)$opt['extra_charge'] . '"' : '' ?> placeholder="Enter your choice…" <?= $opt['is_required'] ? 'required' : '' ?>>

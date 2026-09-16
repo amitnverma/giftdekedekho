@@ -195,7 +195,6 @@ class AdminOrderController extends BaseController
 
         $finfo = finfo_open(FILEINFO_MIME_TYPE);
         $mime = finfo_file($finfo, $file['tmp_name']);
-        finfo_close($finfo);
         $allowed = ['video/mp4' => 'mp4', 'video/quicktime' => 'mov', 'video/webm' => 'webm'];
         if (!isset($allowed[$mime])) {
             flash('error', 'Unsupported video format. Please upload MP4, MOV or WebM.');

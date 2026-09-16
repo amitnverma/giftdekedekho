@@ -148,7 +148,6 @@ class ArFrameService
     {
         $finfo = finfo_open(FILEINFO_MIME_TYPE);
         $mime = (string)finfo_file($finfo, $tmpName);
-        finfo_close($finfo);
         return $mime;
     }
 

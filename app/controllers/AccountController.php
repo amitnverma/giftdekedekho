@@ -4,7 +4,14 @@ class AccountController extends BaseController
 {
     public function login(): void
     {
-        if (isLoggedIn()) redirect('/account');
+        // ?redirect=/product/foo sends the customer back where they came from.
+        // Only same-site paths are accepted, never another host.
+        $back = (string)($_GET['redirect'] ?? '');
+        if ($back !== '' && $back[0] === '/' && !str_starts_with($back, '//') && !str_contains($back, '\\')) {
+            $_SESSION['redirect_after_login'] = $back;
+        }
+
+        if (isLoggedIn()) redirect($_SESSION['redirect_after_login'] ?? '/account');
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && $this->input('action') === 'login') {
             $this->requireCsrf();
@@ -79,7 +86,9 @@ class AccountController extends BaseController
         $this->loginUser($user);
         (new Cart())->mergeGuestCartIntoUser($userId);
         flash('success', 'Welcome to ' . SITE_NAME . '!');
-        redirect('/account');
+        $redirectTo = $_SESSION['redirect_after_login'] ?? '/account';
+        unset($_SESSION['redirect_after_login']);
+        redirect($redirectTo);
     }
 
     private function loginUser(array $user): void

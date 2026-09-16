@@ -179,6 +179,8 @@ h1, h2, h3, h4 { margin: 0 0 12px; line-height: 1.25; }
 
 /* Living Photo AR frame: image + video rows */
 .ar-upload-help { font-size: 13px; color: var(--color-muted); margin: 0 0 12px; }
+.ar-upload-login { padding: 14px; background: #fff; border: 1px dashed var(--color-border); border-radius: 10px; text-align: center; }
+.ar-upload-login p { margin: 0 0 10px; font-size: 14px; }
 .ar-upload-rows { display: flex; flex-direction: column; gap: 10px; }
 .ar-upload-row {
   display: grid; grid-template-columns: auto 1fr 1fr 28px; align-items: center; gap: 8px;

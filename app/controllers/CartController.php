@@ -144,6 +144,16 @@ class CartController extends BaseController
                 $rows = is_array($entry['items'] ?? null) ? array_values($entry['items']) : [];
                 $pairs = [];
 
+                if (!isLoggedIn()) {
+                    if (!$opt['is_required'] && empty(array_filter($rows, fn($r) => is_array($r) && array_filter($r)))) {
+                        continue;
+                    }
+                    $_SESSION['redirect_after_login'] = '/product/' . $product['slug'];
+                    flash('error', 'Please log in or register to upload your photos and videos.');
+                    redirect('/account/login');
+                }
+                $userId = (int)$_SESSION['user_id'];
+
                 foreach ($rows as $row) {
                     $photoToken = is_array($row) ? (string)($row['photo'] ?? '') : '';
                     $videoToken = is_array($row) ? (string)($row['video'] ?? '') : '';
@@ -153,6 +163,8 @@ class CartController extends BaseController
                     $photo = $uploads[$photoToken] ?? null;
                     $video = $uploads[$videoToken] ?? null;
                     $n = count($pairs) + 1;
+                    if ($photo && ($photo['user_id'] ?? 0) !== $userId) $photo = null;
+                    if ($video && ($video['user_id'] ?? 0) !== $userId) $video = null;
                     if (!$photo || $photo['kind'] !== 'photo' || $photo['option_id'] !== (int)$opt['id']) {
                         flash('error', 'Please add the image for photo ' . $n . ' of "' . $opt['label'] . '".');
                         redirect('/product/' . $product['slug']);
@@ -259,13 +271,24 @@ class CartController extends BaseController
      */
     public function uploadArMedia(): void
     {
+        // Anything PHP prints along the way (a deprecation notice on a newer
+        // PHP, say) would sit in front of the JSON and break it for the page.
+        ob_start();
+        $json = function (array $data, int $status = 200): void {
+            while (ob_get_level() > 0) ob_end_clean();
+            jsonResponse($data, $status);
+        };
+
         // A body over post_max_size arrives with $_POST and $_FILES empty,
         // which would otherwise read as a CSRF failure.
         if (empty($_POST) && empty($_FILES) && (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 0) {
-            jsonResponse(['ok' => false, 'error' => 'That file is larger than the server allows.'], 413);
+            $json(['ok' => false, 'error' => 'That file is larger than the server allows.'], 413);
         }
         if (!verifyCsrf()) {
-            jsonResponse(['ok' => false, 'error' => 'Your session expired. Please refresh the page and try again.'], 419);
+            $json(['ok' => false, 'error' => 'Your session expired. Please refresh the page and try again.'], 419);
+        }
+        if (!isLoggedIn()) {
+            $json(['ok' => false, 'error' => 'Please log in or register to upload your photos and videos.'], 401);
         }
 
         $kind = (string)$this->input('kind');
@@ -301,7 +324,7 @@ class CartController extends BaseController
         }
 
         $token = bin2hex(random_bytes(16));
-        $uploads[$token] = ['kind' => $kind, 'option_id' => $optionId, 'path' => $stored['path']];
+        $uploads[$token] = ['kind' => $kind, 'option_id' => $optionId, 'user_id' => (int)$_SESSION['user_id'], 'path' => $stored['path']];
         $_SESSION['ar_uploads'] = $uploads;
 
         jsonResponse(['ok' => true, 'token' => $token]);
@@ -318,7 +341,6 @@ class CartController extends BaseController
 
         $finfo = finfo_open(FILEINFO_MIME_TYPE);
         $mime = finfo_file($finfo, $tmpName);
-        finfo_close($finfo);
         $allowed = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/jpg' => 'jpg'];
         if (!isset($allowed[$mime])) return null;
 
