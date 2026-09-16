@@ -162,6 +162,38 @@ class AdminRouter
                 (new AdminArFrameController())->sticker((int)$m[1]);
                 break;
 
+            // ---- AR Partners (B2B) ----
+            case $path === '/ar-partners':
+                (new AdminArPartnerController())->index();
+                break;
+            case $path === '/ar-partners/create':
+                (new AdminArPartnerController())->create();
+                break;
+            case $path === '/ar-partners/settings':
+                (new AdminArPartnerController())->saveSettings();
+                break;
+            case preg_match('#^/ar-partners/(\d+)$#', $path, $m) === 1:
+                (new AdminArPartnerController())->show((int)$m[1]);
+                break;
+            case preg_match('#^/ar-partners/(\d+)/edit$#', $path, $m) === 1:
+                (new AdminArPartnerController())->edit((int)$m[1]);
+                break;
+            case preg_match('#^/ar-partners/(\d+)/users$#', $path, $m) === 1:
+                (new AdminArPartnerController())->addUser((int)$m[1]);
+                break;
+            case preg_match('#^/ar-partners/(\d+)/users/(\d+)$#', $path, $m) === 1:
+                (new AdminArPartnerController())->updateUser((int)$m[1], (int)$m[2]);
+                break;
+            case preg_match('#^/ar-partners/(\d+)/credits$#', $path, $m) === 1:
+                (new AdminArPartnerController())->adjustCredits((int)$m[1]);
+                break;
+            case preg_match('#^/ar-partners/(\d+)/requests/(\d+)/fulfil$#', $path, $m) === 1:
+                (new AdminArPartnerController())->fulfilRequest((int)$m[1], (int)$m[2]);
+                break;
+            case preg_match('#^/ar-partners/(\d+)/requests/(\d+)/cancel$#', $path, $m) === 1:
+                (new AdminArPartnerController())->cancelRequest((int)$m[1], (int)$m[2]);
+                break;
+
             // ---- Coupons ----
             case $path === '/coupons':
                 (new AdminCouponController())->index();

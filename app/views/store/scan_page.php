@@ -13,6 +13,12 @@
  */
 $isAdminTest = !empty($isAdminTest);
 $frame = $frame ?? null;
+// Who the recipient bought this from. A partner's customers see the partner's
+// name, logo and colour, with a small "powered by" line; GiftDekeDekho's own
+// frames look exactly as they always have.
+$brand = $brand ?? [
+    'name' => $siteName, 'logo' => null, 'color' => '#e63946', 'website' => null, 'poweredBy' => null,
+];
 // $frame is null on the scan-anything page, which matches every active frame.
 $isMulti = $frame === null;
 $photoUrls = $photoUrls ?? [];
@@ -78,6 +84,7 @@ $scanConfig = [
 <title><?= $isAdminTest ? 'Live Scan Test' : 'Your Living Photo' ?> · <?= e($siteName) ?></title>
 <style>
     * { box-sizing: border-box; }
+    :root { --ar-accent: <?= e($brand['color']) ?>; }
     html, body {
         margin: 0; padding: 0; height: 100%; overflow: hidden;
         background: #000; color: #fff;
@@ -98,9 +105,15 @@ $scanConfig = [
     .ar-btn {
         display: inline-block; border: 0; border-radius: 999px; cursor: pointer;
         padding: 15px 34px; font-size: 16px; font-weight: 700;
-        background: #e63946; color: #fff; font-family: inherit;
+        background: var(--ar-accent); color: #fff; font-family: inherit;
     }
     .ar-btn-ghost { background: rgba(255,255,255,.14); }
+    .ar-brand-logo {
+        max-height: 56px; max-width: 180px; object-fit: contain; margin-bottom: 18px;
+        background: #fff; padding: 8px 12px; border-radius: 12px;
+    }
+    .ar-powered { font-size: 11.5px !important; color: #8b8b95 !important; margin: 20px 0 0 !important; letter-spacing: .02em; }
+    .ar-powered-camera { margin: 0 !important; color: rgba(255,255,255,.7) !important; text-shadow: 0 1px 6px rgba(0,0,0,.8); }
     .ar-thumb {
         width: 140px; height: 140px; object-fit: cover; border-radius: 14px;
         margin-bottom: 22px; border: 2px solid rgba(255,255,255,.22);
@@ -474,7 +487,7 @@ $scanConfig = [
         position: absolute; left: 50%; transform: translateX(-50%);
         top: 100%; margin-top: 1.6vmin; z-index: 35; display: none;
         border: 0; cursor: pointer; font-family: inherit; font-weight: 700;
-        background: #e63946; color: #fff; border-radius: 999px;
+        background: var(--ar-accent); color: #fff; border-radius: 999px;
         padding: 11px 22px; font-size: 14px; white-space: nowrap;
         box-shadow: 0 6px 18px rgba(0,0,0,.5);
     }
@@ -507,7 +520,7 @@ $scanConfig = [
         padding: 10px 18px; border-radius: 999px;
     }
     .ar-play-ring {
-        width: 76px; height: 76px; border-radius: 50%; background: #e63946;
+        width: 76px; height: 76px; border-radius: 50%; background: var(--ar-accent);
         display: flex; align-items: center; justify-content: center; font-size: 26px;
     }
 
@@ -543,6 +556,9 @@ $scanConfig = [
      scan-anything page and the admin test. A tap here is worth having when it
      happens — it is the gesture that lets the video play with sound later. -->
 <div class="ar-panel" id="arIntro">
+    <?php if (!empty($brand['logo']) && !$revealPhoto): ?>
+        <img class="ar-brand-logo" src="<?= e($brand['logo']) ?>" alt="<?= e($brand['name']) ?>">
+    <?php endif; ?>
     <?php if ($revealPhoto): ?>
         <?php if (count($photoUrls) === 1): ?>
             <img class="ar-thumb" src="<?= e($photoUrls[0]) ?>" alt="">
@@ -587,6 +603,9 @@ $scanConfig = [
         </p>
     <?php endif; ?>
     <button class="ar-btn" id="arStart" type="button">Start camera</button>
+    <?php if (!empty($brand['poweredBy'])): ?>
+        <p class="ar-powered">Powered by <?= e($brand['poweredBy']) ?></p>
+    <?php endif; ?>
     <?php // $frame is null on the scan-anything page, which has no single frame. ?>
     <?php if (!$isAdminTest && !$isMulti && $anyPoor): ?>
         <p style="margin-top:18px;font-size:13px;color:#f5b400">
@@ -645,6 +664,9 @@ $scanConfig = [
         <span class="ar-guide-arrow" aria-hidden="true">&#9650;</span>
         <p id="arHint">Point your camera at the photo</p>
         <button id="arTorch" type="button" aria-pressed="false">💡 <span data-label>Turn on light</span></button>
+        <?php if (!empty($brand['poweredBy'])): ?>
+            <p class="ar-powered ar-powered-camera"><?= e($brand['name']) ?> · Powered by <?= e($brand['poweredBy']) ?></p>
+        <?php endif; ?>
     </div>
 </div>
 

@@ -55,6 +55,13 @@ class ArFrameService
         'trackability_score', 'trackability_flag', 'trackability_json', 'verified_at',
     ];
 
+    /**
+     * Item columns that exist only once the partner migration has run. Kept out
+     * of ITEM_COLUMNS because a frame has a `title` of its own, which
+     * createFrame() must not mistake for an item's.
+     */
+    private const ITEM_EXTRA_COLUMNS = ['title', 'max_seconds'];
+
     /** Statuses the pipeline may still move a frame between on its own. */
     private const PRE_PRINT_STATUSES = ['pending_setup', 'target_generated', 'verified'];
 
@@ -306,6 +313,8 @@ class ArFrameService
             'aspect' => $aspect,
             'trackabilityFlag' => $item['trackability_flag'] ?? null,
             'playbackMode' => (string)($item['playback_mode'] ?? 'fullscreen'),
+            // Partner content is sold by video length: playback stops here.
+            'maxSeconds' => empty($item['max_seconds']) ? null : (int)$item['max_seconds'],
             'videoType' => null,
             'youtubeId' => null,
             'vimeoId' => null,
@@ -432,7 +441,7 @@ class ArFrameService
     /** Attach one photo/video pair to a frame. Its target still has to be generated. */
     public function addItem(int $frameId, array $attrs): int
     {
-        $data = array_intersect_key($attrs, array_flip(array_merge(self::ITEM_COLUMNS, ['sort_order'])));
+        $data = array_intersect_key($attrs, array_flip(array_merge(self::ITEM_COLUMNS, self::ITEM_EXTRA_COLUMNS, ['sort_order'])));
         return $this->items->create(array_merge(
             ['video_type' => 'youtube', 'playback_mode' => 'fullscreen'],
             $data,
@@ -855,13 +864,15 @@ class ArFrameService
 
     /**
      * Frames the public "scan anything" page can recognise: active, and with a
-     * compiled target.
+     * compiled target. Partner content is never included — /scan is
+     * GiftDekeDekho's own page, and a partner's customers use their sticker.
      */
     public function scannableFrames(): array
     {
         $sql = "SELECT id, slug, target_path
                 FROM ar_frames
                 WHERE is_active = 1 AND target_path IS NOT NULL AND target_path <> ''
+                  AND channel <> 'partner'
                 ORDER BY id ASC";
         return $this->frames->rawQuery($sql);
     }
@@ -890,6 +901,7 @@ class ArFrameService
              FROM ar_frame_items i
              JOIN ar_frames f ON f.id = i.frame_id
              WHERE f.is_active = 1 AND i.target_path IS NOT NULL AND i.target_path <> ''
+               AND f.channel <> 'partner'
              ORDER BY i.id ASC"
         );
     }

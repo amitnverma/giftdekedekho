@@ -14,8 +14,10 @@
 $item = $items[$position] ?? null;
 $photoUrl = $item ? ArFrameService::fileUrl($item['photo_path']) : '';
 $count = count($items);
-$photoLink = function (int $index) use ($items, $frame) {
-    return url('/admin/ar-frames/' . (int)$frame['id'] . '/photo?item=' . (int)$items[$index]['id']);
+// The partner portal shows the same page under its own URL.
+$photoBase = $photoBase ?? '/admin/ar-frames/' . (int)$frame['id'] . '/photo';
+$photoLink = function (int $index) use ($items, $photoBase) {
+    return url($photoBase . '?item=' . (int)$items[$index]['id']);
 };
 $prevUrl = $count > 1 ? $photoLink(($position - 1 + $count) % $count) : null;
 $nextUrl = $count > 1 ? $photoLink(($position + 1) % $count) : null;

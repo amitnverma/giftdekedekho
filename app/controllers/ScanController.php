@@ -86,7 +86,15 @@ class ScanController extends BaseController
         $frame = $frames->findBySlug($slug);
 
         if (!$frame || empty($frame['is_active'])) {
-            $this->invalid('This Living Photo link is no longer available.');
+            $this->invalid('This Living Photo link is no longer available.', $frame);
+            return;
+        }
+
+        // Partner content is sold for a fixed period.
+        require_once APP_PATH . '/services/ArPartnerService.php';
+        $partners = new ArPartnerService();
+        if (ArPartnerService::isExpired($frame)) {
+            $this->invalid('This AR experience has expired. Please contact the shop you bought it from to renew it.', $frame);
             return;
         }
 
@@ -95,9 +103,12 @@ class ScanController extends BaseController
         $scan = $service->frameScan($frame);
         $playable = $scan === null ? [] : array_filter($scan['targets'], fn($t) => $t['videoType'] !== null);
         if (!$playable) {
-            $this->invalid('This Living Photo is still being prepared. Please try again a little later.');
+            $this->invalid('This Living Photo is still being prepared. Please try again a little later.', $frame);
             return;
         }
+
+        $partners->recordOpen($frame);
+        $brand = $partners->brandFor($frame);
 
         // Expressed in the same shape as the scan-all page, so the view and the
         // browser module have exactly one code path. No photo URLs: the photos
@@ -111,17 +122,25 @@ class ScanController extends BaseController
             'verifyUrl' => null,
             'backUrl' => null,
             'csrf' => null,
-            'siteName' => siteSetting('site_name', SITE_NAME),
+            'siteName' => $brand['name'],
+            'brand' => $brand,
         ]);
     }
 
-    private function invalid(string $message): void
+    /** @param array|null $frame when known, so a partner's customer sees the partner's branding */
+    private function invalid(string $message, ?array $frame = null): void
     {
         http_response_code(404);
+        $brand = null;
+        if ($frame !== null && !empty($frame['partner_id'])) {
+            require_once APP_PATH . '/services/ArPartnerService.php';
+            $brand = (new ArPartnerService())->brandFor($frame);
+        }
         renderRaw('store/scan_invalid', [
             'message' => $message,
-            'siteName' => siteSetting('site_name', SITE_NAME),
+            'siteName' => $brand['name'] ?? siteSetting('site_name', SITE_NAME),
             'logo' => siteSetting('logo_path', '/images/GDKD logo.png'),
+            'brand' => $brand,
         ]);
     }
 }

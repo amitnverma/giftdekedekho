@@ -397,6 +397,23 @@ export function initScanner(config) {
   if (els.video) els.video.addEventListener('loadedmetadata', fitFrameToVideo);
 
   /**
+   * Partner content is sold by video length. A longer upload plays only up to
+   * the length paid for, then stops — the same as trimming it, without needing
+   * a video toolchain on the server. Seeking past the end lands on the limit.
+   */
+  function enforceMaxSeconds() {
+    const limit = active && active.maxSeconds;
+    if (!limit || !els.video || els.video.currentTime < limit) return;
+    els.video.pause();
+    // Only when clearly past it: the assignment itself fires 'seeked' again.
+    if (els.video.currentTime > limit + 0.25) els.video.currentTime = limit;
+  }
+  if (els.video) {
+    els.video.addEventListener('timeupdate', enforceMaxSeconds);
+    els.video.addEventListener('seeked', enforceMaxSeconds);
+  }
+
+  /**
    * Show the frame. Held back until the video inside it has a size, because the
    * frame is sized by its contents — see the two-state CSS.
    */

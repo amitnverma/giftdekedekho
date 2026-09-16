@@ -10,6 +10,7 @@ $navItems = [
     // One entry, like every other section — the queue page carries the
     // "Quick Create (Walk-in)" button, so a second sidebar link only duplicated it.
     ['icon' => '🪄', 'label' => 'AR Frames', 'href' => '/admin/ar-frames', 'match' => ['admin/ar_frames_index', 'admin/ar_frames_show', 'admin/ar_frames_quick_create', 'admin/ar_frames_setup']],
+    ['icon' => '🤝', 'label' => 'AR Partners', 'href' => '/admin/ar-partners', 'match' => ['admin/ar_partners_index', 'admin/ar_partners_form', 'admin/ar_partners_show']],
     ['icon' => '🏷️', 'label' => 'Coupons', 'href' => '/admin/coupons', 'match' => ['admin/coupons']],
     ['icon' => '👥', 'label' => 'Customers', 'href' => '/admin/customers', 'match' => ['admin/customers']],
     ['icon' => '⭐', 'label' => 'Reviews', 'href' => '/admin/reviews', 'match' => ['admin/reviews']],

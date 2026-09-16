@@ -17,6 +17,7 @@ class ArFrame extends BaseModel
     public const CHANNELS = [
         'online'   => 'Online Order',
         'in_store' => 'Walk-in',
+        'partner'  => 'Partner',
     ];
 
     /**
@@ -184,6 +185,10 @@ class ArFrame extends BaseModel
         if ($channel !== '' && isset(self::CHANNELS[$channel])) {
             $clauses[] = 'f.channel = :channel';
             $params['channel'] = $channel;
+        } else {
+            // Partners' content belongs to their customers and is managed from
+            // AR Partners; it only appears here when asked for by name.
+            $clauses[] = "f.channel <> 'partner'";
         }
 
         // "Needs attention": not yet verified, i.e. the actionable part of the queue.
@@ -214,7 +219,8 @@ class ArFrame extends BaseModel
     public function statusCounts(): array
     {
         $counts = array_fill_keys(array_keys(self::STATUSES), 0);
-        foreach ($this->db->query('SELECT status, COUNT(*) AS c FROM ar_frames GROUP BY status')->fetchAll() as $row) {
+        $sql = "SELECT status, COUNT(*) AS c FROM ar_frames WHERE channel <> 'partner' GROUP BY status";
+        foreach ($this->db->query($sql)->fetchAll() as $row) {
             $counts[$row['status']] = (int)$row['c'];
         }
         return $counts;
@@ -267,6 +273,7 @@ class ArFrame extends BaseModel
             case 'verified':
                 return ['printed'];
             case 'printed':
+                // Partners hand frames to their own customers.
                 return ($frame['channel'] ?? 'online') === 'online'
                     ? ['shipped']
                     : ['handed_over'];

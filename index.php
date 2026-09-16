@@ -67,6 +67,12 @@ try {
         exit;
     }
 
+    // B2B AR partner portals — /partner/{slug}/...
+    if (($segments[0] ?? '') === 'partner' && isset($segments[1])) {
+        (new PartnerController())->dispatch($segments[1], array_slice($segments, 2), $method);
+        exit;
+    }
+
     // Sitemap
     if ($path === '/sitemap.xml') {
         require BASE_PATH . '/sitemap.php';
