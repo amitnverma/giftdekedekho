@@ -114,9 +114,9 @@ class AdminArPartnerController extends BaseController
         $back = $id ? '/admin/ar-partners/' . $id . '/edit' : '/admin/ar-partners/create';
 
         $name = trim((string)$this->input('name', ''));
-        $slug = strtolower(trim((string)$this->input('slug', '')));
+        $slug = self::cleanSlug((string)$this->input('slug', ''));
         if ($slug === '' && $name !== '') {
-            $slug = slugify($name);
+            $slug = self::cleanSlug(slugify($name));
         }
 
         $errors = [];
@@ -124,7 +124,7 @@ class AdminArPartnerController extends BaseController
             $errors[] = 'Enter the partner\'s name.';
         }
         if (!preg_match('/^[a-z0-9][a-z0-9-]{1,59}$/', $slug)) {
-            $errors[] = 'The page address may use lowercase letters, numbers and hyphens (2–60 characters).';
+            $errors[] = 'The page address needs at least 2 letters or numbers.';
         } elseif ($this->partners->slugTaken($slug, $id)) {
             $errors[] = 'Another partner already uses the page address "' . $slug . '".';
         }
@@ -445,6 +445,21 @@ class AdminArPartnerController extends BaseController
             'npmCommand'       => 'cd ' . BASE_PATH . "/tools/mindar-compile\nnpm ci",
         ]);
         return true;
+    }
+
+    /**
+     * Reduce whatever was typed or pasted to a page address: "/partner1/",
+     * "partner/Narain Jewellers" and a full copied URL all become just the last
+     * part, lowercase, with anything else turned into single hyphens. The form
+     * applies the same rules as you type.
+     */
+    public static function cleanSlug(string $value): string
+    {
+        $value = strtolower(trim($value));
+        $value = preg_replace('#^[a-z]+://[^/]+#', '', $value);
+        $value = preg_replace('#^/*(partner/)?#', '', $value);
+        $value = preg_replace('/[^a-z0-9]+/', '-', $value);
+        return substr(trim($value, '-'), 0, 60);
     }
 
     private function nullIfBlank(?string $value): ?string

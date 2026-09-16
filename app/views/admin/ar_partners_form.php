@@ -25,13 +25,56 @@ $action = $isEdit ? '/admin/ar-partners/' . (int)$partner['id'] . '/edit' : '/ad
             <label>Partner name *
                 <input type="text" name="name" required maxlength="120" value="<?= e($partner['name']) ?>">
             </label>
-            <label>Page address <span class="admin-label-hint">/partner/…</span>
-                <input type="text" name="slug" maxlength="60" pattern="[a-z0-9][a-z0-9\-]{1,59}" value="<?= e($partner['slug']) ?>" placeholder="narain-jewellers">
+            <?php // Only the last part is typed; the fixed start is shown, and anything pasted is cleaned up. ?>
+            <label for="partner-slug">Page address
+                <span class="admin-label-hint">Leave blank to use the name. Letters, numbers and hyphens.</span>
+                <span class="partner-slug-field">
+                    <span class="partner-slug-prefix"><?= e(preg_replace('#^https?://#', '', rtrim(SITE_URL, '/'))) ?>/partner/</span>
+                    <input type="text" id="partner-slug" name="slug" maxlength="60" autocomplete="off" spellcheck="false"
+                           value="<?= e($partner['slug']) ?>" placeholder="narain-jewellers" data-slug-input>
+                </span>
+                <span class="admin-label-hint" data-slug-preview></span>
             </label>
         </div>
         <?php if ($isEdit): ?>
             <p class="admin-help-text" style="margin-top:-6px">Changing the address breaks the partner's bookmarks. Scan links on printed stickers are not affected.</p>
         <?php endif; ?>
+        <style>
+            .partner-slug-field { display: flex; align-items: stretch; margin-top: 6px; border: 1px solid var(--admin-border); border-radius: 8px; background: #fff; overflow: hidden; }
+            .partner-slug-field:focus-within { border-color: var(--admin-primary); box-shadow: 0 0 0 2px rgba(214, 51, 108, .15); }
+            .partner-slug-prefix { display: flex; align-items: center; padding: 0 4px 0 12px; background: #f6f6f8; color: var(--admin-muted); font-weight: 400; font-size: 13.5px; white-space: nowrap; max-width: 55%; overflow: hidden; text-overflow: ellipsis; border-right: 1px solid var(--admin-border); }
+            .admin-form .partner-slug-field input[type=text] { margin: 0; border: 0; border-radius: 0; min-width: 0; flex: 1; outline: none; }
+        </style>
+        <script>
+        (function () {
+            var input = document.querySelector('[data-slug-input]');
+            var name = document.querySelector('input[name="name"]');
+            var preview = document.querySelector('[data-slug-preview]');
+            var base = <?= json_encode(rtrim(SITE_URL, '/') . '/partner/') ?>;
+
+            // Same rules as the server: a pasted URL or "/partner/x/" reduces to "x".
+            function clean(value) {
+                return String(value || '').toLowerCase()
+                    .replace(/^[a-z]+:\/\/[^\/]+/, '')
+                    .replace(/^\/*(partner\/)?/, '')
+                    .replace(/[^a-z0-9]+/g, '-')
+                    .replace(/^-+|-+$/g, '')
+                    .slice(0, 60);
+            }
+
+            function update() {
+                var slug = clean(input.value) || clean(name.value);
+                preview.textContent = slug ? 'Their page will be ' + base + slug : '';
+            }
+
+            input.addEventListener('input', update);
+            // Tidy on leaving the field rather than while typing, so the cursor never jumps.
+            input.addEventListener('blur', function () { input.value = clean(input.value); update(); });
+            name.addEventListener('input', update);
+            input.form.addEventListener('submit', function () { input.value = clean(input.value); });
+            update();
+        })();
+        </script>
         <label>Tagline <span class="admin-label-hint">Under the name on the sign-in page</span>
             <input type="text" name="tagline" maxlength="200" value="<?= e($partner['tagline']) ?>">
         </label>
