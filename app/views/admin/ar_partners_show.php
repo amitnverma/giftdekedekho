@@ -3,7 +3,14 @@
 $pid = (int)$partner['id'];
 $pending = array_values(array_filter($requests, fn($r) => $r['status'] === 'pending'));
 $contentState = ['live' => 'admin-badge-green', 'warn' => 'admin-badge-yellow', 'off' => 'admin-badge-gray'];
+$activeLogins = array_filter($users, fn($u) => !empty($u['is_active']));
 ?>
+<?php if (!$activeLogins): ?>
+    <div class="admin-alert admin-alert-error" style="margin-bottom:16px">
+        <strong>Nobody can sign in to this partner's page.</strong> It has no active login —
+        <a href="#logins">add one below</a> with the email the partner will sign in with.
+    </div>
+<?php endif; ?>
 <div class="admin-flex-between">
     <div style="display:flex;gap:14px;align-items:center">
         <?php if (!empty($partner['logo_path'])): ?>
@@ -88,6 +95,11 @@ $contentState = ['live' => 'admin-badge-green', 'warn' => 'admin-badge-yellow', 
 
 <div class="admin-card admin-mt" id="logins">
     <h3 class="admin-card-title">Logins</h3>
+    <p class="admin-muted" style="font-size:13px;margin-top:0">
+        Each person signs in at <?= e(preg_replace('#^https?://#', '', $portalUrl)) ?> with their login email. “Forgot password”
+        on that page emails a reset link to the login email, so keep it correct. To set a password yourself, type it under
+        New password and press Save.
+    </p>
     <?php if ($users): ?>
         <div class="admin-table-wrap">
             <table class="admin-table">
@@ -96,7 +108,7 @@ $contentState = ['live' => 'admin-badge-green', 'warn' => 'admin-badge-yellow', 
                     <?php foreach ($users as $u): $formId = 'user-' . (int)$u['id']; ?>
                         <tr>
                             <td><?= e($u['name']) ?></td>
-                            <td><?= e($u['email']) ?></td>
+                            <td><input type="email" name="email" form="<?= $formId ?>" value="<?= e($u['email']) ?>" required maxlength="180" aria-label="Login email" style="width:220px"></td>
                             <td>
                                 <select name="role" form="<?= $formId ?>">
                                     <?php foreach (ArPartnerUser::ROLES as $key => $label): ?>
@@ -126,7 +138,7 @@ $contentState = ['live' => 'admin-badge-green', 'warn' => 'admin-badge-yellow', 
         <?= csrfField() ?>
         <div class="admin-form-row">
             <label>Name <input type="text" name="name" required maxlength="120"></label>
-            <label>Email <input type="email" name="email" required maxlength="180" autocomplete="off"></label>
+            <label>Login email <input type="email" name="email" required maxlength="180" autocomplete="off"></label>
             <label>Password <input type="text" name="password" required minlength="<?= PASSWORD_MIN_LENGTH ?>" autocomplete="new-password"></label>
             <label>Role
                 <select name="role">

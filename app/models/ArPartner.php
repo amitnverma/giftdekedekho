@@ -83,6 +83,7 @@ class ArPartner extends BaseModel
         $sql = "SELECT p.*,
                        (SELECT COUNT(*) FROM ar_frames f WHERE f.partner_id = p.id) AS content_count,
                        (SELECT COUNT(*) FROM ar_partner_customers c WHERE c.partner_id = p.id) AS customer_count,
+                       (SELECT COUNT(*) FROM ar_partner_users u WHERE u.partner_id = p.id AND u.is_active = 1) AS login_count,
                        (SELECT COUNT(*) FROM ar_scan_events e WHERE e.partner_id = p.id) AS opens,
                        (SELECT COUNT(*) FROM ar_partner_credit_requests r
                          WHERE r.partner_id = p.id AND r.status = 'pending') AS pending_requests

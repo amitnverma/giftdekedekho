@@ -31,6 +31,9 @@
                             <td>
                                 <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:<?= e(ArPartnerService::safeColor($p['brand_color'])) ?>;margin-right:6px"></span>
                                 <a href="<?= url('/admin/ar-partners/' . (int)$p['id']) ?>"><strong><?= e($p['name']) ?></strong></a>
+                                <?php if ((int)$p['login_count'] === 0): ?>
+                                    <span class="admin-badge admin-badge-red" title="Nobody can sign in until a login is added">No login</span>
+                                <?php endif; ?>
                                 <?php if ((int)$p['pending_requests'] > 0): ?>
                                     <span class="admin-badge admin-badge-yellow"><?= (int)$p['pending_requests'] ?> credit request<?= (int)$p['pending_requests'] === 1 ? '' : 's' ?></span>
                                 <?php endif; ?>

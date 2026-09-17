@@ -55,16 +55,18 @@ class AdminArPartnerController extends BaseController
             return;
         }
 
+        $stash = $this->takeFormStash(0);
         $this->viewAdmin('admin/ar_partners_form', [
             'metaTitle' => 'New AR Partner',
-            'partner'   => [
+            'owner'     => $stash['owner'] ?? [],
+            'partner'   => array_merge([
                 'id' => 0, 'slug' => '', 'name' => '', 'tagline' => '', 'logo_path' => null,
                 'brand_color' => ArPartnerService::DEFAULT_BRAND_COLOR,
                 'contact_name' => '', 'contact_phone' => '', 'whatsapp' => '', 'contact_email' => '', 'website_url' => '',
                 'allow_singles' => 1, 'allow_albums' => 1, 'max_album_pages' => ArFrameItem::MAX_PER_FRAME, 'max_video_mb' => 20,
                 'base_credits' => 99, 'duration_prices' => null, 'validity_prices' => null, 'credit_packs' => null,
                 'edit_window_days' => 7, 'is_active' => 1, 'notes' => '',
-            ],
+            ], $stash['data'] ?? []),
         ]);
     }
 
@@ -80,9 +82,11 @@ class AdminArPartnerController extends BaseController
             return;
         }
 
+        $stash = $this->takeFormStash($id);
         $this->viewAdmin('admin/ar_partners_form', [
             'metaTitle' => 'Edit ' . $partner['name'],
-            'partner'   => $partner,
+            'partner'   => array_merge($partner, $stash['data'] ?? []),
+            'logins'    => (new ArPartnerUser())->forPartner($id),
         ]);
     }
 
@@ -172,23 +176,22 @@ class AdminArPartnerController extends BaseController
             $errors[] = 'The per-item rate must be at least 1 credit.';
         }
 
-        // --- a first login, only when creating
+        // --- the first login, required when creating: without it nobody can
+        // sign in, and its email is where "Forgot password" sends reset links.
+        $ownerName = trim((string)$this->input('owner_name', ''));
         $ownerEmail = strtolower(trim((string)$this->input('owner_email', '')));
         $ownerPassword = (string)$this->input('owner_password', '');
-        if (!$id && $ownerEmail !== '') {
-            if (!filter_var($ownerEmail, FILTER_VALIDATE_EMAIL)) {
+        if (!$id) {
+            if ($ownerEmail === '') {
+                $errors[] = 'Enter a login email for the partner — they sign in with it, and password reset links are sent to it.';
+            } elseif (!filter_var($ownerEmail, FILTER_VALIDATE_EMAIL)) {
                 $errors[] = 'The login email does not look right.';
             } elseif ((new ArPartnerUser())->findByEmail($ownerEmail)) {
-                $errors[] = 'That login email is already in use.';
+                $errors[] = 'That login email is already used by a partner login.';
             }
             if (strlen($ownerPassword) < PASSWORD_MIN_LENGTH) {
-                $errors[] = 'The login password must be at least ' . PASSWORD_MIN_LENGTH . ' characters.';
+                $errors[] = 'Set a login password of at least ' . PASSWORD_MIN_LENGTH . ' characters.';
             }
-        }
-
-        if ($errors) {
-            flash('error', implode(' ', $errors));
-            redirect($back);
         }
 
         $data = [
@@ -215,6 +218,22 @@ class AdminArPartnerController extends BaseController
             'notes'            => $this->nullIfBlank((string)$this->input('notes', '')),
         ];
 
+        if ($errors) {
+            // Keep what was typed — the form is long, and a typo in one field
+            // must not cost the whole price list. Passwords are never kept.
+            $_SESSION['ar_partner_form'] = [
+                'id'    => $id,
+                'data'  => array_merge($data, [
+                    'slug'          => (string)$this->input('slug', ''),
+                    'contact_email' => $email,
+                    'website_url'   => $website,
+                ]),
+                'owner' => ['name' => $ownerName, 'email' => $ownerEmail, 'opening_credits' => (int)$this->input('opening_credits', 0)],
+            ];
+            flash('error', implode(' ', $errors));
+            redirect($back);
+        }
+
         // --- logo
         $oldLogo = $existing['logo_path'] ?? null;
         if (!empty($_FILES['logo']['name'])) {
@@ -231,21 +250,33 @@ class AdminArPartnerController extends BaseController
         if ($id) {
             $this->partners->update($id, $data);
         } else {
-            $data['created_at'] = date('Y-m-d H:i:s');
-            $id = $this->partners->create($data);
-
-            if ($ownerEmail !== '') {
+            // The partner, its first login and any opening credits exist
+            // together or not at all — never a partner nobody can sign in to.
+            $db = $this->credits->db();
+            $db->beginTransaction();
+            try {
+                $data['created_at'] = date('Y-m-d H:i:s');
+                $id = $this->partners->create($data);
                 (new ArPartnerUser())->create(
                     $id,
-                    trim((string)$this->input('owner_name', '')) ?: ($data['contact_name'] ?? $data['name']),
+                    mb_substr($ownerName ?: ($data['contact_name'] ?? $data['name']), 0, 120),
                     $ownerEmail,
                     $ownerPassword,
                     'owner'
                 );
-            }
-            $bonus = (int)$this->input('opening_credits', 0);
-            if ($bonus > 0) {
-                $this->credits->applyNow($id, $bonus, 'added', 'Joining bonus', ['created_by' => currentUserId()]);
+                $bonus = (int)$this->input('opening_credits', 0);
+                if ($bonus > 0) {
+                    $this->credits->apply($id, $bonus, 'added', 'Joining bonus', ['created_by' => currentUserId()]);
+                }
+                $db->commit();
+            } catch (Throwable $e) {
+                if ($db->inTransaction()) {
+                    $db->rollBack();
+                }
+                if (!empty($data['logo_path'])) {
+                    (new ArFrameService())->deleteFile($data['logo_path']);
+                }
+                throw $e;
             }
         }
 
@@ -254,7 +285,9 @@ class AdminArPartnerController extends BaseController
             (new ArFrameService())->deleteFile($oldLogo);
         }
 
-        flash('success', 'Partner saved. Their page is at /partner/' . $slug);
+        flash('success', $existing
+            ? 'Partner saved. Their page is at /partner/' . $slug
+            : 'Partner created. They sign in at /partner/' . $slug . ' with ' . $ownerEmail . ' — share the password with them securely.');
         redirect('/admin/ar-partners/' . $id);
     }
 
@@ -297,8 +330,21 @@ class AdminArPartnerController extends BaseController
             redirect('/admin/ar-partners/' . $id . '#logins');
         }
 
+        // The login email is also where reset links go, so a typo must be fixable.
+        $email = strtolower(trim((string)$this->input('email', $user['email'])));
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            flash('error', 'Not saved: "' . $email . '" is not a valid email address.');
+            redirect('/admin/ar-partners/' . $id . '#logins');
+        }
+        $owner = $users->findByEmail($email);
+        if ($owner && (int)$owner['id'] !== $userId) {
+            flash('error', 'Not saved: ' . $email . ' is already used by another partner login.');
+            redirect('/admin/ar-partners/' . $id . '#logins');
+        }
+
         $role = (string)$this->input('role', $user['role']);
         $users->update($userId, [
+            'email'     => mb_substr($email, 0, 180),
             'is_active' => $this->input('is_active') ? 1 : 0,
             'role'      => isset(ArPartnerUser::ROLES[$role]) ? $role : $user['role'],
         ]);
@@ -311,7 +357,7 @@ class AdminArPartnerController extends BaseController
             }
             $users->setPassword($userId, $password);
         }
-        flash('success', 'Login for ' . $user['email'] . ' updated' . ($password !== '' ? ', with a new password.' : '.'));
+        flash('success', 'Login for ' . $email . ' updated' . ($password !== '' ? ', with a new password.' : '.'));
         redirect('/admin/ar-partners/' . $id . '#logins');
     }
 
@@ -412,6 +458,14 @@ class AdminArPartnerController extends BaseController
     }
 
     // ------------------------------------------------------------ helpers
+
+    /** Input kept from a failed save of this form (0 = the create form), used once. */
+    private function takeFormStash(int $id): array
+    {
+        $stash = $_SESSION['ar_partner_form'] ?? null;
+        unset($_SESSION['ar_partner_form']);
+        return is_array($stash) && (int)($stash['id'] ?? -1) === $id ? $stash : [];
+    }
 
     private function findOrRedirect(int $id): array
     {

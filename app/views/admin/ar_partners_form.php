@@ -117,6 +117,44 @@ $action = $isEdit ? '/admin/ar-partners/' . (int)$partner['id'] . '/edit' : '/ad
         </label>
     </div>
 
+    <?php if (!$isEdit): ?>
+        <div class="admin-card admin-mt">
+            <h3 class="admin-card-title">Partner login</h3>
+            <p class="admin-muted" style="font-size:13px;margin-top:0">
+                Required. The partner signs in at their page with this email and password. “Forgot password” on
+                their sign-in page sends the reset link to this login email — not to the contact email above.
+                Staff logins can be added later from the partner's page.
+            </p>
+            <div class="admin-form-row">
+                <label>Name <span class="admin-label-hint">Defaults to the contact person</span>
+                    <input type="text" name="owner_name" maxlength="120" value="<?= e($owner['name'] ?? '') ?>">
+                </label>
+                <label>Login email *
+                    <input type="email" name="owner_email" maxlength="180" autocomplete="off" required value="<?= e($owner['email'] ?? '') ?>">
+                </label>
+                <label>Password * <span class="admin-label-hint">Min <?= PASSWORD_MIN_LENGTH ?> characters — share it with the partner securely</span>
+                    <input type="text" name="owner_password" autocomplete="new-password" required minlength="<?= PASSWORD_MIN_LENGTH ?>">
+                </label>
+            </div>
+            <label style="max-width:240px">Opening credits <span class="admin-label-hint">Recorded as “Joining bonus”</span>
+                <input type="number" name="opening_credits" min="0" value="<?= (int)($owner['opening_credits'] ?? 0) ?>">
+            </label>
+        </div>
+    <?php else:
+        $activeLogins = array_filter($logins, fn($u) => !empty($u['is_active'])); ?>
+        <div class="admin-card admin-mt">
+            <h3 class="admin-card-title">Logins</h3>
+            <?php if (!$activeLogins): ?>
+                <p style="margin:0 0 8px;color:#b91c1c;font-size:13.5px"><strong>This partner has no active login, so nobody can sign in.</strong></p>
+            <?php else: ?>
+                <p class="admin-muted" style="margin:0 0 8px;font-size:13px">
+                    <?= e(implode(', ', array_column($activeLogins, 'email'))) ?> — password reset links are sent to <?= count($activeLogins) === 1 ? 'this email' : 'these emails' ?>.
+                </p>
+            <?php endif; ?>
+            <a class="admin-btn admin-btn-sm" href="<?= url('/admin/ar-partners/' . (int)$partner['id'] . '#logins') ?>">Manage logins &amp; passwords</a>
+        </div>
+    <?php endif; ?>
+
     <div class="admin-card admin-mt">
         <h3 class="admin-card-title">What they can create</h3>
         <div class="admin-form-row">
@@ -196,27 +234,6 @@ $action = $isEdit ? '/admin/ar-partners/' . (int)$partner['id'] . '/edit' : '/ad
             </tbody>
         </table>
     </div>
-
-    <?php if (!$isEdit): ?>
-        <div class="admin-card admin-mt">
-            <h3 class="admin-card-title">First login &amp; opening credits</h3>
-            <p class="admin-muted" style="font-size:13px;margin-top:0">Optional — more logins can be added from the partner's page.</p>
-            <div class="admin-form-row">
-                <label>Name
-                    <input type="text" name="owner_name" maxlength="120">
-                </label>
-                <label>Login email
-                    <input type="email" name="owner_email" maxlength="180" autocomplete="off">
-                </label>
-                <label>Password <span class="admin-label-hint">Min <?= PASSWORD_MIN_LENGTH ?> characters</span>
-                    <input type="text" name="owner_password" autocomplete="new-password">
-                </label>
-            </div>
-            <label style="max-width:240px">Opening credits <span class="admin-label-hint">Recorded as “Joining bonus”</span>
-                <input type="number" name="opening_credits" min="0" value="0">
-            </label>
-        </div>
-    <?php endif; ?>
 
     <div class="admin-card admin-mt">
         <label>Internal notes <span class="admin-label-hint">Never shown to the partner</span>
