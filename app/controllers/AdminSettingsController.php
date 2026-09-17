@@ -23,6 +23,9 @@ class AdminSettingsController extends BaseController
                 'admin_ip_whitelist' => trim((string)$this->input('admin_ip_whitelist')),
                 'max_login_attempts' => (string)(int)$this->input('max_login_attempts', 5),
                 'login_lockout_minutes' => (string)(int)$this->input('login_lockout_minutes', 15),
+                'captcha_enabled' => $this->input('captcha_enabled') ? '1' : '0',
+                'turnstile_site_key' => trim((string)$this->input('turnstile_site_key')),
+                'turnstile_secret_key' => trim((string)$this->input('turnstile_secret_key')),
                 'shiprocket_email' => trim((string)$this->input('shiprocket_email')),
                 'shiprocket_password' => trim((string)$this->input('shiprocket_password')),
             ]);

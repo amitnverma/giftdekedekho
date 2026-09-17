@@ -40,6 +40,7 @@ $initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)$
                 <label for="email">Email</label>
                 <input type="email" id="email" name="email" value="<?= old('email') ?>" autocomplete="username" required autofocus>
             </div>
+            <?= CaptchaService::field('partner-forgot-password') ?>
             <button class="btn" type="submit" style="width:100%">Email me a reset link</button>
         </form>
         <p class="hint" style="text-align:center;margin-top:16px">

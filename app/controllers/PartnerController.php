@@ -18,6 +18,7 @@
  */
 require_once APP_PATH . '/services/ArPartnerService.php';
 require_once APP_PATH . '/services/NotificationService.php';
+require_once APP_PATH . '/services/CaptchaService.php';
 
 class PartnerController extends BaseController
 {
@@ -165,6 +166,12 @@ class PartnerController extends BaseController
             $password = (string)$this->input('password', '');
             $identifier = 'partner:' . $email;
 
+            if ($captchaError = CaptchaService::verify('partner-login')) {
+                $this->setOld(['email' => $email]);
+                flash('error', $captchaError);
+                $this->go('/login');
+            }
+
             if ($this->loginRateLimited($identifier)) {
                 flash('error', 'Too many sign-in attempts. Please wait 15 minutes and try again.');
                 $this->go('/login');
@@ -280,6 +287,11 @@ class PartnerController extends BaseController
             $this->requireCsrf();
             $email = strtolower(trim((string)$this->input('email', '')));
             $identifier = 'partner-reset:' . $email;
+            if ($captchaError = CaptchaService::verify('partner-forgot-password')) {
+                $this->setOld(['email' => $email]);
+                flash('error', $captchaError);
+                $this->go('/forgot-password');
+            }
             if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 $this->setOld(['email' => $email]);
                 flash('error', 'Enter the email address you sign in with.');

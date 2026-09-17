@@ -6,6 +6,7 @@
   <form method="post" action="<?= url('/account/forgot-password') ?>">
     <?= csrfField() ?>
     <div class="form-group"><label for="email">Email</label><input type="email" id="email" name="email" value="<?= old('email') ?>" autocomplete="username" required autofocus></div>
+    <?= CaptchaService::field('forgot-password') ?>
     <button type="submit" class="btn btn-primary btn-block">Email me a reset link</button>
   </form>
   <p style="text-align:center;margin-top:16px"><a href="<?= url('/account/login') ?>">← Back to login</a></p>

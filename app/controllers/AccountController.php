@@ -1,6 +1,7 @@
 <?php
 
 require_once APP_PATH . '/services/NotificationService.php';
+require_once APP_PATH . '/services/CaptchaService.php';
 
 class AccountController extends BaseController
 {
@@ -22,6 +23,12 @@ class AccountController extends BaseController
             $this->requireCsrf();
             $email = strtolower(trim($this->input('email')));
             $password = (string)$this->input('password');
+
+            if ($captchaError = CaptchaService::verify('login')) {
+                flash('error', $captchaError);
+                $this->setOld(['email' => $email]);
+                redirect('/account/login');
+            }
 
             if ($this->isRateLimited($email)) {
                 flash('error', 'Too many login attempts. Please try again later.');
@@ -69,6 +76,7 @@ class AccountController extends BaseController
         $confirm = (string)$this->input('password_confirm');
 
         $errors = [];
+        if ($captchaError = CaptchaService::verify('register')) $errors[] = $captchaError;
         if (mb_strlen($name) < 2) $errors[] = 'Please enter your full name.';
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) $errors[] = 'Please enter a valid email address.';
         if (!preg_match('/^\d{10}$/', $phone)) $errors[] = 'Please enter a valid 10-digit phone number.';
@@ -130,6 +138,11 @@ class AccountController extends BaseController
             $this->requireCsrf();
             $email = strtolower(trim((string)$this->input('email', '')));
             $identifier = 'customer-reset:' . $email;
+            if ($captchaError = CaptchaService::verify('forgot-password')) {
+                $this->setOld(['email' => $email]);
+                flash('error', $captchaError);
+                redirect('/account/forgot-password');
+            }
             if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 $this->setOld(['email' => $email]);
                 flash('error', 'Enter the email address you sign in with.');

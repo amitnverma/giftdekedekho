@@ -47,6 +47,7 @@ $initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)$
                 <label for="password">Password</label>
                 <input type="password" id="password" name="password" autocomplete="current-password" required>
             </div>
+            <?= CaptchaService::field('partner-login') ?>
             <button class="btn" type="submit" style="width:100%">Sign in</button>
         </form>
         <p class="hint" style="text-align:center;margin-top:16px">
