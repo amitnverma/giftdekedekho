@@ -54,6 +54,12 @@ try {
         exit;
     }
 
+    // Captcha code image for the public login / register / forgot-password forms
+    if ($path === '/captcha') {
+        require_once APP_PATH . '/services/CaptchaService.php';
+        CaptchaService::serveImage((string)($_GET['form'] ?? ''), !empty($_GET['refresh']));
+    }
+
     // Watch (video-photo QR player) — /watch/{token}
     if (($segments[0] ?? '') === 'watch' && isset($segments[1])) {
         (new WatchController())->show($segments[1]);
