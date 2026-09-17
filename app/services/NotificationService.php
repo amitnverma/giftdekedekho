@@ -1,14 +1,19 @@
 <?php
 /**
  * Sends transactional emails (via PHPMailer/SMTP) and SMS (via MSG91).
- * SMTP & SMS credentials are stored in the `settings` table (admin-editable).
+ * SMTP & SMS credentials are stored in the `settings` table (Admin → Notifications).
  *
- * Note: PHPMailer must be present in /libs/PHPMailer (composer or manual vendor copy).
- * If it's missing, email sending degrades gracefully to PHP's mail().
+ * PHPMailer is committed under libs/PHPMailer/src. When no SMTP host is set,
+ * email falls back to PHP's mail() — which on the production VPS accepts the
+ * message and delivers nothing, so SMTP must be configured there.
  */
 class NotificationService
 {
+    /** Kept short: order emails are sent while the customer waits on checkout. */
+    private const SMTP_TIMEOUT_SECONDS = 15;
+
     private Settings $settings;
+    private ?string $lastError = null;
 
     public function __construct()
     {
@@ -17,43 +22,96 @@ class NotificationService
 
     // ===================== EMAIL =====================
 
+    /** Why the last sendEmail() returned false, for the admin's test button and the log. */
+    public function lastError(): ?string
+    {
+        return $this->lastError;
+    }
+
+    /** "SMTP smtp.hostinger.com:465 (SSL)", or a note that PHP mail() is in use. */
+    public function transportLabel(): string
+    {
+        $host = trim((string)$this->settings->get('smtp_host', ''));
+        if ($host === '') {
+            return 'PHP mail() — no SMTP host is set';
+        }
+        $port = $this->smtpPort();
+        return 'SMTP ' . $host . ':' . $port . ($port === 465 ? ' (SSL)' : ($port === 587 ? ' (STARTTLS)' : ''));
+    }
+
     public function sendEmail(string $toEmail, string $toName, string $subject, string $bodyHtml): bool
     {
-        $phpMailerAutoload = BASE_PATH . '/libs/PHPMailer/src/PHPMailer.php';
+        $this->lastError = null;
+        $host = trim((string)$this->settings->get('smtp_host', ''));
 
-        if (is_file($phpMailerAutoload) && is_file(BASE_PATH . '/libs/PHPMailer/src/SMTP.php') && is_file(BASE_PATH . '/libs/PHPMailer/src/Exception.php')) {
-            require_once BASE_PATH . '/libs/PHPMailer/src/Exception.php';
-            require_once BASE_PATH . '/libs/PHPMailer/src/PHPMailer.php';
-            require_once BASE_PATH . '/libs/PHPMailer/src/SMTP.php';
-
-            try {
-                $mail = new PHPMailer\PHPMailer\PHPMailer(true);
-                $mail->isSMTP();
-                $mail->Host = $this->settings->get('smtp_host');
-                $mail->SMTPAuth = true;
-                $mail->Username = $this->settings->get('smtp_user');
-                $mail->Password = $this->settings->get('smtp_pass');
-                $mail->SMTPSecure = 'tls';
-                $mail->Port = (int)$this->settings->get('smtp_port', 587);
-
-                $mail->setFrom($this->settings->get('smtp_from_email'), $this->settings->get('smtp_from_name', SITE_NAME));
-                $mail->addAddress($toEmail, $toName);
-                $mail->isHTML(true);
-                $mail->Subject = $subject;
-                $mail->Body = $bodyHtml;
-                $mail->AltBody = strip_tags($bodyHtml);
-
-                return $mail->send();
-            } catch (Throwable $e) {
-                error_log('PHPMailer error: ' . $e->getMessage());
-                return false;
+        if ($host === '') {
+            $headers = "MIME-Version: 1.0\r\nContent-type: text/html; charset=UTF-8\r\n";
+            $headers .= 'From: ' . $this->settings->get('smtp_from_name', SITE_NAME) . ' <' . $this->settings->get('smtp_from_email', 'noreply@example.com') . ">\r\n";
+            if (@mail($toEmail, $subject, $bodyHtml, $headers)) {
+                return true;
             }
+            return $this->fail($toEmail, 'No SMTP host is set in Admin → Notifications, and PHP mail() refused the message.');
         }
 
-        // Fallback: native mail()
-        $headers = "MIME-Version: 1.0\r\nContent-type: text/html; charset=UTF-8\r\n";
-        $headers .= 'From: ' . $this->settings->get('smtp_from_name', SITE_NAME) . ' <' . $this->settings->get('smtp_from_email', 'noreply@example.com') . ">\r\n";
-        return @mail($toEmail, $subject, $bodyHtml, $headers);
+        $lib = BASE_PATH . '/libs/PHPMailer/src/';
+        if (!is_file($lib . 'PHPMailer.php') || !is_file($lib . 'SMTP.php') || !is_file($lib . 'Exception.php')) {
+            return $this->fail($toEmail, 'PHPMailer is missing from libs/PHPMailer/src.');
+        }
+        require_once $lib . 'Exception.php';
+        require_once $lib . 'PHPMailer.php';
+        require_once $lib . 'SMTP.php';
+
+        $user = trim((string)$this->settings->get('smtp_user', ''));
+        // Mail hosts such as Hostinger reject a From address other than the
+        // mailbox that signed in, so that mailbox is the default.
+        $from = trim((string)$this->settings->get('smtp_from_email', '')) ?: $user;
+        if (!filter_var($from, FILTER_VALIDATE_EMAIL)) {
+            return $this->fail($toEmail, 'Set a valid From Email (or an email-address SMTP username) in Admin → Notifications.');
+        }
+
+        $mail = new PHPMailer\PHPMailer\PHPMailer(true);
+        try {
+            $port = $this->smtpPort();
+            $mail->isSMTP();
+            $mail->Host = $host;
+            $mail->Port = $port;
+            // 465 is SSL from the first byte; 587 upgrades with STARTTLS. Any
+            // other port is left to PHPMailer, which upgrades when offered.
+            if ($port === 465) {
+                $mail->SMTPSecure = PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_SMTPS;
+            } elseif ($port === 587) {
+                $mail->SMTPSecure = PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
+            }
+            $mail->SMTPAuth = $user !== '';
+            $mail->Username = $user;
+            $mail->Password = (string)$this->settings->get('smtp_pass', '');
+            $mail->Timeout = self::SMTP_TIMEOUT_SECONDS;
+            $mail->CharSet = PHPMailer\PHPMailer\PHPMailer::CHARSET_UTF8;
+
+            $mail->setFrom($from, (string)($this->settings->get('smtp_from_name', '') ?: SITE_NAME));
+            $mail->addAddress($toEmail, $toName);
+            $mail->isHTML(true);
+            $mail->Subject = $subject;
+            $mail->Body = $bodyHtml;
+            $mail->AltBody = trim(html_entity_decode(strip_tags(preg_replace('#<br\s*/?>|</p>#i', "\n", $bodyHtml)), ENT_QUOTES, 'UTF-8'));
+
+            $mail->send();
+            return true;
+        } catch (Throwable $e) {
+            return $this->fail($toEmail, $mail->ErrorInfo ?: $e->getMessage());
+        }
+    }
+
+    private function smtpPort(): int
+    {
+        return (int)$this->settings->get('smtp_port', 587) ?: 587;
+    }
+
+    private function fail(string $toEmail, string $error): bool
+    {
+        $this->lastError = $error;
+        error_log('Email to ' . $toEmail . ' failed: ' . $error);
+        return false;
     }
 
     // ===================== SMS (MSG91) =====================

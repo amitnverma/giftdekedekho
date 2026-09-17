@@ -256,6 +256,9 @@ class AdminRouter
             case $path === '/notifications':
                 (new AdminSettingsController())->notifications();
                 break;
+            case $path === '/notifications/test-email' && $_SERVER['REQUEST_METHOD'] === 'POST':
+                (new AdminSettingsController())->testEmail();
+                break;
 
             // ---- General settings ----
             case $path === '/settings':

@@ -88,9 +88,44 @@ class AdminSettingsController extends BaseController
             redirect('/admin/notifications');
         }
 
+        require_once APP_PATH . '/services/NotificationService.php';
+        $admin = currentUserId() ? (new User())->find((int)currentUserId()) : null;
         $this->viewAdmin('admin/settings_notifications', [
             'metaTitle' => 'Notification Settings',
             'settings' => $settings->getAll(),
+            'transport' => (new NotificationService())->transportLabel(),
+            'testEmailTo' => (string)($_SESSION['test_email_to'] ?? ($admin['email'] ?? '')),
         ]);
+    }
+
+    /** Send a real email with the saved settings, and show exactly why it failed if it does. */
+    public function testEmail(): void
+    {
+        $this->requireAdmin();
+        $this->requireCsrf();
+        require_once APP_PATH . '/services/NotificationService.php';
+
+        $to = strtolower(trim((string)$this->input('test_email_to', '')));
+        if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
+            flash('error', 'Enter a valid address to send the test email to.');
+            redirect('/admin/notifications#test-email');
+        }
+        $_SESSION['test_email_to'] = $to;
+
+        @set_time_limit(60);
+        $notifier = new NotificationService();
+        $transport = $notifier->transportLabel();
+        $sent = $notifier->sendEmail($to, 'Test', 'Test email from ' . siteSetting('site_name', SITE_NAME),
+            '<p>This is a test email from the ' . e((string)siteSetting('site_name', SITE_NAME)) . ' admin.</p>'
+            . '<p>If you are reading it, order emails and partner password resets can be delivered.</p>'
+            . '<p style="color:#6b7280;font-size:13px">Sent via ' . e($transport) . ' at ' . e(date('d M Y, h:i A')) . '.</p>');
+
+        if ($sent) {
+            flash('success', 'Test email accepted by ' . $transport . ' for ' . $to . '. Check the inbox and the spam folder.'
+                . (str_starts_with($transport, 'PHP mail()') ? ' Warning: without SMTP, the server may accept the email and never deliver it.' : ''));
+        } else {
+            flash('error', 'Test email failed via ' . $transport . ': ' . $notifier->lastError());
+        }
+        redirect('/admin/notifications#test-email');
     }
 }

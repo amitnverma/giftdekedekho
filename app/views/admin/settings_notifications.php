@@ -3,9 +3,15 @@
 
     <div class="admin-card">
         <h2 class="admin-card-title">SMTP / Email (PHPMailer)</h2>
+        <p class="admin-help">
+            Required for any email to arrive — order updates, contact messages and partner password resets.
+            For a Hostinger mailbox: host <code>smtp.hostinger.com</code>, port <code>465</code> (or <code>587</code>),
+            username = the full mailbox address, and its password. Leave From Email blank or set it to that same
+            mailbox — Hostinger rejects any other sender. Currently sending via: <strong><?= e($transport) ?></strong>.
+        </p>
         <div class="admin-form-row">
             <label>SMTP Host<input type="text" name="smtp_host" value="<?= e($settings['smtp_host'] ?? '') ?>"></label>
-            <label>SMTP Port<input type="number" name="smtp_port" value="<?= e($settings['smtp_port'] ?? '587') ?>"></label>
+            <label>SMTP Port <span class="admin-label-hint">465 = SSL, 587 = STARTTLS</span><input type="number" name="smtp_port" value="<?= e($settings['smtp_port'] ?? '587') ?>"></label>
         </div>
         <div class="admin-form-row">
             <label>SMTP Username<input type="text" name="smtp_user" value="<?= e($settings['smtp_user'] ?? '') ?>"></label>
@@ -41,3 +47,15 @@
 
     <button type="submit" class="admin-btn admin-btn-primary admin-mt">Save Notification Settings</button>
 </form>
+
+<div class="admin-card admin-mt" id="test-email">
+    <h2 class="admin-card-title">Send a test email</h2>
+    <p class="admin-help">Uses the <strong>saved</strong> settings above — save first if you changed them. If it fails, the exact error is shown.</p>
+    <form method="post" action="<?= url('/admin/notifications/test-email') ?>" class="admin-form">
+        <?= csrfField() ?>
+        <div class="admin-form-row">
+            <label>Send to<input type="email" name="test_email_to" value="<?= e($testEmailTo) ?>" required></label>
+        </div>
+        <button type="submit" class="admin-btn">Send test email</button>
+    </form>
+</div>

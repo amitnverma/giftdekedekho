@@ -1,16 +1,18 @@
-PHPMailer library (used to send transactional emails over SMTP).
+PHPMailer 7.1.1 (https://github.com/PHPMailer/PHPMailer, tag v7.1.1), used by
+app/services/NotificationService.php to send email over SMTP.
 
-Download the source from https://github.com/PHPMailer/PHPMailer and copy
-the `src/` directory into this folder, so app/services/NotificationService.php
-can require:
+Only the three files the app needs are committed, under src/:
 
-    libs/PHPMailer/src/Exception.php
-    libs/PHPMailer/src/PHPMailer.php
-    libs/PHPMailer/src/SMTP.php
+    src/Exception.php
+    src/PHPMailer.php
+    src/SMTP.php
 
-(If you install via Composer instead, update the require_once paths in
-NotificationService::sendEmail() to point at vendor/phpmailer/phpmailer/src/.)
+They are committed on purpose: deployment is `git reset --hard`, so anything
+installed by hand on the server is easy to lose, and without these files no
+email could be sent — the server has no working local mail transport.
 
-If PHPMailer isn't available, NotificationService automatically falls back
-to PHP's native mail() function — so emails keep sending either way,
-though SMTP delivery is strongly recommended for production.
+To upgrade, copy the same three files from a newer release tag and update the
+version above. LICENSE is PHPMailer's (LGPL 2.1).
+
+SMTP details are set in Admin → Notifications, which also has a
+"Send test email" button that shows the real error if sending fails.

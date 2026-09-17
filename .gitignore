@@ -26,8 +26,6 @@ public/uploads/ar-targets/.gitkeep
 .env
 config/local.php
 
-# Vendor libraries (installed separately per libs/*/README.txt)
-libs/PHPMailer/src/
 libs/fpdf/fpdf.php
 libs/fpdf/font/
 libs/phpqrcode/qrlib.php
