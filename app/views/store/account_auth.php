@@ -10,6 +10,7 @@
     <div class="form-group"><label>Email</label><input type="email" name="email" value="<?= old('email') ?>" required></div>
     <div class="form-group"><label>Password</label><input type="password" name="password" required></div>
     <button type="submit" class="btn btn-primary btn-block">Login</button>
+    <p style="text-align:center;margin-top:16px"><a href="<?= url('/account/forgot-password') ?>">Forgot your password?</a></p>
   </form>
 
   <form class="auth-form" data-auth="register" method="post" action="<?= url('/account/register') ?>">

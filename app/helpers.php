@@ -135,6 +135,27 @@ function isLoggedIn(): bool
     return !empty($_SESSION['user_id']);
 }
 
+/**
+ * End a customer's login once their password has changed since they signed in
+ * (reset link, or changed from another browser). Sessions from before the
+ * password stamp existed carry none and are left alone.
+ */
+function endStaleCustomerSession(): void
+{
+    if (empty($_SESSION['user_id']) || ($_SESSION['user_role'] ?? '') !== 'customer' || !isset($_SESSION['user_pw'])) {
+        return;
+    }
+    try {
+        $user = (new User())->find((int)$_SESSION['user_id']);
+    } catch (Throwable $e) {
+        return;
+    }
+    if (!$user || !hash_equals(AccountController::passwordStamp($user), (string)$_SESSION['user_pw'])) {
+        unset($_SESSION['user_id'], $_SESSION['user_name'], $_SESSION['user_role'], $_SESSION['user_pw']);
+        session_regenerate_id(true);
+    }
+}
+
 function isAdmin(): bool
 {
     return isLoggedIn() && ($_SESSION['user_role'] ?? '') === 'admin';

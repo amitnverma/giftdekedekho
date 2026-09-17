@@ -1,7 +1,12 @@
 <?php
 
+require_once APP_PATH . '/services/NotificationService.php';
+
 class AccountController extends BaseController
 {
+    /** How long an emailed password-reset link works. */
+    private const RESET_LINK_SECONDS = 3600;
+
     public function login(): void
     {
         // ?redirect=/product/foo sends the customer back where they came from.
@@ -97,7 +102,175 @@ class AccountController extends BaseController
         $_SESSION['user_id'] = (int)$user['id'];
         $_SESSION['user_name'] = $user['name'];
         $_SESSION['user_role'] = $user['role'];
+        $_SESSION['user_pw'] = self::passwordStamp($user);
         $this->clearOld();
+    }
+
+    /**
+     * A short fingerprint of a customer's password hash, kept in their session:
+     * once the password changes, sessions signed in with the old one end
+     * (see endStaleCustomerSession() in helpers.php).
+     */
+    public static function passwordStamp(array $user): string
+    {
+        return substr(hash('sha256', (string)$user['password_hash']), 0, 20);
+    }
+
+    // --------------------------------------------------------- password reset
+
+    /**
+     * "Forgot password": email a reset link. The reply is the same whether or
+     * not the address has an account, so the form cannot be used to find out.
+     */
+    public function forgotPassword(): void
+    {
+        if (isLoggedIn()) redirect('/account/profile');
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $this->requireCsrf();
+            $email = strtolower(trim((string)$this->input('email', '')));
+            $identifier = 'customer-reset:' . $email;
+            if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $this->setOld(['email' => $email]);
+                flash('error', 'Enter the email address you sign in with.');
+                redirect('/account/forgot-password');
+            }
+            if ($this->resetRateLimited($identifier)) {
+                flash('error', 'A reset link was requested several times already. Please check your inbox, or wait 15 minutes and try again.');
+                redirect('/account/forgot-password');
+            }
+            $this->recordAttempt(substr($identifier, 0, 180));
+
+            $this->clearOld();
+            flash('success', 'If ' . $email . ' has an account here, a reset link is on its way. It works for '
+                . intdiv(self::RESET_LINK_SECONDS, 60) . ' minutes. No email? Check your spam folder, or contact us.');
+
+            $user = (new User())->findByEmail($email);
+            if (!$user || $user['role'] !== 'customer' || empty($user['is_active'])) {
+                redirect('/account/login');
+            }
+
+            // Answer first, then send: an SMTP round trip takes seconds, and a
+            // reply that was only slow for real accounts would give them away.
+            header('Location: ' . url('/account/login'));
+            session_write_close();
+            if (function_exists('fastcgi_finish_request')) {
+                fastcgi_finish_request();
+            } elseif (function_exists('litespeed_finish_request')) {
+                litespeed_finish_request();
+            }
+            $link = url('/account/reset-password?token=' . rawurlencode($this->resetToken($user)));
+            $siteName = (string)siteSetting('site_name', SITE_NAME);
+            $sent = (new NotificationService())->sendEmail($user['email'], (string)$user['name'],
+                'Reset your ' . $siteName . ' password', $this->resetEmailHtml($user, $link, $siteName));
+            if (!$sent) {
+                error_log('Customer password reset email failed for user ' . (int)$user['id']);
+            }
+            exit;
+        }
+
+        $this->view('account_password_forgot', ['metaTitle' => 'Forgot password | ' . SITE_NAME]);
+    }
+
+    public function resetPassword(): void
+    {
+        $token = (string)$this->input('token', '');
+        $user = $this->userForResetToken($token);
+        if (!$user) {
+            flash('error', 'That reset link has expired or has already been used. Request a new one below.');
+            redirect('/account/forgot-password');
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $this->requireCsrf();
+            $password = (string)$this->input('password', '');
+            $error = null;
+            if (strlen($password) < PASSWORD_MIN_LENGTH) {
+                $error = 'The new password must be at least ' . PASSWORD_MIN_LENGTH . ' characters.';
+            } elseif (!hash_equals($password, (string)$this->input('password_confirm', ''))) {
+                $error = 'The two new passwords do not match.';
+            }
+            if ($error !== null) {
+                flash('error', $error);
+                redirect('/account/reset-password?token=' . rawurlencode($token));
+            }
+            (new User())->updatePassword((int)$user['id'], $password);
+            // Old sessions end through the password stamp; clear this browser's
+            // customer login too.
+            unset($_SESSION['user_id'], $_SESSION['user_name'], $_SESSION['user_role'], $_SESSION['user_pw']);
+            session_regenerate_id(true);
+            flash('success', 'Your password has been changed. Log in with the new one.');
+            redirect('/account/login');
+        }
+
+        // The token is in this page's address: keep it out of Referer headers
+        // sent to anything the page loads.
+        header('Referrer-Policy: no-referrer');
+        $this->view('account_password_reset', [
+            'metaTitle' => 'Choose a new password | ' . SITE_NAME,
+            'token'     => $token,
+            'email'     => $user['email'],
+        ]);
+    }
+
+    /**
+     * A password-reset token for one customer.
+     *
+     * Nothing is stored: the token is the user id and an expiry, signed with a
+     * key that includes the current password hash. Setting any new password
+     * changes that hash, so every link issued before it stops working,
+     * including this one once it is used.
+     */
+    private function resetToken(array $user): string
+    {
+        $payload = (int)$user['id'] . '.' . (time() + self::RESET_LINK_SECONDS);
+        return $payload . '.' . $this->resetSignature($user, $payload);
+    }
+
+    /** The customer a reset token belongs to, if it is genuine, unexpired and unused. */
+    private function userForResetToken(string $token): ?array
+    {
+        if (!preg_match('/^(\d+)\.(\d+)\.([a-f0-9]{64})$/', $token, $m) || (int)$m[2] < time()) {
+            return null;
+        }
+        $user = (new User())->find((int)$m[1]);
+        if (!$user || $user['role'] !== 'customer' || empty($user['is_active'])) {
+            return null;
+        }
+        return hash_equals($this->resetSignature($user, $m[1] . '.' . $m[2]), $m[3]) ? $user : null;
+    }
+
+    private function resetSignature(array $user, string $payload): string
+    {
+        $settings = new Settings();
+        $key = (string)$settings->get('customer_reset_key', '');
+        if ($key === '') {
+            $key = bin2hex(random_bytes(32));
+            $settings->set('customer_reset_key', $key);
+        }
+        return hash_hmac('sha256', $payload . '|' . $user['password_hash'], $key);
+    }
+
+    private function resetRateLimited(string $identifier): bool
+    {
+        $stmt = Database::getInstance()->prepare(
+            'SELECT COUNT(*) FROM login_attempts WHERE identifier = ? AND attempted_at > DATE_SUB(NOW(), INTERVAL 15 MINUTE)'
+        );
+        $stmt->execute([substr($identifier, 0, 180)]);
+        return (int)$stmt->fetchColumn() >= 3;
+    }
+
+    private function resetEmailHtml(array $user, string $link, string $siteName): string
+    {
+        return '<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#1f2937;max-width:520px">'
+            . '<p>Hi ' . e((string)$user['name']) . ',</p>'
+            . '<p>Someone asked to reset the password for your <strong>' . e($siteName) . '</strong> account ('
+            . e((string)$user['email']) . ').</p>'
+            . '<p><a href="' . e($link) . '" style="display:inline-block;background:#e63946;color:#fff;text-decoration:none;padding:10px 18px;border-radius:6px;font-weight:bold">Choose a new password</a></p>'
+            . '<p style="font-size:13px;color:#6b7280">The link works for ' . intdiv(self::RESET_LINK_SECONDS, 60)
+            . ' minutes and only once. If you did not ask for this, ignore this email — your password stays the same.</p>'
+            . '<p style="font-size:12px;color:#9ca3af;word-break:break-all">' . e($link) . '</p>'
+            . '</div>';
     }
 
     private function isRateLimited(string $identifier): bool
@@ -265,7 +438,10 @@ class AccountController extends BaseController
                     flash('error', 'New password must be at least ' . PASSWORD_MIN_LENGTH . ' characters.');
                 } else {
                     $userModel->updatePassword($userId, $new);
-                    flash('success', 'Password changed successfully.');
+                    // Keep this browser signed in; every other session ends at its next click.
+                    session_regenerate_id(true);
+                    $_SESSION['user_pw'] = self::passwordStamp($userModel->find($userId));
+                    flash('success', 'Password changed. Anywhere else you were logged in has been logged out.');
                 }
             }
             redirect('/account/profile');

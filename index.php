@@ -29,6 +29,9 @@ if (ENVIRONMENT === 'production' && empty($_SERVER['HTTPS'])) {
     redirect('https://' . ($_SERVER['HTTP_HOST'] ?? '') . ($_SERVER['REQUEST_URI'] ?? '/'));
 }
 
+// A customer whose password was changed elsewhere is logged out here.
+endStaleCustomerSession();
+
 // ---- Resolve path ----
 $basePath = rtrim(parse_url(SITE_URL, PHP_URL_PATH) ?: '', '/');
 $requestUri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
@@ -144,6 +147,14 @@ try {
 
         case $path === '/account/register':
             (new AccountController())->register();
+            break;
+
+        case $path === '/account/forgot-password':
+            (new AccountController())->forgotPassword();
+            break;
+
+        case $path === '/account/reset-password':
+            (new AccountController())->resetPassword();
             break;
 
         case $path === '/account/logout':
