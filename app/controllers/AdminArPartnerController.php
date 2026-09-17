@@ -203,7 +203,8 @@ class AdminArPartnerController extends BaseController
             'website_url'      => $website === '' ? null : ArPartnerService::safeWebsite($website),
             'allow_singles'    => $this->input('allow_singles') ? 1 : 0,
             'allow_albums'     => $this->input('allow_albums') ? 1 : 0,
-            'max_album_pages'  => max(1, min(ArFrameItem::MAX_PER_FRAME, (int)$this->input('max_album_pages', ArFrameItem::MAX_PER_FRAME))),
+            // 0 = no limit; the column is a TINYINT UNSIGNED.
+            'max_album_pages'  => max(0, min(255, (int)$this->input('max_album_pages', ArFrameItem::MAX_PER_FRAME))),
             'max_video_mb'     => max(1, min(500, (int)$this->input('max_video_mb', 20))),
             'base_credits'     => $base,
             'duration_prices'  => json_encode($durationPrices),

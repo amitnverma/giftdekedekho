@@ -17,6 +17,7 @@
  *    AR queue and scan-anything page.
  */
 require_once APP_PATH . '/services/ArPartnerService.php';
+require_once APP_PATH . '/services/NotificationService.php';
 
 class PartnerController extends BaseController
 {
@@ -25,7 +26,10 @@ class PartnerController extends BaseController
 
     private const GENERATE_LIMIT = 24;
     private const GENERATE_WINDOW_SECONDS = 300;
-    private const MAX_PENDING_UPLOADS = 60;
+    /** Photos compiled in one request, so a large album never outlasts the server's time limit. */
+    private const GENERATE_BATCH = 8;
+    /** Enough for an image and a video on every page of a large album. */
+    private const MAX_PENDING_UPLOADS = 400;
 
     private ArPartner $partners;
     private ArPartnerService $service;
@@ -63,6 +67,14 @@ class PartnerController extends BaseController
         }
         if ($path === '/logout') {
             $this->logout();
+            return;
+        }
+        if ($path === '/forgot-password') {
+            $this->forgotPassword();
+            return;
+        }
+        if ($path === '/reset-password') {
+            $this->resetPassword();
             return;
         }
 
@@ -103,8 +115,8 @@ class PartnerController extends BaseController
             case preg_match('#^/content/(\d+)/update$#', $path, $m) === 1 && $post:
                 $this->updateContent((int)$m[1]);
                 break;
-            case preg_match('#^/content/(\d+)/items/(\d+)/replace$#', $path, $m) === 1 && $post:
-                $this->replaceItem((int)$m[1], (int)$m[2]);
+            case preg_match('#^/content/(\d+)/edit$#', $path, $m) === 1:
+                $post ? $this->saveEdit((int)$m[1]) : $this->editForm((int)$m[1]);
                 break;
             case preg_match('#^/content/(\d+)/generate$#', $path, $m) === 1 && $post:
                 $this->generate((int)$m[1]);
@@ -128,6 +140,10 @@ class PartnerController extends BaseController
 
             case $path === '/analytics':
                 $this->analytics();
+                break;
+
+            case $path === '/password':
+                $post ? $this->changePassword() : $this->passwordForm();
                 break;
 
             default:
@@ -174,6 +190,7 @@ class PartnerController extends BaseController
             $_SESSION['partner_auth'] = [
                 'user_id'    => (int)$user['id'],
                 'partner_id' => (int)$this->partner['id'],
+                'pw'         => ArPartnerService::passwordStamp($user),
                 'seen'       => time(),
             ];
             $users->update((int)$user['id'], ['last_login_at' => date('Y-m-d H:i:s')]);
@@ -213,7 +230,10 @@ class PartnerController extends BaseController
         // Re-read on every request, so switching a login or the partner off in
         // the admin takes effect at once rather than at the next sign-in.
         $user = (new ArPartnerUser())->findForPartner((int)$this->partner['id'], (int)$_SESSION['partner_auth']['user_id']);
-        if (!$user || empty($user['is_active']) || empty($this->partner['is_active'])) {
+        // A password changed anywhere — here, by reset link or in the admin —
+        // ends every session that signed in with the old one.
+        if (!$user || empty($user['is_active']) || empty($this->partner['is_active'])
+            || !hash_equals(ArPartnerService::passwordStamp($user), (string)($_SESSION['partner_auth']['pw'] ?? ''))) {
             unset($_SESSION['partner_auth']);
             $this->respondUnauthenticated();
         }
@@ -230,20 +250,170 @@ class PartnerController extends BaseController
         $this->go('/login');
     }
 
-    private function loginRateLimited(string $identifier): bool
+    private function loginRateLimited(string $identifier, int $max = 5): bool
     {
         $stmt = Database::getInstance()->prepare(
             'SELECT COUNT(*) FROM login_attempts WHERE identifier = ? AND attempted_at > DATE_SUB(NOW(), INTERVAL 15 MINUTE)'
         );
-        $stmt->execute([$identifier]);
-        return (int)$stmt->fetchColumn() >= 5;
+        $stmt->execute([substr($identifier, 0, 180)]);
+        return (int)$stmt->fetchColumn() >= $max;
     }
 
     private function recordLoginAttempt(string $identifier): void
     {
         Database::getInstance()
             ->prepare('INSERT INTO login_attempts (identifier, ip_address) VALUES (?, ?)')
-            ->execute([$identifier, $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0']);
+            ->execute([substr($identifier, 0, 180), $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0']);
+    }
+
+    /**
+     * "Forgot password": email a reset link. The reply is the same whether or
+     * not the address has a login here, so the form cannot be used to find out.
+     */
+    private function forgotPassword(): void
+    {
+        if ($this->signedIn()) {
+            $this->go('/password');
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $this->requireCsrf();
+            $email = strtolower(trim((string)$this->input('email', '')));
+            $identifier = 'partner-reset:' . $email;
+            if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $this->setOld(['email' => $email]);
+                flash('error', 'Enter the email address you sign in with.');
+                $this->go('/forgot-password');
+            }
+            if ($this->loginRateLimited($identifier, 3)) {
+                flash('error', 'A reset link was requested several times already. Please check your inbox, or wait 15 minutes and try again.');
+                $this->go('/forgot-password');
+            }
+            $this->recordLoginAttempt($identifier);
+
+            $this->clearOld();
+            flash('success', 'If ' . $email . ' has a login here, a reset link is on its way. It works for '
+                . intdiv(ArPartnerService::RESET_LINK_SECONDS, 60) . ' minutes. No email? Ask '
+                . (string)siteSetting('site_name', SITE_NAME) . ' to reset your password.');
+
+            $user = (new ArPartnerUser())->findByEmail($email);
+            if (!$user || (int)$user['partner_id'] !== (int)$this->partner['id'] || empty($user['is_active'])) {
+                $this->go('/login');
+            }
+
+            // Answer first, then send: an SMTP round trip takes seconds, and a
+            // reply that was only slow for real accounts would give them away.
+            header('Location: ' . $this->portalUrl('/login'));
+            session_write_close();
+            if (function_exists('fastcgi_finish_request')) {
+                fastcgi_finish_request();
+            } elseif (function_exists('litespeed_finish_request')) {
+                litespeed_finish_request();
+            }
+            $link = $this->portalUrl('/reset-password?token=' . rawurlencode($this->service->resetToken($user)));
+            $sent = (new NotificationService())->sendEmail($user['email'], (string)$user['name'],
+                'Reset your ' . $this->partner['name'] . ' password', $this->resetEmailHtml($user, $link));
+            if (!$sent) {
+                error_log('Partner password reset email failed for partner ' . (int)$this->partner['id'] . ', login ' . (int)$user['id']);
+            }
+            exit;
+        }
+
+        renderRaw('partner/password_forgot', [
+            'partner' => $this->partner,
+            'brand'   => $this->brand(),
+        ]);
+    }
+
+    private function resetPassword(): void
+    {
+        $token = (string)$this->input('token', '');
+        $user = $this->service->userForResetToken((int)$this->partner['id'], $token);
+        if (!$user) {
+            flash('error', 'That reset link has expired or has already been used. Request a new one below.');
+            $this->go('/forgot-password');
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $this->requireCsrf();
+            $error = $this->newPasswordError();
+            if ($error !== null) {
+                flash('error', $error);
+                $this->go('/reset-password?token=' . rawurlencode($token));
+            }
+            (new ArPartnerUser())->setPassword((int)$user['id'], (string)$this->input('password', ''));
+            // Old sessions end through the password stamp; clear this browser too.
+            unset($_SESSION['partner_auth']);
+            session_regenerate_id(true);
+            flash('success', 'Your password has been changed. Sign in with the new one.');
+            $this->go('/login');
+        }
+
+        renderRaw('partner/password_reset', [
+            'partner' => $this->partner,
+            'brand'   => $this->brand(),
+            'token'   => $token,
+            'email'   => $user['email'],
+        ]);
+    }
+
+    private function passwordForm(): void
+    {
+        $this->page('password', 'Change password', '', []);
+    }
+
+    private function changePassword(): void
+    {
+        $this->requireCsrf();
+        $identifier = 'partner-password:' . (int)$this->user['id'];
+        if ($this->loginRateLimited($identifier)) {
+            flash('error', 'Too many attempts. Please wait 15 minutes and try again.');
+            $this->go('/password');
+        }
+        if (!password_verify((string)$this->input('current_password', ''), $this->user['password_hash'])) {
+            $this->recordLoginAttempt($identifier);
+            flash('error', 'Your current password is not correct.');
+            $this->go('/password');
+        }
+        $error = $this->newPasswordError();
+        if ($error !== null) {
+            flash('error', $error);
+            $this->go('/password');
+        }
+
+        $users = new ArPartnerUser();
+        $users->setPassword((int)$this->user['id'], (string)$this->input('password', ''));
+        // Keep this browser signed in; every other session ends at its next click.
+        session_regenerate_id(true);
+        $_SESSION['partner_auth']['pw'] = ArPartnerService::passwordStamp($users->findForPartner((int)$this->partner['id'], (int)$this->user['id']));
+        flash('success', 'Password changed. Anywhere else you were signed in has been signed out.');
+        $this->go('/password');
+    }
+
+    private function newPasswordError(): ?string
+    {
+        $password = (string)$this->input('password', '');
+        if (strlen($password) < PASSWORD_MIN_LENGTH) {
+            return 'The new password must be at least ' . PASSWORD_MIN_LENGTH . ' characters.';
+        }
+        if (!hash_equals($password, (string)$this->input('password_confirm', ''))) {
+            return 'The two new passwords do not match.';
+        }
+        return null;
+    }
+
+    private function resetEmailHtml(array $user, string $link): string
+    {
+        $color = ArPartnerService::safeColor($this->partner['brand_color'] ?? null);
+        return '<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#1f2937;max-width:520px">'
+            . '<p>Hi ' . e((string)$user['name']) . ',</p>'
+            . '<p>Someone asked to reset the password for your <strong>' . e((string)$this->partner['name']) . '</strong> AR studio login ('
+            . e((string)$user['email']) . ').</p>'
+            . '<p><a href="' . e($link) . '" style="display:inline-block;background:' . $color . ';color:#fff;text-decoration:none;padding:10px 18px;border-radius:6px;font-weight:bold">Choose a new password</a></p>'
+            . '<p style="font-size:13px;color:#6b7280">The link works for ' . intdiv(ArPartnerService::RESET_LINK_SECONDS, 60)
+            . ' minutes and only once. If you did not ask for this, ignore this email — your password stays the same.</p>'
+            . '<p style="font-size:12px;color:#9ca3af;word-break:break-all">' . e($link) . '</p>'
+            . '</div>';
     }
 
     // ------------------------------------------------------------- dashboard
@@ -368,6 +538,7 @@ class PartnerController extends BaseController
             'validityPrices' => ArPartner::validityPrices($this->partner),
             'packs'          => ArPartner::creditPacks($this->partner),
             'maxPages'       => $this->maxAlbumPages(),
+            'playbackModes'  => ArFrameItem::PLAYBACK_MODES,
             'maxVideoMb'     => $this->maxVideoMb(),
             'uploadLimit'    => (string)ini_get('upload_max_filesize'),
             'compiler'       => $this->compilerOk(),
@@ -405,8 +576,9 @@ class PartnerController extends BaseController
         if (!$rows) {
             $this->failCreate($back, 'Add a photo and the video it should play.');
         }
-        if (count($rows) > $this->maxAlbumPages()) {
-            $this->failCreate($back, 'An album can hold at most ' . $this->maxAlbumPages() . ' photos.');
+        $maxPages = $this->maxAlbumPages();
+        if ($maxPages !== null && count($rows) > $maxPages) {
+            $this->failCreate($back, 'An album can hold at most ' . $maxPages . ' photos.');
         }
 
         $pages = [];
@@ -428,6 +600,7 @@ class PartnerController extends BaseController
                 'video_path'  => $video['path'],
                 'max_seconds' => (int)($kind === 'album' ? ($row['duration'] ?? 0) : $this->input('duration', 0)),
                 'title'       => mb_substr(trim((string)($row['title'] ?? '')), 0, 120),
+                'playback_mode' => ArFrameItem::playbackMode((string)($kind === 'album' ? ($row['playback_mode'] ?? '') : $this->input('playback_mode', ''))),
             ];
         }
 
@@ -494,15 +667,7 @@ class PartnerController extends BaseController
             'customer_phone' => $customer['phone'] === null ? null : substr((string)$customer['phone'], 0, 15),
         ]);
 
-        if (!$this->throttleGeneration(count($pages))) {
-            flash('error', sprintf('Created for %s credits, but many photos were processed in the last few minutes. '
-                . 'Wait a minute, then press "Prepare photos".', number_format($result['cost'])));
-            $this->go('/content/' . $frameId);
-        }
-
-        @set_time_limit(30 + 25 * count($pages));
-        $generated = $this->frames->generateTarget($frameId);
-        $this->flashGeneration($generated, sprintf('Created for %s credits.', number_format($result['cost'])));
+        $this->prepareMissing($frameId, count($pages), sprintf('Created for %s credits.', number_format($result['cost'])));
         $this->go('/content/' . $frameId);
     }
 
@@ -591,102 +756,136 @@ class PartnerController extends BaseController
             'qr'         => (new QrCodeService())->pngDataUri($scanUrl, 'Q', 8),
             'editable'   => ArPartnerService::isEditable($frame),
             'expired'    => ArPartnerService::isExpired($frame),
-            'customers'  => (new ArPartnerCustomer())->optionsForPartner((int)$this->partner['id']),
             'opens'      => $stat['opens'],
             'visitors'   => $stat['visitors'],
-            'maxVideoMb' => $this->maxVideoMb(),
         ]);
     }
 
+    /** The on/off switch, which stays available after the edit window closes. */
     private function updateContent(int $id): void
     {
         $this->requireCsrf();
-        $frame = $this->findContentOr404($id);
-
-        $data = ['is_active' => $this->input('is_active') ? 1 : 0];
-
-        // Title and customer follow the same edit window as the photos: after
-        // it closes, what was sold stays as it was sold.
-        if (ArPartnerService::isEditable($frame)) {
-            $title = trim((string)$this->input('title', ''));
-            if ($title !== '') {
-                $data['title'] = mb_substr($title, 0, 160);
-            }
-            $customer = (new ArPartnerCustomer())->findForPartner((int)$this->partner['id'], (int)$this->input('customer_id', 0));
-            if ($customer) {
-                $data['partner_customer_id'] = (int)$customer['id'];
-                $data['customer_name'] = mb_substr((string)$customer['name'], 0, 120);
-                $data['customer_phone'] = $customer['phone'] === null ? null : substr((string)$customer['phone'], 0, 15);
-            }
-        }
-
-        (new ArFrame())->update($id, $data);
+        $this->findContentOr404($id);
+        (new ArFrame())->update($id, ['is_active' => $this->input('is_active') ? 1 : 0]);
         flash('success', 'Saved.');
         $this->go('/content/' . $id);
     }
 
-    /** Swap one page's photo and/or video during the edit window. */
-    private function replaceItem(int $id, int $itemId): void
+    private function editForm(int $id): void
+    {
+        $frame = $this->findEditableOr404($id);
+        $this->page('content_edit', 'Edit ' . (string)($frame['title'] ?: $frame['slug']), $frame['content_kind'] === 'album' ? 'albums' : 'singles', [
+            'frame'         => $frame,
+            'items'         => $this->frames->items($frame),
+            'customers'     => (new ArPartnerCustomer())->optionsForPartner((int)$this->partner['id']),
+            'playbackModes' => ArFrameItem::PLAYBACK_MODES,
+            'maxVideoMb'    => $this->maxVideoMb(),
+        ]);
+    }
+
+    /**
+     * Save the edit page: title and customer, and for each photo its title,
+     * playback mode, and optionally a new image and/or video.
+     *
+     * What was paid for — video length, validity, the number of pages — is not
+     * editable here. Every upload token is checked before anything is changed,
+     * so an expired upload never leaves the content half-edited.
+     */
+    private function saveEdit(int $id): void
     {
         $this->requireCsrf();
-        $frame = $this->findContentOr404($id);
-        if (!ArPartnerService::isEditable($frame)) {
-            flash('error', 'The edit window for this content has closed.');
-            $this->go('/content/' . $id);
+        $frame = $this->findEditableOr404($id);
+        $back = '/content/' . $id . '/edit';
+
+        $data = [];
+        $title = trim((string)$this->input('title', ''));
+        if ($title !== '') {
+            $data['title'] = mb_substr($title, 0, 160);
         }
+        $customer = (new ArPartnerCustomer())->findForPartner((int)$this->partner['id'], (int)$this->input('customer_id', 0));
+        if ($customer) {
+            $data['partner_customer_id'] = (int)$customer['id'];
+            $data['customer_name'] = mb_substr((string)$customer['name'], 0, 120);
+            $data['customer_phone'] = $customer['phone'] === null ? null : substr((string)$customer['phone'], 0, 15);
+        }
+
+        $input = is_array($_POST['items'] ?? null) ? $_POST['items'] : [];
+        $changes = [];
+        foreach ($this->frames->items($frame) as $item) {
+            $row = is_array($input[$item['id']] ?? null) ? $input[$item['id']] : [];
+            $photoToken = (string)($row['photo_token'] ?? '');
+            $videoToken = (string)($row['video_token'] ?? '');
+            $photo = $photoToken === '' ? null : $this->uploadFromToken($photoToken, 'photo');
+            $video = $videoToken === '' ? null : $this->uploadFromToken($videoToken, 'video');
+            if (($photoToken !== '' && $photo === null) || ($videoToken !== '' && $video === null)) {
+                flash('error', 'An upload has expired. Please choose the new image or video again.');
+                $this->go($back);
+            }
+            $changes[] = [$item, $row, $photo, $video, $photoToken, $videoToken];
+        }
+
         $itemModel = new ArFrameItem();
-        $item = $itemModel->findForFrame($id, $itemId);
-        if (!$item) {
-            flash('error', 'That photo is not part of this content.');
-            $this->go('/content/' . $id);
-        }
+        $newPhotos = 0;
+        foreach ($changes as [$item, $row, $photo, $video, $photoToken, $videoToken]) {
+            $update = [
+                'title'         => $this->blankToNull(mb_substr((string)($row['title'] ?? ''), 0, 120)),
+                'playback_mode' => ArFrameItem::playbackMode((string)($row['playback_mode'] ?? $item['playback_mode'])),
+            ];
+            if ($video !== null) {
+                $update['video_type'] = 'upload';
+                $update['video_path'] = $video['path'];
+            }
+            if ($photo !== null) {
+                // A new photo invalidates the old target and any earlier test.
+                $update += [
+                    'photo_path'         => $photo['path'],
+                    'target_path'        => null,
+                    'trackability_score' => null,
+                    'trackability_flag'  => null,
+                    'trackability_json'  => null,
+                    'verified_at'        => null,
+                ];
+                $newPhotos++;
+            }
+            $itemModel->update((int)$item['id'], $update);
 
-        $photoToken = (string)$this->input('photo_token', '');
-        $videoToken = (string)$this->input('video_token', '');
-        $photo = $photoToken === '' ? null : $this->uploadFromToken($photoToken, 'photo');
-        $video = $videoToken === '' ? null : $this->uploadFromToken($videoToken, 'video');
-        if ($photo === null && $video === null) {
-            flash('error', 'Upload a new image or video first.');
-            $this->go('/content/' . $id . '#item-' . $itemId);
-        }
-
-        if ($video !== null) {
-            $itemModel->update($itemId, ['video_type' => 'upload', 'video_path' => $video['path']]);
-            unset($_SESSION['partner_uploads'][$videoToken]);
-            if (!empty($item['video_path']) && $item['video_path'] !== $video['path']) {
-                $this->frames->deleteFile($item['video_path']);
+            if ($video !== null) {
+                unset($_SESSION['partner_uploads'][$videoToken]);
+                if (!empty($item['video_path']) && $item['video_path'] !== $video['path']) {
+                    $this->frames->deleteFile($item['video_path']);
+                }
+            }
+            if ($photo !== null) {
+                unset($_SESSION['partner_uploads'][$photoToken]);
+                $this->frames->deleteFile($item['photo_path']);
+                $this->frames->deleteFile($item['target_path']);
             }
         }
 
-        if ($photo === null) {
-            flash('success', 'Video replaced.');
-            $this->go('/content/' . $id . '#item-' . $itemId);
+        if ($data) {
+            (new ArFrame())->update($id, $data);
         }
 
-        // A new photo invalidates the old target and any earlier test.
-        $itemModel->update($itemId, [
-            'photo_path'         => $photo['path'],
-            'target_path'        => null,
-            'trackability_score' => null,
-            'trackability_flag'  => null,
-            'trackability_json'  => null,
-            'verified_at'        => null,
-        ]);
-        unset($_SESSION['partner_uploads'][$photoToken]);
-        $this->frames->deleteFile($item['photo_path']);
-        $this->frames->deleteFile($item['target_path']);
-
-        if (!$this->throttleGeneration()) {
-            $this->frames->refreshFrame($id);
-            flash('error', 'Image replaced, but many photos were processed in the last few minutes. Wait a minute, then press "Prepare photos".');
-            $this->go('/content/' . $id . '#item-' . $itemId);
+        if ($newPhotos === 0) {
+            flash('success', 'Changes saved.');
+            $this->go('/content/' . $id);
         }
+        // Drop the replaced photos from the scan target straight away, so the old
+        // image stops playing even if preparing the new one has to wait.
+        $this->frames->refreshFrame($id);
+        $this->prepareMissing($id, $newPhotos, 'Changes saved.');
+        $this->go('/content/' . $id);
+    }
 
-        $this->flashGeneration(
-            $this->frames->generateTarget($id, true),
-            $video !== null ? 'Image and video replaced.' : 'Image replaced.'
-        );
-        $this->go('/content/' . $id . '#item-' . $itemId);
+    private function findEditableOr404(int $id): array
+    {
+        $frame = $this->findContentOr404($id);
+        if (!ArPartnerService::isEditable($frame)) {
+            flash('error', 'The edit window for this content closed on '
+                . date('d M Y, h:i A', strtotime((string)($frame['editable_until'] ?: $frame['created_at']))) . '.');
+            $this->go('/content/' . $id);
+        }
+        return $frame;
     }
 
     /** Compile any photo still missing a target — after a failure or a throttle. */
@@ -699,12 +898,7 @@ class PartnerController extends BaseController
             flash('success', 'Every photo is already prepared.');
             $this->go('/content/' . $id);
         }
-        if (!$this->throttleGeneration($missing)) {
-            flash('error', 'Many photos were processed in the last few minutes. Please wait a minute and try again.');
-            $this->go('/content/' . $id);
-        }
-        @set_time_limit(30 + 25 * $missing);
-        $this->flashGeneration($this->frames->generateTarget($id, true), 'Photos prepared.');
+        $this->prepareMissing($id, $missing, 'Photos prepared.');
         $this->go('/content/' . $id);
     }
 
@@ -866,9 +1060,11 @@ class PartnerController extends BaseController
         return $kind === 'album' ? !empty($this->partner['allow_albums']) : !empty($this->partner['allow_singles']);
     }
 
-    private function maxAlbumPages(): int
+    /** Pages allowed in one album, or null when the admin set 0 (no limit). */
+    private function maxAlbumPages(): ?int
     {
-        return max(1, min(ArFrameItem::MAX_PER_FRAME, (int)$this->partner['max_album_pages']));
+        $max = (int)$this->partner['max_album_pages'];
+        return $max <= 0 ? null : $max;
     }
 
     private function maxVideoMb(): int
@@ -902,22 +1098,44 @@ class PartnerController extends BaseController
         flash('success', $lead . ' Your AR is live — print the QR sticker, or send the link to your customer.');
     }
 
-    private function throttleGeneration(int $count = 1): bool
+    /**
+     * Compile the photos still missing a target, as many as this request may.
+     *
+     * Each request compiles at most GENERATE_BATCH photos, within the rolling
+     * GENERATE_LIMIT, so an album of any size is prepared by pressing "Prepare
+     * photos" again rather than by one request that runs past the time limit.
+     */
+    private function prepareMissing(int $frameId, int $missing, string $lead): void
+    {
+        $batch = $this->claimGeneration(min($missing, self::GENERATE_BATCH));
+        if ($batch === 0) {
+            flash('error', $lead . ' But many photos were processed in the last few minutes. Wait a minute, then press "Prepare photos".');
+            return;
+        }
+
+        @set_time_limit(30 + 25 * $batch);
+        $result = $this->frames->generateTarget($frameId, true, $batch);
+        if ($batch < $missing && !empty($result['ok'])) {
+            flash('error', sprintf('%s %d of %d photos prepared — press "Prepare photos" to continue with the rest.', $lead, $batch, $missing));
+            return;
+        }
+        $this->flashGeneration($result, $lead);
+    }
+
+    /** Reserve up to $wanted compilations in the rolling window; returns how many were granted. */
+    private function claimGeneration(int $wanted): int
     {
         $now = time();
         $recent = array_values(array_filter(
             $_SESSION['partner_generate_times'] ?? [],
             fn($t) => ($now - (int)$t) < self::GENERATE_WINDOW_SECONDS
         ));
-        if (count($recent) + $count > self::GENERATE_LIMIT) {
-            $_SESSION['partner_generate_times'] = $recent;
-            return false;
-        }
-        for ($i = 0; $i < $count; $i++) {
+        $granted = max(0, min($wanted, self::GENERATE_LIMIT - count($recent)));
+        for ($i = 0; $i < $granted; $i++) {
             $recent[] = $now;
         }
         $_SESSION['partner_generate_times'] = $recent;
-        return true;
+        return $granted;
     }
 
     private function portalUrl(string $path): string

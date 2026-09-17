@@ -208,7 +208,7 @@ table.p-table { width: 100%; border-collapse: collapse; min-width: 640px; }
 
 /* Album rows */
 .pages-list { border-top: 1px solid var(--line); }
-.page-row { display: grid; grid-template-columns: 22px minmax(120px, 1.2fr) minmax(130px, 1fr) auto auto 28px; gap: 10px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+.page-row { display: grid; grid-template-columns: 22px minmax(120px, 1.2fr) minmax(130px, 1fr) minmax(120px, 1fr) auto auto 28px; gap: 10px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--line); }
 .page-row .n { color: var(--ink-3); font-size: 13px; font-variant-numeric: tabular-nums; }
 .page-row .input, .page-row select { padding: 6px 9px; font-size: 13.5px; }
 .page-row .row-status { grid-column: 2 / -1; font-size: 12.5px; color: var(--ink-3); margin-top: -4px; }
@@ -292,7 +292,7 @@ table.p-table { width: 100%; border-collapse: collapse; min-width: 640px; }
   .kv { grid-template-columns: 1fr; gap: 2px; }
   .kv dd { margin-bottom: 8px; }
   .page-row { grid-template-columns: 22px minmax(0, 1fr) 28px; }
-  .page-row > .page-dur, .page-row > .upload-btn { grid-column: 2 / 3; }
+  .page-row > .page-dur, .page-row > .page-mode, .page-row > .upload-btn { grid-column: 2 / 3; }
   .page-row .icon-btn { grid-column: 3; grid-row: 1; }
   .page-row .row-status { grid-column: 2 / 3; }
   .item { grid-template-columns: 64px minmax(0, 1fr); }

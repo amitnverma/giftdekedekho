@@ -84,6 +84,7 @@ $initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)$
                 <div class="p-user-menu">
                     <div class="who">Signed in as <?= e($partnerUser['email']) ?></div>
                     <a href="<?= url($base . '/credits') ?>">Credits &amp; billing</a>
+                    <a href="<?= url($base . '/password') ?>">Change password</a>
                     <a href="<?= url($base . '/logout') ?>">Sign out</a>
                 </div>
             </details>

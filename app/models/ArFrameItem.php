@@ -18,6 +18,17 @@ class ArFrameItem extends BaseModel
      */
     public const MAX_PER_FRAME = 8;
 
+    /** How the video appears once the photo is found. */
+    public const PLAYBACK_MODES = [
+        'fullscreen' => 'Full screen',
+        'overlay'    => 'On the photo (AR overlay)',
+    ];
+
+    public static function playbackMode(?string $mode): string
+    {
+        return isset(self::PLAYBACK_MODES[(string)$mode]) ? (string)$mode : 'fullscreen';
+    }
+
     /** Items in display order, which is also the order they are bundled in. */
     public function forFrame(int $frameId): array
     {

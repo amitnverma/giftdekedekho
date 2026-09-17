@@ -21,11 +21,13 @@ $config = [
     'balance'        => (int)$partner['credit_balance'],
     'durationPrices' => (object)$durationPrices,
     'validityPrices' => (object)$validityPrices,
-    'maxPages'       => $maxPages,
+    'maxPages'       => (int)($maxPages ?? 0),   // 0 = no limit
     'maxVideoBytes'  => $maxVideoMb * 1024 * 1024,
     'maxPhotoBytes'  => ArFrameService::MAX_PHOTO_BYTES,
     'uploadUrl'      => url($base . '/upload'),
 ];
+
+$defaultMode = 'fullscreen';
 
 $durationOption = function (int $seconds, int $price): string {
     return $seconds . 's' . ($price > 0 ? ' (+' . number_format($price) . ' credits)' : '');
@@ -149,6 +151,20 @@ $durationOption = function (int $seconds, int $price): string {
                     </div>
                 </div>
             </div>
+            <div class="field" style="margin-bottom:0">
+                <span class="field-label">
+                    <?= $isAlbum ? 'Default Playback Mode <span class="muted">(for new AR contents — each can be changed below)</span>' : 'Playback Mode' ?>
+                </span>
+                <div class="chips">
+                    <?php foreach ($playbackModes as $key => $label): ?>
+                        <label class="chip">
+                            <input type="radio" name="<?= $isAlbum ? 'default_playback_mode' : 'playback_mode' ?>" value="<?= e($key) ?>" <?= $key === $defaultMode ? 'checked' : '' ?>>
+                            <span><?= e($label) ?></span>
+                        </label>
+                    <?php endforeach; ?>
+                </div>
+                <p class="hint" style="margin:6px 0 0">Full screen opens the video over the whole phone screen once the photo is found. On the photo plays it inside the printed photo, moving with it.</p>
+            </div>
         </div>
 
         <?php if ($isAlbum): ?>
@@ -164,6 +180,11 @@ $durationOption = function (int $seconds, int $price): string {
                     <select class="input page-dur" name="pages[__i__][duration]" aria-label="Video duration" data-page-duration>
                         <?php foreach ($durationPrices as $seconds => $price): ?>
                             <option value="<?= (int)$seconds ?>"><?= e($durationOption((int)$seconds, (int)$price)) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <select class="input page-mode" name="pages[__i__][playback_mode]" aria-label="Playback mode" data-page-mode>
+                        <?php foreach ($playbackModes as $key => $label): ?>
+                            <option value="<?= e($key) ?>"><?= e($label) ?></option>
                         <?php endforeach; ?>
                     </select>
                     <label class="upload-btn" data-upload="photo">

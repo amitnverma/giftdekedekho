@@ -94,7 +94,7 @@ class ArPartnerService
      * takes seconds per photo and must not hold the partner's row locked.
      *
      * @param array{kind: string, title: string, customer_id: int, validity: string} $attrs
-     * @param array[] $pages each: photo_path, video_path, max_seconds, title
+     * @param array[] $pages each: photo_path, video_path, max_seconds, title, playback_mode
      * @return array{ok: bool, frame_id?: int, cost?: int, error?: string}
      */
     public function createContent(array $partner, ?int $partnerUserId, array $attrs, array $pages): array
@@ -113,7 +113,7 @@ class ArPartnerService
                 'photo_path'    => $page['photo_path'],
                 'video_type'    => 'upload',
                 'video_path'    => $page['video_path'],
-                'playback_mode' => 'fullscreen',
+                'playback_mode' => ArFrameItem::playbackMode($page['playback_mode'] ?? null),
                 'max_seconds'   => (int)$page['max_seconds'],
                 'title'         => $page['title'] !== '' ? $page['title'] : null,
             ];
@@ -351,6 +351,53 @@ class ArPartnerService
         return ['ok' => true, 'path' => self::LOGO_DIR . '/' . $name];
     }
 
+    // ----------------------------------------------------------- sign-in
+
+    /** How long an emailed reset link works. */
+    public const RESET_LINK_SECONDS = 3600;
+
+    /**
+     * A password-reset token for one partner login.
+     *
+     * Nothing is stored: the token is the login id and an expiry, signed with a
+     * key that includes the current password hash. Setting any new password —
+     * through this link, the portal or the admin — changes that hash, so every
+     * link issued before it stops working, including this one once it is used.
+     */
+    public function resetToken(array $user, ?int $expires = null): string
+    {
+        $expires = $expires ?? time() + self::RESET_LINK_SECONDS;
+        $payload = (int)$user['id'] . '.' . $expires;
+        return $payload . '.' . $this->resetSignature($user, $payload);
+    }
+
+    /** The login a reset token belongs to, if it is genuine, unexpired and unused. */
+    public function userForResetToken(int $partnerId, string $token): ?array
+    {
+        if (!preg_match('/^(\d+)\.(\d+)\.([a-f0-9]{64})$/', $token, $m) || (int)$m[2] < time()) {
+            return null;
+        }
+        $user = (new ArPartnerUser())->findForPartner($partnerId, (int)$m[1]);
+        if (!$user || empty($user['is_active'])) {
+            return null;
+        }
+        return hash_equals($this->resetSignature($user, $m[1] . '.' . $m[2]), $m[3]) ? $user : null;
+    }
+
+    /**
+     * A short fingerprint of a login's password hash, kept in its session: once
+     * the password changes, sessions signed in with the old one end.
+     */
+    public static function passwordStamp(array $user): string
+    {
+        return substr(hash('sha256', (string)$user['password_hash']), 0, 20);
+    }
+
+    private function resetSignature(array $user, string $payload): string
+    {
+        return hash_hmac('sha256', $payload . '|' . (int)$user['partner_id'] . '|' . $user['password_hash'], $this->secret('ar_partner_reset_key'));
+    }
+
     // -------------------------------------------------------------- analytics
 
     /**
@@ -380,11 +427,16 @@ class ArPartnerService
     /** Secret for the visitor hash, created on first use and kept in settings. */
     private function visitorKey(): string
     {
+        return $this->secret('ar_visitor_hash_key');
+    }
+
+    private function secret(string $name): string
+    {
         $settings = new Settings();
-        $key = (string)$settings->get('ar_visitor_hash_key', '');
+        $key = (string)$settings->get($name, '');
         if ($key === '') {
             $key = bin2hex(random_bytes(32));
-            $settings->set('ar_visitor_hash_key', $key);
+            $settings->set($name, $key);
         }
         return $key;
     }

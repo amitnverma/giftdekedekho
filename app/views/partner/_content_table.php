@@ -31,7 +31,12 @@
                     </td>
                     <td>
                         <a href="<?= $link ?>"><?= e($row['title'] ?: $row['slug']) ?></a>
-                        <div class="muted small"><?= e(date('d M Y, h:i A', strtotime($row['created_at']))) ?></div>
+                        <div class="muted small">
+                            <?= e(date('d M Y, h:i A', strtotime($row['created_at']))) ?>
+                            <?php if (ArPartnerService::isEditable($row)): ?>
+                                · <a href="<?= url($base . '/content/' . (int)$row['id'] . '/edit') ?>">Edit</a>
+                            <?php endif; ?>
+                        </div>
                     </td>
                     <td><?= e($row['customer_name'] ?? '—') ?></td>
                     <td>

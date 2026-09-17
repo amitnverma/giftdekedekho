@@ -1,5 +1,5 @@
 <?php
-/** Sign-in page for one partner's portal, in that partner's branding. */
+/** "Forgot password" for one partner's portal: emails a reset link. */
 $initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)$partner['name']), 0, 2)) ?: 'AR';
 ?>
 <!DOCTYPE html>
@@ -8,7 +8,7 @@ $initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)$
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex, nofollow">
-<title>Sign in · <?= e($partner['name']) ?></title>
+<title>Forgot password · <?= e($partner['name']) ?></title>
 <?php if (!empty($brand['logo'])): ?><link rel="icon" href="<?= e($brand['logo']) ?>"><?php endif; ?>
 <link rel="stylesheet" href="<?= asset('public/css/partner.css') ?>">
 <style>:root { --brand: <?= e($brand['color']) ?>; }</style>
@@ -33,24 +33,17 @@ $initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)$
             <div class="banner banner-success" role="status"><p><?= e($msg) ?></p></div>
         <?php endif; ?>
 
-        <?php if (empty($partner['is_active'])): ?>
-            <div class="banner banner-amber"><p>This account is currently paused.</p></div>
-        <?php endif; ?>
-
-        <form method="post" action="<?= url('/partner/' . $partner['slug'] . '/login') ?>">
+        <p class="hint" style="margin-top:0">Enter the email you sign in with, and we will send you a link to choose a new password.</p>
+        <form method="post" action="<?= url('/partner/' . $partner['slug'] . '/forgot-password') ?>">
             <?= csrfField() ?>
             <div class="field">
                 <label for="email">Email</label>
                 <input type="email" id="email" name="email" value="<?= old('email') ?>" autocomplete="username" required autofocus>
             </div>
-            <div class="field">
-                <label for="password">Password</label>
-                <input type="password" id="password" name="password" autocomplete="current-password" required>
-            </div>
-            <button class="btn" type="submit" style="width:100%">Sign in</button>
+            <button class="btn" type="submit" style="width:100%">Email me a reset link</button>
         </form>
         <p class="hint" style="text-align:center;margin-top:16px">
-            <a href="<?= url('/partner/' . $partner['slug'] . '/forgot-password') ?>">Forgot your password?</a>
+            <a href="<?= url('/partner/' . $partner['slug'] . '/login') ?>">← Back to sign in</a>
         </p>
     </div>
 </main>

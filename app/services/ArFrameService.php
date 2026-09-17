@@ -533,9 +533,11 @@ class ArFrameService
      * on demand from the online queue. Identical either way.
      *
      * @param bool $onlyMissing Skip photos that already have a target.
+     * @param int  $limit       Compile at most this many photos (0 = all), so a
+     *                          large album can be prepared over several requests.
      * @return array{ok: bool, error?: string, compiled?: int, failures?: array, score?: int, flag?: string, advice?: string, metrics?: array}
      */
-    public function generateTarget(int $frameId, bool $onlyMissing = false): array
+    public function generateTarget(int $frameId, bool $onlyMissing = false, int $limit = 0): array
     {
         $frame = $this->frames->find($frameId);
         if (!$frame) {
@@ -558,6 +560,9 @@ class ArFrameService
         foreach ($items as $position => $item) {
             if ($onlyMissing && !empty($item['target_path'])) {
                 continue;
+            }
+            if ($limit > 0 && $compiled + count($failures) >= $limit) {
+                break;
             }
             $result = $this->compileItem($frame, $item);
             if (empty($result['ok'])) {

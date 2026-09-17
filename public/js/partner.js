@@ -220,7 +220,7 @@
         + ' credit' + (config.balance === 1 ? '' : 's') + ' — ' + formatNumber(short) + ' credits short.';
 
       if (pageCount) pageCount.textContent = list.length;
-      if (addBtn) addBtn.hidden = list.length >= config.maxPages;
+      if (addBtn) addBtn.hidden = config.maxPages > 0 && list.length >= config.maxPages;
 
       var blocked = short > 0 || pendingUploads > 0 || !ready;
       submit.disabled = blocked;
@@ -244,13 +244,14 @@
     }
 
     function addPage() {
-      if (pages().length >= config.maxPages) return;
+      if (config.maxPages > 0 && pages().length >= config.maxPages) return;
       var html = template.innerHTML.replace(/__i__/g, String(nextIndex++));
       var holder = document.createElement('div');
       holder.innerHTML = html.trim();
       var page = holder.firstElementChild;
       page.querySelector('[data-title]').value = 'AR Content ' + (pages().length + 1);
       page.querySelector('[data-page-duration]').value = checked('default_duration') || '';
+      page.querySelector('[data-page-mode]').value = checked('default_playback_mode') || 'fullscreen';
       page.querySelector('[data-page-duration]').addEventListener('change', refresh);
       page.querySelector('[data-remove-page]').addEventListener('click', function () {
         page.remove();
@@ -287,29 +288,53 @@
     refresh();
   }
 
-  // ------------------------------------------ replace photo/video (detail)
+  // ------------------------------------------------------------ edit form
 
-  document.querySelectorAll('[data-replace-form]').forEach(function (replaceForm) {
-    var config = JSON.parse(replaceForm.getAttribute('data-replace-form'));
-    var submit = replaceForm.querySelector('[type=submit]');
+  var editForm = document.querySelector('[data-edit-form]');
+  if (editForm) initEditForm(editForm);
+
+  function initEditForm(editForm) {
+    var config = JSON.parse(editForm.getAttribute('data-edit-form'));
+    var submit = editForm.querySelector('[data-submit]');
+    var hint = editForm.querySelector('[data-submit-hint]');
+    var saving = false;
+
     function refresh() {
-      var any = Array.prototype.some.call(replaceForm.querySelectorAll('[data-token]'), function (t) { return t.value; });
-      submit.disabled = pendingUploads > 0 || !any;
+      if (saving) return;
+      submit.disabled = pendingUploads > 0;
+      hint.textContent = pendingUploads > 0 ? 'Waiting for uploads to finish…' : '';
     }
-    replaceForm.querySelectorAll('[data-upload]').forEach(function (button) {
-      bindUpload(button, {
-        scope: replaceForm,
-        config: config,
-        onChange: refresh,
-        durationFor: function () { return config.maxSeconds || 0; },
+
+    editForm.querySelectorAll('[data-edit-item]').forEach(function (item) {
+      var maxSeconds = parseInt(item.getAttribute('data-max-seconds'), 10) || 0;
+      item.querySelectorAll('[data-upload]').forEach(function (button) {
+        bindUpload(button, {
+          scope: item,
+          config: config,
+          onChange: refresh,
+          durationFor: function () { return maxSeconds; },
+        });
       });
     });
-    replaceForm.addEventListener('submit', function () {
+
+    editForm.addEventListener('submit', function (e) {
+      if (pendingUploads > 0) {
+        e.preventDefault();
+        return;
+      }
+      saving = true;
       submit.disabled = true;
-      submit.textContent = 'Saving…';
+      submit.textContent = hasPhotoToken()
+        ? 'Saving… preparing new images can take a minute'
+        : 'Saving…';
     });
+
+    function hasPhotoToken() {
+      return Array.prototype.some.call(editForm.querySelectorAll('[data-token="photo"]'), function (t) { return t.value; });
+    }
+
     refresh();
-  });
+  }
 
   // --------------------------------------------------------- copy buttons
 

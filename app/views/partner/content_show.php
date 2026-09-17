@@ -1,7 +1,7 @@
 <?php
 /**
  * One single or album: how to hand it over (QR, link, sticker, WhatsApp), how
- * to test it, and — during the edit window — replacing its photos and videos.
+ * to test it, and — during the edit window — the way into its edit page.
  */
 $id = (int)$frame['id'];
 $isAlbum = $frame['content_kind'] === 'album';
@@ -20,7 +20,13 @@ if (strlen($waPhone) === 10) {
 }
 $waText = 'Your AR gift from ' . $partner['name'] . ' is ready! Scan the QR sticker, or open this link and point your camera at the photo: ' . $scanUrl;
 
-$headAction = '<span class="tag tag-' . $stateTone . '" style="font-size:13px;padding:4px 10px">' . e($stateLabel) . '</span>';
+$editUrl = url($base . '/content/' . $id . '/edit');
+$headAction = '<div class="toolbar">'
+    . '<span class="tag tag-' . $stateTone . '" style="font-size:13px;padding:4px 10px">' . e($stateLabel) . '</span>'
+    . ($editable
+        ? '<a class="btn btn-sm" href="' . $editUrl . '">Edit</a>'
+        : '<span class="btn btn-sm btn-ghost" aria-disabled="true" title="The edit window has closed">Edit</span>')
+    . '</div>';
 ?>
 <p style="margin:-8px 0 16px">
     <a class="btn-link" href="<?= url($base . ($isAlbum ? '/albums' : '/singles')) ?>">← <?= $isAlbum ? 'All albums' : 'All singles' ?></a>
@@ -31,7 +37,7 @@ $headAction = '<span class="tag tag-' . $stateTone . '" style="font-size:13px;pa
 <?php elseif ($missingTargets > 0): ?>
     <div class="banner banner-danger">
         <p><strong><?= $missingTargets ?> photo<?= $missingTargets === 1 ? ' is' : 's are' ?> not ready to scan yet.</strong>
-            Press “Prepare photos”. If it keeps failing, replace the image<?= $editable ? ' below' : '' ?>.</p>
+            Press “Prepare photos”. If it keeps failing, <?= $editable ? '<a href="' . $editUrl . '">replace the image</a>' : 'replace the image' ?>.</p>
         <form method="post" action="<?= url($base . '/content/' . $id . '/generate') ?>">
             <?= csrfField() ?>
             <button class="btn btn-sm" type="submit">Prepare photos</button>
@@ -59,29 +65,16 @@ $headAction = '<span class="tag tag-' . $stateTone . '" style="font-size:13px;pa
                     <dt>Credits</dt><dd><?= number_format((int)$frame['credits_charged']) ?></dd>
                     <dt>Opens</dt><dd><?= number_format($opens) ?> <span class="muted">(<?= number_format($visitors) ?> unique)</span></dd>
                     <dt>Editable</dt>
-                    <dd><?= $editable
-                        ? 'Until ' . e(date('d M Y, h:i A', strtotime($frame['editable_until'])))
-                        : 'No — the edit window has closed' ?></dd>
+                    <dd><?php if ($editable): ?>
+                            Until <?= e(date('d M Y, h:i A', strtotime($frame['editable_until']))) ?> ·
+                            <a href="<?= $editUrl ?>">Edit title, customer, photos &amp; videos</a>
+                        <?php else: ?>
+                            No — the edit window closed<?= !empty($frame['editable_until']) ? ' on ' . e(date('d M Y', strtotime($frame['editable_until']))) : '' ?>
+                        <?php endif; ?></dd>
                 </dl>
             </div>
             <form class="card-foot" method="post" action="<?= url($base . '/content/' . $id . '/update') ?>" style="display:block">
                 <?= csrfField() ?>
-                <?php if ($editable): ?>
-                    <div class="grid-2">
-                        <div class="field">
-                            <label for="t-title">Title</label>
-                            <input type="text" id="t-title" name="title" value="<?= e($frame['title']) ?>" maxlength="160">
-                        </div>
-                        <div class="field">
-                            <label for="t-customer">Customer</label>
-                            <select id="t-customer" name="customer_id">
-                                <?php foreach ($customers as $c): ?>
-                                    <option value="<?= (int)$c['id'] ?>" <?= (int)$c['id'] === (int)$frame['partner_customer_id'] ? 'selected' : '' ?>><?= e($c['name']) ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                    </div>
-                <?php endif; ?>
                 <div class="toolbar" style="justify-content:space-between">
                     <label class="check">
                         <input type="checkbox" name="is_active" value="1" <?= !empty($frame['is_active']) ? 'checked' : '' ?>>
@@ -113,40 +106,13 @@ $headAction = '<span class="tag tag-' . $stateTone . '" style="font-size:13px;pa
                                 <span class="tag tag-<?= $flagTone[$flag] ?? 'off' ?>"><?= e($flagWord[$flag] ?? $flag) ?> · <?= (int)$item['trackability_score'] ?>/100</span>
                             <?php endif; ?>
                             <?php if (!empty($item['verified_at'])): ?><span class="tag tag-live">Tested</span><?php endif; ?>
-                            <span class="muted">Plays up to <?= (int)($item['max_seconds'] ?? 0) ?>s</span>
+                            <span class="muted">Plays up to <?= (int)($item['max_seconds'] ?? 0) ?>s · <?= e(ArFrameItem::PLAYBACK_MODES[ArFrameItem::playbackMode($item['playback_mode'] ?? null)]) ?></span>
                             <?php if (!empty($item['video_path'])): ?>
                                 <a class="btn-link" href="<?= e(ArFrameService::fileUrl($item['video_path'])) ?>" target="_blank" rel="noopener">View video ↗</a>
                             <?php endif; ?>
                         </div>
                         <?php if ($flag && $flag !== 'good'): ?>
                             <p class="small muted" style="margin:6px 0 0"><?= e(ArTargetService::trackabilityAdvice($flag)) ?></p>
-                        <?php endif; ?>
-
-                        <?php if ($editable): ?>
-                            <form class="item-replace" method="post" action="<?= url($base . '/content/' . $id . '/items/' . $itemId . '/replace') ?>"
-                                  data-replace-form="<?= e(json_encode([
-                                      'uploadUrl' => url($base . '/upload'),
-                                      'maxPhotoBytes' => ArFrameService::MAX_PHOTO_BYTES,
-                                      'maxVideoBytes' => $maxVideoMb * 1024 * 1024,
-                                      'maxSeconds' => (int)($item['max_seconds'] ?? 0),
-                                  ])) ?>">
-                                <?= csrfField() ?>
-                                <span class="small muted">Replace:</span>
-                                <label class="upload-btn" data-upload="photo">
-                                    <span data-label>🖼 Image</span>
-                                    <input type="file" accept="image/jpeg,image/png">
-                                    <span class="bar"></span>
-                                </label>
-                                <label class="upload-btn" data-upload="video">
-                                    <span data-label>🎬 Video</span>
-                                    <input type="file" accept="video/mp4,video/quicktime,video/webm">
-                                    <span class="bar"></span>
-                                </label>
-                                <input type="hidden" name="photo_token" data-token="photo">
-                                <input type="hidden" name="video_token" data-token="video">
-                                <button class="btn btn-sm" type="submit" disabled>Save</button>
-                                <span class="upload-status" data-status="row" style="flex-basis:100%"></span>
-                            </form>
                         <?php endif; ?>
                     </div>
                 </div>

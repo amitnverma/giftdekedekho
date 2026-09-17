@@ -124,8 +124,8 @@ $action = $isEdit ? '/admin/ar-partners/' . (int)$partner['id'] . '/edit' : '/ad
             <label class="admin-checkbox"><input type="checkbox" name="allow_albums" value="1" <?= $partner['allow_albums'] ? 'checked' : '' ?>> Albums (several photos behind one QR)</label>
         </div>
         <div class="admin-form-row">
-            <label>Max pages per album <span class="admin-label-hint">1–<?= ArFrameItem::MAX_PER_FRAME ?></span>
-                <input type="number" name="max_album_pages" min="1" max="<?= ArFrameItem::MAX_PER_FRAME ?>" value="<?= (int)$partner['max_album_pages'] ?>">
+            <label>Max pages per album <span class="admin-label-hint">0 = unlimited. Every page is checked on each camera frame, so very large albums start more slowly on older phones</span>
+                <input type="number" name="max_album_pages" min="0" max="255" value="<?= (int)$partner['max_album_pages'] ?>">
             </label>
             <label>Max video size (MB) <span class="admin-label-hint">This server accepts up to <?= e((string)ini_get('upload_max_filesize')) ?> per file</span>
                 <input type="number" name="max_video_mb" min="1" max="500" value="<?= (int)$partner['max_video_mb'] ?>">
