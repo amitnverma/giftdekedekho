@@ -172,7 +172,7 @@ function gddNavActive(string $href, string $current): string {
         </a>
         <?php
           // Account menu: customer sign-in and account links on one side, the
-          // seller (AR partner) sign-in on the other, so neither is mistaken for the other.
+          // seller sign-in on the other, so neither is mistaken for the other.
           $__signedIn  = isLoggedIn();
           $__firstName = $__signedIn ? (explode(' ', trim((string)($_SESSION['user_name'] ?? '')))[0] ?: 'there') : '';
           $__partnerOn = !empty($_SESSION['partner_auth']['partner_id']);
@@ -221,7 +221,6 @@ function gddNavActive(string $href, string $current): string {
               </div>
               <div class="gdd-acct-col gdd-acct-seller">
                 <h4>Your Seller Account</h4>
-                <p>For our AR partner studios — create living-photo gifts for your own customers.</p>
                 <a href="<?= url('/partner/login') ?>" class="gdd-acct-seller-btn">
                   <span aria-hidden="true">🏪</span>
                   <?= $__partnerOn ? 'Open your partner studio' : 'Seller sign in' ?>
@@ -409,7 +408,7 @@ foreach ($__navCats as $__nc) { $__catLookup[$__nc['slug']] = $__nc; }
     <?php else: ?>
       <a href="<?= url('/account/login') ?>">👤 Customer sign in / Register</a>
     <?php endif; ?>
-    <a href="<?= url('/partner/login') ?>">🏪 <?= !empty($_SESSION['partner_auth']['partner_id']) ? 'Your partner studio' : 'Seller sign in (AR partners)' ?></a>
+    <a href="<?= url('/partner/login') ?>">🏪 <?= !empty($_SESSION['partner_auth']['partner_id']) ? 'Your partner studio' : 'Seller sign in' ?></a>
   </div>
 </div>
 <?php if ($flashSuccess = flash('success')): ?>

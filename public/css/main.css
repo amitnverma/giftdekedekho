@@ -1032,8 +1032,7 @@ table.data-table th, table.data-table td { padding: 12px 14px; border-bottom: 1p
 .gdd-acct-col > a:not(.gdd-acct-seller-btn) { display:block; width:100%; padding:6px 0; font-size:14px; color:var(--color-text); opacity:.85; }
 .gdd-acct-col > a:not(.gdd-acct-seller-btn):hover { color:var(--color-primary); opacity:1; text-decoration:underline; text-underline-offset:3px; }
 .gdd-acct-col .gdd-acct-signout { margin-top:6px; padding-top:10px; border-top:1px dashed var(--color-border); color:var(--color-muted); }
-.gdd-acct-seller p { margin:0 0 12px; font-size:13px; line-height:1.5; color:var(--color-muted); }
-.gdd-acct-seller-btn {
+.gdd-acct-seller-btn { margin-top:4px;
   display:inline-flex; align-items:center; gap:8px; padding:9px 14px; border-radius:10px;
   border:1.5px solid var(--color-text); color:var(--color-text); font-weight:700; font-size:13.5px; background:#fff;
   transition:background .15s ease, color .15s ease;
