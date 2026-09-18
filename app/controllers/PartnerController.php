@@ -224,8 +224,8 @@ class PartnerController extends BaseController
             if (empty($partner['is_active'])) {
                 $siteName = (string)siteSetting('site_name', SITE_NAME);
                 flash('error', match ($partner['signup_status'] ?? null) {
-                    'pending'  => 'Your seller account is waiting to be activated. We activate it and add your credits once your payment is received — please contact ' . $siteName . ' if you have already paid.',
-                    'rejected' => 'Your seller registration was not approved. Please contact ' . $siteName . '.',
+                    'pending'  => 'Your DEx partner account is waiting to be activated. We activate it and add your credits once your payment is received — please contact ' . $siteName . ' if you have already paid.',
+                    'rejected' => 'Your DEx partner registration was not approved. Please contact ' . $siteName . '.',
                     default    => 'This account is paused. Please contact ' . $siteName . '.',
                 });
                 $this->go('/login');
@@ -445,7 +445,7 @@ class PartnerController extends BaseController
             if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 $errors[] = 'Enter a valid email address — you will sign in with it.';
             } elseif ($users->findByEmail($email)) {
-                $errors[] = 'That email already has a seller account. Sign in, or use "Forgot your password?".';
+                $errors[] = 'That email already has a DEx partner account. Sign in, or use "Forgot your password?".';
             }
             if (strlen($password) < PASSWORD_MIN_LENGTH) {
                 $errors[] = 'Choose a password of at least ' . PASSWORD_MIN_LENGTH . ' characters.';
@@ -615,7 +615,7 @@ class PartnerController extends BaseController
         $color = ArPartnerService::safeColor($this->partner['brand_color'] ?? null);
         return '<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#1f2937;max-width:520px">'
             . '<p>Hi ' . e((string)$user['name']) . ',</p>'
-            . '<p>Someone asked to reset the password for your <strong>' . e((string)$this->partner['name']) . '</strong> DEx studio login ('
+            . '<p>Someone asked to reset the password for your <strong>' . e((string)$this->partner['name']) . '</strong> DEx Studio login ('
             . e((string)$user['email']) . ').</p>'
             . '<p><a href="' . e($link) . '" style="display:inline-block;background:' . $color . ';color:#fff;text-decoration:none;padding:10px 18px;border-radius:6px;font-weight:bold">Choose a new password</a></p>'
             . '<p style="font-size:13px;color:#6b7280">The link works for ' . intdiv(ArPartnerService::RESET_LINK_SECONDS, 60)

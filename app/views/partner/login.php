@@ -1,14 +1,14 @@
 <?php
 /**
  * Sign-in page for one partner's portal, in that partner's branding — or, with
- * no $partner, the shared seller sign-in linked from the storefront header.
+ * no $partner, the shared DEx Studio sign-in linked from the storefront header.
  */
 $hub = empty($partner);
 $base = $hub ? '/partner' : '/partner/' . $partner['slug'];
-$heading = $hub ? 'Seller sign in' : $partner['name'];
+$heading = $hub ? 'Partner sign in' : $partner['name'];
 $subheading = $hub
-    ? 'Sign in to your partner studio. We will take you straight to your own portal.'
-    : ($partner['tagline'] ?: 'DEx studio — sign in to continue');
+    ? 'Sign in to your DEx Studio. We will take you straight to your own portal.'
+    : ($partner['tagline'] ?: 'DEx Studio — sign in to continue');
 $initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)($partner['name'] ?? $brand['name'])), 0, 2)) ?: 'DX';
 ?>
 <!DOCTYPE html>
@@ -17,7 +17,7 @@ $initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)(
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex, nofollow">
-<title>Sign in · <?= e($hub ? $brand['name'] . ' seller' : $partner['name']) ?></title>
+<title>Sign in · <?= e($hub ? 'DEx Studio' : $partner['name']) ?></title>
 <?php if (!empty($brand['logo'])): ?><link rel="icon" href="<?= e($brand['logo']) ?>"><?php endif; ?>
 <link rel="stylesheet" href="<?= asset('public/css/partner.css') ?>">
 <style>:root { --brand: <?= e($brand['color']) ?>; }</style>
@@ -31,6 +31,7 @@ $initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)(
             <?php else: ?>
                 <span class="p-logo-mark"><?= e($initials) ?></span>
             <?php endif; ?>
+            <?php if ($hub): ?><span class="dex-badge"><b>DEx</b> Studio · Digital Experience</span><?php endif; ?>
             <h1><?= e($heading) ?></h1>
             <p><?= e($subheading) ?></p>
         </div>
@@ -66,7 +67,7 @@ $initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)(
         </p>
         <?php if ($hub): ?>
             <div class="login-switch">
-                <p>New seller? <a href="<?= url('/partner/register') ?>">Register as a partner</a></p>
+                <p>New to DEx? <a href="<?= url('/partner/register') ?>">Become a DEx partner</a></p>
                 <p>Shopping for a gift? <a href="<?= url('/account/login') ?>">Customer sign in</a></p>
                 <p><a href="<?= url('/') ?>">← Back to <?= e($brand['name']) ?></a></p>
             </div>

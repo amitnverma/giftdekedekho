@@ -550,14 +550,14 @@ class AdminArPartnerController extends BaseController
         $color = ArPartnerService::safeColor($partner['brand_color'] ?? null);
         $html = '<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#1f2937;max-width:520px">'
             . '<p>Hi ' . e((string)$owner['name']) . ',</p>'
-            . '<p>Your seller account for <strong>' . e((string)$partner['name']) . '</strong> is now active'
+            . '<p>Your DEx partner account for <strong>' . e((string)$partner['name']) . '</strong> is now active'
             . ($credits > 0 ? ', and <strong>' . number_format($credits) . ' credits</strong> have been added' : '') . '.</p>'
-            . '<p><a href="' . e($link) . '" style="display:inline-block;background:' . $color . ';color:#fff;text-decoration:none;padding:10px 18px;border-radius:6px;font-weight:bold">Sign in to your studio</a></p>'
+            . '<p><a href="' . e($link) . '" style="display:inline-block;background:' . $color . ';color:#fff;text-decoration:none;padding:10px 18px;border-radius:6px;font-weight:bold">Sign in to your DEx Studio</a></p>'
             . '<p style="font-size:13px;color:#6b7280">Sign in with ' . e((string)$owner['email']) . ' and the password you chose when you registered.</p>'
             . '<p style="font-size:12px;color:#9ca3af;word-break:break-all">' . e($link) . '</p>'
             . '</div>';
         return (new NotificationService())->sendEmail((string)$owner['email'], (string)$owner['name'],
-            'Your ' . $siteName . ' seller account is active', $html);
+            'Your ' . $siteName . ' DEx partner account is active', $html);
     }
 
     public function cancelRequest(int $id, int $requestId): void

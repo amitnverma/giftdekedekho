@@ -1,6 +1,6 @@
 <?php
 /**
- * "Become a seller" — /partner/register, in the shop's own branding.
+ * "Become a DEx partner" — /partner/register, in the shop's own branding.
  *
  * Three states: the form; $done, the "what happens next" page shown once after
  * registering; and $closed, until the registration migration has been run.
@@ -19,7 +19,7 @@ $sitePhone = trim((string)siteSetting('site_phone', ''));
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex, nofollow">
-<title>Become a seller · <?= e($siteName) ?></title>
+<title>Become a DEx partner · <?= e($siteName) ?></title>
 <?php if (!empty($brand['logo'])): ?><link rel="icon" href="<?= e($brand['logo']) ?>"><?php endif; ?>
 <link rel="stylesheet" href="<?= asset('public/css/partner.css') ?>">
 <style>:root { --brand: <?= e($brand['color']) ?>; }</style>
@@ -33,17 +33,18 @@ $sitePhone = trim((string)siteSetting('site_phone', ''));
             <?php else: ?>
                 <span class="p-logo-mark"><?= e($initials) ?></span>
             <?php endif; ?>
-            <h1><?= $done ? 'Registration received' : 'Become a seller' ?></h1>
+            <span class="dex-badge"><b>DEx</b> Studio · Digital Experience</span>
+            <h1><?= $done ? 'Registration received' : 'Become a DEx partner' ?></h1>
             <p><?= $done
                 ? 'Thank you, ' . e($done['business']) . '. One step left.'
-                : 'Sell Living Photo DEx to your own customers, from your own branded studio page.' ?></p>
+                : 'Sell Living Photo DEx to your own customers, from your own branded DEx Studio.' ?></p>
         </div>
 
         <?php if ($closed): ?>
-            <div class="banner banner-amber"><p>Online registration is not open yet. Please contact <?= e($siteName) ?> to become a seller.</p></div>
+            <div class="banner banner-amber"><p>Online registration is not open yet. Please contact <?= e($siteName) ?> to become a DEx partner.</p></div>
             <?php if ($support): ?>
                 <a class="btn" style="width:100%" target="_blank" rel="noopener"
-                   href="https://wa.me/<?= e($support) ?>?text=<?= rawurlencode('Hi, I would like to become a seller on ' . $siteName . '.') ?>">Message us on WhatsApp</a>
+                   href="https://wa.me/<?= e($support) ?>?text=<?= rawurlencode('Hi, I would like to become a DEx partner on ' . $siteName . '.') ?>">Message us on WhatsApp</a>
             <?php endif; ?>
 
         <?php elseif ($done): ?>
@@ -57,7 +58,7 @@ $sitePhone = trim((string)siteSetting('site_phone', ''));
             </ol>
             <?php if ($support): ?>
                 <a class="btn" style="width:100%" target="_blank" rel="noopener"
-                   href="https://wa.me/<?= e($support) ?>?text=<?= rawurlencode('Hi, I have registered ' . $done['business'] . ' (' . $done['email'] . ') as a seller and chose the ' . GDD_CURRENCY_SYMBOL . number_format((int)$done['price']) . ' pack for ' . number_format((int)$done['credits']) . ' credits. How should I pay?') ?>">
+                   href="https://wa.me/<?= e($support) ?>?text=<?= rawurlencode('Hi, I have registered ' . $done['business'] . ' (' . $done['email'] . ') as a DEx partner and chose the ' . GDD_CURRENCY_SYMBOL . number_format((int)$done['price']) . ' pack for ' . number_format((int)$done['credits']) . ' credits. How should I pay?') ?>">
                     Message us on WhatsApp to pay
                 </a>
             <?php endif; ?>
@@ -70,7 +71,7 @@ $sitePhone = trim((string)siteSetting('site_phone', ''));
                 </p>
             <?php endif; ?>
             <div class="login-switch">
-                <p><a href="<?= url('/partner/login') ?>">Seller sign in</a></p>
+                <p><a href="<?= url('/partner/login') ?>">Sign in to DEx Studio</a></p>
                 <p><a href="<?= url('/') ?>">← Back to <?= e($siteName) ?></a></p>
             </div>
 
@@ -134,10 +135,10 @@ $sitePhone = trim((string)siteSetting('site_phone', ''));
                 </fieldset>
 
                 <?= CaptchaService::field('partner-register') ?>
-                <button class="btn" type="submit" style="width:100%">Register as a seller</button>
+                <button class="btn" type="submit" style="width:100%">Register as a DEx partner</button>
             </form>
             <div class="login-switch">
-                <p>Already a seller? <a href="<?= url('/partner/login') ?>">Sign in</a></p>
+                <p>Already a DEx partner? <a href="<?= url('/partner/login') ?>">Sign in</a></p>
                 <p><a href="<?= url('/') ?>">← Back to <?= e($siteName) ?></a></p>
             </div>
         <?php endif; ?>

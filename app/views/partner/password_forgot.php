@@ -1,9 +1,9 @@
 <?php
-/** "Forgot password" for one partner's portal, or (no $partner) the shared seller sign-in: emails a reset link. */
+/** "Forgot password" for one partner's portal, or (no $partner) the shared DEx Studio sign-in: emails a reset link. */
 $hub = empty($partner);
 $base = $hub ? '/partner' : '/partner/' . $partner['slug'];
-$heading = $hub ? 'Seller sign in' : $partner['name'];
-$subheading = $hub ? 'Reset the password for your partner studio' : ($partner['tagline'] ?: 'DEx studio — sign in to continue');
+$heading = $hub ? 'Reset your password' : $partner['name'];
+$subheading = $hub ? 'For your DEx Studio partner login' : ($partner['tagline'] ?: 'DEx Studio — sign in to continue');
 $initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)($partner['name'] ?? $brand['name'])), 0, 2)) ?: 'DX';
 ?>
 <!DOCTYPE html>
@@ -12,7 +12,7 @@ $initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)(
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex, nofollow">
-<title>Forgot password · <?= e($hub ? $brand['name'] . ' seller' : $partner['name']) ?></title>
+<title>Forgot password · <?= e($hub ? 'DEx Studio' : $partner['name']) ?></title>
 <?php if (!empty($brand['logo'])): ?><link rel="icon" href="<?= e($brand['logo']) ?>"><?php endif; ?>
 <link rel="stylesheet" href="<?= asset('public/css/partner.css') ?>">
 <style>:root { --brand: <?= e($brand['color']) ?>; }</style>
@@ -26,6 +26,7 @@ $initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)(
             <?php else: ?>
                 <span class="p-logo-mark"><?= e($initials) ?></span>
             <?php endif; ?>
+            <?php if ($hub): ?><span class="dex-badge"><b>DEx</b> Studio · Digital Experience</span><?php endif; ?>
             <h1><?= e($heading) ?></h1>
             <p><?= e($subheading) ?></p>
         </div>
