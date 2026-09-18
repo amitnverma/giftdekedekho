@@ -45,6 +45,33 @@ class PartnerController extends BaseController
         $this->frames = new ArFrameService();
     }
 
+    /**
+     * The one seller sign-in for every partner: /partner, /partner/login and
+     * /partner/forgot-password, linked from the storefront header ("Your seller
+     * account"). A login belongs to exactly one partner (emails are unique across
+     * them), so the email alone says whose portal to open once the password
+     * checks out. $this->partner stays empty until then, which makes go() and
+     * portalUrl() point back here. The branded /partner/{slug}/login still works.
+     */
+    public function hub(string $page): void
+    {
+        if (!$this->partners->tableExists()) {
+            $this->notFound();
+            return;
+        }
+        if ($page === 'forgot-password') {
+            $this->forgotPassword();
+            return;
+        }
+        // Already signed in to a portal: straight there, no second sign-in.
+        $auth = $_SESSION['partner_auth'] ?? null;
+        if (is_array($auth) && time() - (int)($auth['seen'] ?? 0) < self::SESSION_IDLE_SECONDS
+            && ($partner = $this->partners->find((int)($auth['partner_id'] ?? 0)))) {
+            redirect('/partner/' . $partner['slug']);
+        }
+        $this->login();
+    }
+
     public function dispatch(string $slug, array $rest, string $method): void
     {
         if (!preg_match('/^[a-z0-9][a-z0-9-]{1,59}$/', $slug) || !$this->partners->tableExists()) {
@@ -179,19 +206,22 @@ class PartnerController extends BaseController
 
             $users = new ArPartnerUser();
             $user = $email === '' ? null : $users->findByEmail($email);
+            // On the shared seller sign-in, the login itself says which partner.
+            $partner = $this->partner ?: ($user ? $this->partners->find((int)$user['partner_id']) : null);
             // One message for every failure, so the form never confirms which
             // emails have accounts, or which partner they belong to.
-            if (!$user || (int)$user['partner_id'] !== (int)$this->partner['id']
+            if (!$user || !$partner || (int)$user['partner_id'] !== (int)$partner['id']
                 || empty($user['is_active']) || !password_verify($password, $user['password_hash'])) {
                 $this->recordLoginAttempt($identifier);
                 $this->setOld(['email' => $email]);
                 flash('error', 'Incorrect email or password.');
                 $this->go('/login');
             }
-            if (empty($this->partner['is_active'])) {
+            if (empty($partner['is_active'])) {
                 flash('error', 'This account is paused. Please contact ' . siteSetting('site_name', SITE_NAME) . '.');
                 $this->go('/login');
             }
+            $this->partner = $partner;
 
             session_regenerate_id(true);
             $_SESSION['partner_auth'] = [
@@ -223,7 +253,7 @@ class PartnerController extends BaseController
     private function signedIn(): bool
     {
         $auth = $_SESSION['partner_auth'] ?? null;
-        return is_array($auth)
+        return is_array($auth) && $this->partner
             && (int)($auth['partner_id'] ?? 0) === (int)$this->partner['id']
             && time() - (int)($auth['seen'] ?? 0) < self::SESSION_IDLE_SECONDS;
     }
@@ -308,14 +338,20 @@ class PartnerController extends BaseController
                 . intdiv(ArPartnerService::RESET_LINK_SECONDS, 60) . ' minutes. No email? Ask '
                 . (string)siteSetting('site_name', SITE_NAME) . ' to reset your password.');
 
+            // Where the reply goes is fixed before the lookup: on the shared
+            // seller page, bouncing to the partner's own page would give it away.
+            $back = $this->portalPath('/login');
             $user = (new ArPartnerUser())->findByEmail($email);
-            if (!$user || (int)$user['partner_id'] !== (int)$this->partner['id'] || empty($user['is_active'])) {
-                $this->go('/login');
+            if ($user && !$this->partner) {
+                $this->partner = $this->partners->find((int)$user['partner_id']) ?: [];
+            }
+            if (!$user || !$this->partner || (int)$user['partner_id'] !== (int)$this->partner['id'] || empty($user['is_active'])) {
+                redirect($back);
             }
 
             // Answer first, then send: an SMTP round trip takes seconds, and a
             // reply that was only slow for real accounts would give them away.
-            header('Location: ' . $this->portalUrl('/login'));
+            header('Location: ' . url($back));
             session_write_close();
             if (function_exists('fastcgi_finish_request')) {
                 fastcgi_finish_request();
@@ -1064,7 +1100,18 @@ class PartnerController extends BaseController
 
     private function brand(): array
     {
-        return ArPartnerService::brand($this->partner, (string)siteSetting('site_name', SITE_NAME));
+        $siteName = (string)siteSetting('site_name', SITE_NAME);
+        if (!$this->partner) {
+            // The shared seller sign-in wears the shop's own colours and logo.
+            return [
+                'name'      => $siteName,
+                'logo'      => asset((string)siteSetting('logo_path', '/images/GDKD logo.png')),
+                'color'     => ArPartnerService::safeColor((string)siteSetting('primary_color', '')),
+                'website'   => null,
+                'poweredBy' => null,
+            ];
+        }
+        return ArPartnerService::brand($this->partner, $siteName);
     }
 
     private function kindAllowed(string $kind): bool
@@ -1150,14 +1197,20 @@ class PartnerController extends BaseController
         return $granted;
     }
 
+    /** A path in this partner's portal, or on the shared seller sign-in when no partner is known yet. */
+    private function portalPath(string $path): string
+    {
+        return '/partner' . ($this->partner ? '/' . $this->partner['slug'] : '') . ($path === '/' ? '' : $path);
+    }
+
     private function portalUrl(string $path): string
     {
-        return url('/partner/' . $this->partner['slug'] . $path);
+        return url($this->portalPath($path));
     }
 
     private function go(string $path): void
     {
-        redirect('/partner/' . $this->partner['slug'] . ($path === '/' ? '' : $path));
+        redirect($this->portalPath($path));
     }
 
     private function wantsJson(): bool

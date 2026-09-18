@@ -76,6 +76,14 @@ try {
         exit;
     }
 
+    // Shared seller sign-in — /partner, /partner/login, /partner/forgot-password —
+    // which opens whichever partner portal the login belongs to.
+    if (($segments[0] ?? '') === 'partner' && count($segments) <= 2
+        && in_array($segments[1] ?? 'login', ArPartner::RESERVED_SLUGS, true)) {
+        (new PartnerController())->hub($segments[1] ?? 'login');
+        exit;
+    }
+
     // B2B AR partner portals — /partner/{slug}/...
     if (($segments[0] ?? '') === 'partner' && isset($segments[1])) {
         (new PartnerController())->dispatch($segments[1], array_slice($segments, 2), $method);

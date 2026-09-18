@@ -99,6 +99,34 @@
     });
   }
 
+  // ---- Header account menu: opens on hover (mouse) or click/tap, closes on Esc or outside click ----
+  document.querySelectorAll('[data-acct-menu]').forEach(function (menu) {
+    var trigger = menu.querySelector('.gdd-acct-trigger');
+    var closeTimer = null;
+    function setOpen(open) {
+      clearTimeout(closeTimer);
+      menu.classList.toggle('open', open);
+      trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+    // A mouse has already opened it by hovering, so its click must not close it again.
+    var lastPointer = '';
+    trigger.addEventListener('pointerdown', function (e) { lastPointer = e.pointerType; });
+    trigger.addEventListener('click', function () {
+      setOpen(lastPointer === 'mouse' ? true : !menu.classList.contains('open'));
+      lastPointer = '';
+    });
+    menu.addEventListener('pointerenter', function (e) { if (e.pointerType === 'mouse') setOpen(true); });
+    menu.addEventListener('pointerleave', function (e) {
+      if (e.pointerType !== 'mouse') return;
+      closeTimer = setTimeout(function () { setOpen(false); }, 180);
+    });
+    document.addEventListener('click', function (e) { if (!menu.contains(e.target)) setOpen(false); });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && menu.classList.contains('open')) { setOpen(false); trigger.focus(); }
+    });
+    menu.addEventListener('focusout', function (e) { if (!menu.contains(e.relatedTarget)) setOpen(false); });
+  });
+
   // ---- Generic AJAX helper ----
   window.gddFetch = function (url, options) {
     options = options || {};

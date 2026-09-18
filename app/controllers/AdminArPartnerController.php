@@ -129,6 +129,8 @@ class AdminArPartnerController extends BaseController
         }
         if (!preg_match('/^[a-z0-9][a-z0-9-]{1,59}$/', $slug)) {
             $errors[] = 'The page address needs at least 2 letters or numbers.';
+        } elseif (in_array($slug, ArPartner::RESERVED_SLUGS, true)) {
+            $errors[] = 'The page address "' . $slug . '" is reserved. Please choose another.';
         } elseif ($this->partners->slugTaken($slug, $id)) {
             $errors[] = 'Another partner already uses the page address "' . $slug . '".';
         }

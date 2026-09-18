@@ -273,6 +273,10 @@ table.p-table { width: 100%; border-collapse: collapse; min-width: 640px; }
 .login-brand .p-logo-mark { width: 56px; height: 56px; font-size: 18px; margin: 0 auto; border-radius: 12px; }
 .login-brand h1 { font-size: 20px; margin: 12px 0 2px; }
 .login-brand p { margin: 0; color: var(--ink-3); font-size: 14px; }
+.login-switch { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); text-align: center; font-size: 13.5px; color: var(--ink-3); }
+.login-switch p { margin: 0 0 6px; }
+.login-switch p:last-child { margin-bottom: 0; }
+.login-switch a { color: var(--brand); font-weight: 600; }
 
 @media (max-width: 1000px) {
   .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }

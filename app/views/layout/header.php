@@ -170,14 +170,67 @@ function gddNavActive(string $href, string $current): string {
         <a href="<?= url('/cart') ?>" class="gdd-icon-btn" title="Cart">
           🛍 <?php if ($__cartCount > 0): ?><span class="badge-count"><?= (int)$__cartCount ?></span><?php endif; ?>
         </a>
-        <?php if (isLoggedIn()): ?>
-          <a href="<?= url('/account') ?>" class="gdd-account-btn" title="My Account">
-            <span class="av"><?= e(strtoupper(substr((string)($_SESSION['user_name'] ?? 'A'), 0, 1))) ?></span>
-            <span>Account</span>
-          </a>
-        <?php else: ?>
-          <a href="<?= url('/account/login') ?>" class="btn btn-primary btn-sm">Login</a>
-        <?php endif; ?>
+        <?php
+          // Account menu: customer sign-in and account links on one side, the
+          // seller (AR partner) sign-in on the other, so neither is mistaken for the other.
+          $__signedIn  = isLoggedIn();
+          $__firstName = $__signedIn ? (explode(' ', trim((string)($_SESSION['user_name'] ?? '')))[0] ?: 'there') : '';
+          $__partnerOn = !empty($_SESSION['partner_auth']['partner_id']);
+        ?>
+        <div class="gdd-acct" data-acct-menu>
+          <button type="button" class="gdd-acct-trigger" aria-expanded="false" aria-controls="gddAcctPanel">
+            <?php if ($__signedIn): ?>
+              <span class="gdd-acct-av"><?= e(mb_strtoupper(mb_substr($__firstName, 0, 1))) ?></span>
+            <?php else: ?>
+              <span class="gdd-acct-av is-guest" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2"/><path d="M4 20c1.5-3.5 4.5-5 8-5s6.5 1.5 8 5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>
+            <?php endif; ?>
+            <span class="gdd-acct-text">
+              <small><?= $__signedIn ? 'Hello, ' . e($__firstName) : 'Hello, sign in' ?></small>
+              <strong>Account</strong>
+            </span>
+            <svg class="gdd-acct-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+
+          <div class="gdd-acct-panel" id="gddAcctPanel">
+            <?php if ($__signedIn): ?>
+              <div class="gdd-acct-head is-signed-in">
+                <span class="gdd-acct-av lg"><?= e(mb_strtoupper(mb_substr($__firstName, 0, 1))) ?></span>
+                <div>
+                  <strong><?= e((string)($_SESSION['user_name'] ?? 'Your account')) ?></strong>
+                  <span>Signed in as a customer</span>
+                </div>
+              </div>
+            <?php else: ?>
+              <div class="gdd-acct-head">
+                <a href="<?= url('/account/login') ?>" class="gdd-acct-signin">Sign in</a>
+                <p>New customer? <a href="<?= url('/account/register') ?>">Start here.</a></p>
+              </div>
+            <?php endif; ?>
+
+            <div class="gdd-acct-cols">
+              <div class="gdd-acct-col">
+                <h4>Your Account</h4>
+                <a href="<?= url('/account') ?>">Your Account</a>
+                <a href="<?= url('/account/orders') ?>">Your Orders</a>
+                <a href="<?= url('/account/wishlist') ?>">Your Wishlist</a>
+                <a href="<?= url('/account/addresses') ?>">Your Addresses</a>
+                <a href="<?= url('/account/profile') ?>">Profile &amp; Password</a>
+                <?php if ($__signedIn): ?>
+                  <a href="<?= url('/account/logout') ?>" class="gdd-acct-signout">Sign out</a>
+                <?php endif; ?>
+              </div>
+              <div class="gdd-acct-col gdd-acct-seller">
+                <h4>Your Seller Account</h4>
+                <p>For our AR partner studios — create living-photo gifts for your own customers.</p>
+                <a href="<?= url('/partner/login') ?>" class="gdd-acct-seller-btn">
+                  <span aria-hidden="true">🏪</span>
+                  <?= $__partnerOn ? 'Open your partner studio' : 'Seller sign in' ?>
+                </a>
+                <small>Uses your partner login, not your shopping account.</small>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -352,9 +405,11 @@ foreach ($__navCats as $__nc) { $__catLookup[$__nc['slug']] = $__nc; }
     <a href="<?= url('/cart') ?>">🛍 Cart<?php if ($__cartCount > 0): ?> (<?= (int)$__cartCount ?>)<?php endif; ?></a>
     <?php if (isLoggedIn()): ?>
       <a href="<?= url('/account') ?>">👤 My Account</a>
+      <a href="<?= url('/account/orders') ?>">📦 Your Orders</a>
     <?php else: ?>
-      <a href="<?= url('/account/login') ?>">🔑 Login / Register</a>
+      <a href="<?= url('/account/login') ?>">👤 Customer sign in / Register</a>
     <?php endif; ?>
+    <a href="<?= url('/partner/login') ?>">🏪 <?= !empty($_SESSION['partner_auth']['partner_id']) ? 'Your partner studio' : 'Seller sign in (AR partners)' ?></a>
   </div>
 </div>
 <?php if ($flashSuccess = flash('success')): ?>

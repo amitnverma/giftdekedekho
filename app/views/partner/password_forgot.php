@@ -1,6 +1,10 @@
 <?php
-/** "Forgot password" for one partner's portal: emails a reset link. */
-$initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)$partner['name']), 0, 2)) ?: 'AR';
+/** "Forgot password" for one partner's portal, or (no $partner) the shared seller sign-in: emails a reset link. */
+$hub = empty($partner);
+$base = $hub ? '/partner' : '/partner/' . $partner['slug'];
+$heading = $hub ? 'Seller sign in' : $partner['name'];
+$subheading = $hub ? 'Reset the password for your partner studio' : ($partner['tagline'] ?: 'AR studio — sign in to continue');
+$initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)($partner['name'] ?? $brand['name'])), 0, 2)) ?: 'AR';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -8,7 +12,7 @@ $initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)$
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex, nofollow">
-<title>Forgot password · <?= e($partner['name']) ?></title>
+<title>Forgot password · <?= e($hub ? $brand['name'] . ' seller' : $partner['name']) ?></title>
 <?php if (!empty($brand['logo'])): ?><link rel="icon" href="<?= e($brand['logo']) ?>"><?php endif; ?>
 <link rel="stylesheet" href="<?= asset('public/css/partner.css') ?>">
 <style>:root { --brand: <?= e($brand['color']) ?>; }</style>
@@ -18,12 +22,12 @@ $initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)$
     <div class="login-card">
         <div class="login-brand">
             <?php if (!empty($brand['logo'])): ?>
-                <img src="<?= e($brand['logo']) ?>" alt="<?= e($partner['name']) ?>">
+                <img src="<?= e($brand['logo']) ?>" alt="<?= e($brand['name']) ?>">
             <?php else: ?>
                 <span class="p-logo-mark"><?= e($initials) ?></span>
             <?php endif; ?>
-            <h1><?= e($partner['name']) ?></h1>
-            <p><?= e($partner['tagline'] ?: 'AR studio — sign in to continue') ?></p>
+            <h1><?= e($heading) ?></h1>
+            <p><?= e($subheading) ?></p>
         </div>
 
         <?php if ($msg = flash('error')): ?>
@@ -34,7 +38,7 @@ $initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)$
         <?php endif; ?>
 
         <p class="hint" style="margin-top:0">Enter the email you sign in with, and we will send you a link to choose a new password.</p>
-        <form method="post" action="<?= url('/partner/' . $partner['slug'] . '/forgot-password') ?>">
+        <form method="post" action="<?= url($base . '/forgot-password') ?>">
             <?= csrfField() ?>
             <div class="field">
                 <label for="email">Email</label>
@@ -44,7 +48,7 @@ $initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)$
             <button class="btn" type="submit" style="width:100%">Email me a reset link</button>
         </form>
         <p class="hint" style="text-align:center;margin-top:16px">
-            <a href="<?= url('/partner/' . $partner['slug'] . '/login') ?>">← Back to sign in</a>
+            <a href="<?= url($base . '/login') ?>">← Back to sign in</a>
         </p>
     </div>
 </main>

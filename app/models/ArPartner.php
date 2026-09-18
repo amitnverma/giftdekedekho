@@ -60,6 +60,9 @@ class ArPartner extends BaseModel
         return $stmt->fetch() ?: null;
     }
 
+    /** Addresses under /partner that belong to the shared seller sign-in, not to a partner. */
+    public const RESERVED_SLUGS = ['login', 'forgot-password'];
+
     public function slugTaken(string $slug, int $exceptId = 0): bool
     {
         $stmt = $this->db->prepare('SELECT 1 FROM ar_partners WHERE slug = ? AND id <> ? LIMIT 1');
