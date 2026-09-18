@@ -12,7 +12,7 @@
         <div class="table-scroll">
             <table class="p-table">
                 <thead>
-                    <tr><th>Name</th><th>Phone</th><th>Email</th><th>Bill / order no.</th><th class="num">AR items</th><th>Added</th></tr>
+                    <tr><th>Name</th><th>Phone</th><th>Email</th><th>Bill / order no.</th><th class="num">DEx items</th><th>Added</th></tr>
                 </thead>
                 <tbody>
                     <?php foreach ($customers as $c): ?>
@@ -31,7 +31,7 @@
     <?php else: ?>
         <div class="empty">
             <h3><?= $search !== '' ? 'No customer matches that search' : 'No customers yet' ?></h3>
-            <p>Add the people you make AR gifts for, then create singles and albums for them.</p>
+            <p>Add the people you make DEx gifts for, then create singles and albums for them.</p>
         </div>
     <?php endif; ?>
 </div>
@@ -47,7 +47,7 @@
             </div>
             <div class="field">
                 <label for="c-phone">Mobile</label>
-                <input type="tel" id="c-phone" name="phone" value="<?= old('phone') ?>" maxlength="20" placeholder="For sending the AR link on WhatsApp">
+                <input type="tel" id="c-phone" name="phone" value="<?= old('phone') ?>" maxlength="20" placeholder="For sending the DEx link on WhatsApp">
             </div>
             <div class="field">
                 <label for="c-email">Email</label>

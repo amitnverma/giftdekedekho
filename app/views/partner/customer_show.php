@@ -13,7 +13,7 @@ $headAction = $actions ? '<div class="toolbar">' . implode('', $actions) . '</di
 <p style="margin:-8px 0 16px"><a class="btn-link" href="<?= url($base . '/customers') ?>">← All customers</a></p>
 
 <div class="card">
-    <div class="card-head"><h2>AR content for <?= e($customer['name']) ?></h2></div>
+    <div class="card-head"><h2>DEx content for <?= e($customer['name']) ?></h2></div>
     <?php if ($content): ?>
         <?php $rows = $content; require viewPath('partner/_content_table.php'); ?>
     <?php else: ?>

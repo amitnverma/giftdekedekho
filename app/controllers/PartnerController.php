@@ -615,7 +615,7 @@ class PartnerController extends BaseController
         $color = ArPartnerService::safeColor($this->partner['brand_color'] ?? null);
         return '<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#1f2937;max-width:520px">'
             . '<p>Hi ' . e((string)$user['name']) . ',</p>'
-            . '<p>Someone asked to reset the password for your <strong>' . e((string)$this->partner['name']) . '</strong> AR studio login ('
+            . '<p>Someone asked to reset the password for your <strong>' . e((string)$this->partner['name']) . '</strong> DEx studio login ('
             . e((string)$user['email']) . ').</p>'
             . '<p><a href="' . e($link) . '" style="display:inline-block;background:' . $color . ';color:#fff;text-decoration:none;padding:10px 18px;border-radius:6px;font-weight:bold">Choose a new password</a></p>'
             . '<p style="font-size:13px;color:#6b7280">The link works for ' . intdiv(ArPartnerService::RESET_LINK_SECONDS, 60)
@@ -738,7 +738,7 @@ class PartnerController extends BaseController
             $this->go('/');
         }
 
-        $this->page('content_create', $kind === 'album' ? 'New Album' : 'New AR Content', $kind === 'album' ? 'albums' : 'singles', [
+        $this->page('content_create', $kind === 'album' ? 'New Album' : 'New DEx Content', $kind === 'album' ? 'albums' : 'singles', [
             'kind'           => $kind,
             'customers'      => (new ArPartnerCustomer())->optionsForPartner((int)$this->partner['id']),
             'preselect'      => (int)$this->input('customer', 0),
@@ -792,7 +792,7 @@ class PartnerController extends BaseController
         $pages = [];
         $tokens = [];
         foreach ($rows as $n => $row) {
-            $label = $kind === 'album' ? 'AR content ' . ($n + 1) . ': ' : '';
+            $label = $kind === 'album' ? 'DEx content ' . ($n + 1) . ': ' : '';
             $photo = $this->uploadFromToken((string)($row['photo_token'] ?? ''), 'photo');
             $video = $this->uploadFromToken((string)($row['video_token'] ?? ''), 'video');
             if ($photo === null) {
@@ -1314,7 +1314,7 @@ class PartnerController extends BaseController
             ));
             return;
         }
-        flash('success', $lead . ' Your AR is live — print the QR sticker, or send the link to your customer.');
+        flash('success', $lead . ' Your DEx is live — print the QR sticker, or send the link to your customer.');
     }
 
     /**

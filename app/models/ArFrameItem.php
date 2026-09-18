@@ -21,7 +21,7 @@ class ArFrameItem extends BaseModel
     /** How the video appears once the photo is found. */
     public const PLAYBACK_MODES = [
         'fullscreen' => 'Full screen',
-        'overlay'    => 'On the photo (AR overlay)',
+        'overlay'    => 'On the photo (DEx overlay)',
     ];
 
     public static function playbackMode(?string $mode): string

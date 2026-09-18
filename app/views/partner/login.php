@@ -8,8 +8,8 @@ $base = $hub ? '/partner' : '/partner/' . $partner['slug'];
 $heading = $hub ? 'Seller sign in' : $partner['name'];
 $subheading = $hub
     ? 'Sign in to your partner studio. We will take you straight to your own portal.'
-    : ($partner['tagline'] ?: 'AR studio — sign in to continue');
-$initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)($partner['name'] ?? $brand['name'])), 0, 2)) ?: 'AR';
+    : ($partner['tagline'] ?: 'DEx studio — sign in to continue');
+$initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)($partner['name'] ?? $brand['name'])), 0, 2)) ?: 'DX';
 ?>
 <!DOCTYPE html>
 <html lang="en">

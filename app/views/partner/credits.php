@@ -8,7 +8,7 @@ $pending = array_values(array_filter($requests, fn($r) => $r['status'] === 'pend
 $supportName = $brand['poweredBy'] ?? 'us';
 if ($support) {
     $headAction = '<a class="btn" href="https://wa.me/' . e($support) . '?text='
-        . rawurlencode('Hi, this is ' . $partner['name'] . '. I would like to buy AR credits.')
+        . rawurlencode('Hi, this is ' . $partner['name'] . '. I would like to buy DEx credits.')
         . '" target="_blank" rel="noopener">+ Buy Credits</a>';
 }
 ?>
@@ -44,7 +44,7 @@ if ($support) {
         </p>
         <?php if ($support): ?>
             <a class="btn btn-amber btn-sm" target="_blank" rel="noopener"
-               href="https://wa.me/<?= e($support) ?>?text=<?= rawurlencode('Hi, this is ' . $partner['name'] . '. I have requested ' . number_format((int)$pending[0]['credits']) . ' AR credits (' . GDD_CURRENCY_SYMBOL . number_format((int)$pending[0]['price']) . '). How should I pay?') ?>">
+               href="https://wa.me/<?= e($support) ?>?text=<?= rawurlencode('Hi, this is ' . $partner['name'] . '. I have requested ' . number_format((int)$pending[0]['credits']) . ' DEx credits (' . GDD_CURRENCY_SYMBOL . number_format((int)$pending[0]['price']) . '). How should I pay?') ?>">
                 Message on WhatsApp
             </a>
         <?php endif; ?>

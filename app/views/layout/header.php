@@ -162,10 +162,10 @@ function gddNavActive(string $href, string $current): string {
 
       <div class="gdd-actions">
         <button class="gdd-burger" id="gddBurgerBtn" aria-label="Open menu">☰</button>
-        <!-- No scanner button here on purpose. Every frame now carries its own QR
+        <?php /* No scanner button here on purpose. Every frame now carries its own QR
              sticker (Admin → AR Frames → Sticker), which opens that frame's
              camera page directly — so a recipient never has to find their way in
-             through the shop. /scan still exists for anyone typing their code. -->
+             through the shop. /scan still exists for anyone typing their code. */ ?>
         <a href="<?= url('/account/wishlist') ?>" class="gdd-icon-btn" title="Wishlist">♡</a>
         <a href="<?= url('/cart') ?>" class="gdd-icon-btn" title="Cart">
           🛍 <?php if ($__cartCount > 0): ?><span class="badge-count"><?= (int)$__cartCount ?></span><?php endif; ?>

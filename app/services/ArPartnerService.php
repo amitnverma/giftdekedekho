@@ -51,7 +51,7 @@ class ArPartnerService
         $validityPrices = ArPartner::validityPrices($partner);
 
         if (!isset($validityPrices[$validity])) {
-            return ['ok' => false, 'error' => 'Choose how long the AR should stay active.'];
+            return ['ok' => false, 'error' => 'Choose how long the DEx should stay active.'];
         }
         if (!$durations) {
             return ['ok' => false, 'error' => 'Add at least one photo and video.'];

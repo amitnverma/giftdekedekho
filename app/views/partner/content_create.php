@@ -36,7 +36,7 @@ $durationOption = function (int $seconds, int $price): string {
 
 <?php if (!$compiler): ?>
     <div class="banner banner-danger">
-        <p><strong>AR processing is temporarily unavailable.</strong> Content you create now is saved and charged, but its
+        <p><strong>DEx processing is temporarily unavailable.</strong> Content you create now is saved and charged, but its
             photos cannot be prepared until this is fixed. Please contact <?= e($brand['poweredBy']) ?> before creating content.</p>
     </div>
 <?php endif; ?>
@@ -127,7 +127,7 @@ $durationOption = function (int $seconds, int $price): string {
             <div class="<?= $isAlbum ? 'grid-2' : '' ?>">
                 <div class="field">
                     <span class="field-label">
-                        <?= $isAlbum ? 'Default Video Duration <span class="muted">(for new AR contents — each can be changed below)</span>' : 'Video Duration' ?>
+                        <?= $isAlbum ? 'Default Video Duration <span class="muted">(for new DEx contents — each can be changed below)</span>' : 'Video Duration' ?>
                     </span>
                     <div class="chips">
                         <?php foreach ($durationPrices as $seconds => $price): ?>
@@ -153,7 +153,7 @@ $durationOption = function (int $seconds, int $price): string {
             </div>
             <div class="field" style="margin-bottom:0">
                 <span class="field-label">
-                    <?= $isAlbum ? 'Default Playback Mode <span class="muted">(for new AR contents — each can be changed below)</span>' : 'Playback Mode' ?>
+                    <?= $isAlbum ? 'Default Playback Mode <span class="muted">(for new DEx contents — each can be changed below)</span>' : 'Playback Mode' ?>
                 </span>
                 <div class="chips">
                     <?php foreach ($playbackModes as $key => $label): ?>
@@ -169,8 +169,8 @@ $durationOption = function (int $seconds, int $price): string {
 
         <?php if ($isAlbum): ?>
             <div class="card-head" style="border-top:1px solid var(--line)">
-                <h2>AR Contents <span class="tag tag-off" data-page-count>1</span></h2>
-                <button type="button" class="btn-link" data-add-page>+ Add AR Content</button>
+                <h2>DEx Contents <span class="tag tag-off" data-page-count>1</span></h2>
+                <button type="button" class="btn-link" data-add-page>+ Add DEx Content</button>
             </div>
             <div class="pages-list" data-pages></div>
             <template data-page-template>

@@ -541,7 +541,7 @@ class ArFrameService
     {
         $frame = $this->frames->find($frameId);
         if (!$frame) {
-            return ['ok' => false, 'error' => 'That AR frame no longer exists.'];
+            return ['ok' => false, 'error' => 'That DEx frame no longer exists.'];
         }
         if (!$this->itemsReady()) {
             return ['ok' => false, 'error' => 'Run the multi-photo migration (migrations/2026_09_14_ar_frame_items.sql) first.'];
@@ -613,7 +613,7 @@ class ArFrameService
     {
         $frame = $this->frames->find($frameId);
         if (!$frame) {
-            return ['ok' => false, 'error' => 'That AR frame no longer exists.'];
+            return ['ok' => false, 'error' => 'That DEx frame no longer exists.'];
         }
         $items = $this->items->forFrame($frameId);
 

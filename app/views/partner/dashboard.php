@@ -7,7 +7,7 @@ $canCreate = ArPartnerService::itemsAffordable($partner);
 <?php if ($canCreate === 0): ?>
     <div class="banner banner-amber">
         <p>
-            <strong>You need credits to create AR content.</strong>
+            <strong>You need credits to create DEx content.</strong>
             Each item starts at <?= number_format($base_credits) ?> credits and you have <?= number_format($balance) ?>.
         </p>
         <a class="btn btn-amber btn-sm" href="<?= url($base . '/credits') ?>">Buy Credits</a>
@@ -22,7 +22,7 @@ $canCreate = ArPartnerService::itemsAffordable($partner);
 <div class="stats">
     <?php
     $tiles = [
-        ['coin', 'green', 'Per AR item', number_format($base_credits), 'credits'],
+        ['coin', 'green', 'Per DEx item', number_format($base_credits), 'credits'],
         ['users', 'pink', 'Customers', number_format($customers), ''],
         ['image', 'yellow', 'Singles', number_format($counts['singles']), ''],
         ['album', 'violet', 'Albums', number_format($counts['albums']), ''],
@@ -43,7 +43,7 @@ $canCreate = ArPartnerService::itemsAffordable($partner);
 <div class="actions">
     <a class="action" href="<?= url($base . '/customers#add') ?>">
         <span class="ic ic-pink"><?= partnerIcon('user-add') ?></span>
-        <span><span class="t">Add Customer</span><br><span class="s">New client for AR content</span></span>
+        <span><span class="t">Add Customer</span><br><span class="s">New client for DEx content</span></span>
     </a>
     <?php if (!empty($partner['allow_singles'])): ?>
         <a class="action" href="<?= url($base . '/singles/create') ?>">
@@ -54,14 +54,14 @@ $canCreate = ArPartnerService::itemsAffordable($partner);
     <?php if (!empty($partner['allow_albums'])): ?>
         <a class="action" href="<?= url($base . '/albums/create') ?>">
             <span class="ic ic-violet"><?= partnerIcon('album') ?></span>
-            <span><span class="t">New Album</span><br><span class="s">Multi-page AR album</span></span>
+            <span><span class="t">New Album</span><br><span class="s">Multi-page DEx album</span></span>
         </a>
     <?php endif; ?>
 </div>
 
 <?php if ($recent): ?>
     <div class="card">
-        <div class="card-head"><h2>Recent AR content</h2></div>
+        <div class="card-head"><h2>Recent DEx content</h2></div>
         <?php $rows = $recent; require viewPath('partner/_content_table.php'); ?>
     </div>
 <?php endif; ?>

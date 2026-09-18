@@ -47,7 +47,7 @@ $config = [
         </div>
 
         <div class="card-head" style="border-top:1px solid var(--line)">
-            <h2><?= $isAlbum ? 'AR Contents' : 'Photo & video' ?></h2>
+            <h2><?= $isAlbum ? 'DEx Contents' : 'Photo & video' ?></h2>
         </div>
         <?php foreach ($items as $n => $item):
             $itemId = (int)$item['id'];
@@ -58,7 +58,7 @@ $config = [
                 <div>
                     <div class="grid-2">
                         <div class="field">
-                            <label for="i-title-<?= $itemId ?>"><?= $isAlbum ? 'Title of AR content ' . ($n + 1) : 'Photo title' ?> <span class="muted">(optional)</span></label>
+                            <label for="i-title-<?= $itemId ?>"><?= $isAlbum ? 'Title of DEx content ' . ($n + 1) : 'Photo title' ?> <span class="muted">(optional)</span></label>
                             <input type="text" id="i-title-<?= $itemId ?>" name="items[<?= $itemId ?>][title]" value="<?= e($item['title'] ?? '') ?>" maxlength="120">
                         </div>
                         <div class="field">

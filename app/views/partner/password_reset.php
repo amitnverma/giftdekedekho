@@ -1,6 +1,6 @@
 <?php
 /** Set a new password from an emailed reset link. */
-$initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)$partner['name']), 0, 2)) ?: 'AR';
+$initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)$partner['name']), 0, 2)) ?: 'DX';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -24,7 +24,7 @@ $initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)$
                 <span class="p-logo-mark"><?= e($initials) ?></span>
             <?php endif; ?>
             <h1><?= e($partner['name']) ?></h1>
-            <p><?= e($partner['tagline'] ?: 'AR studio — sign in to continue') ?></p>
+            <p><?= e($partner['tagline'] ?: 'DEx studio — sign in to continue') ?></p>
         </div>
 
         <?php if ($msg = flash('error')): ?>

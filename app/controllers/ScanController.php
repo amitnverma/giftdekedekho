@@ -94,7 +94,7 @@ class ScanController extends BaseController
         require_once APP_PATH . '/services/ArPartnerService.php';
         $partners = new ArPartnerService();
         if (ArPartnerService::isExpired($frame)) {
-            $this->invalid('This AR experience has expired. Please contact the shop you bought it from to renew it.', $frame);
+            $this->invalid('This DEx has expired. Please contact the shop you bought it from to renew it.', $frame);
             return;
         }
 

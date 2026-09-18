@@ -249,7 +249,7 @@
       var holder = document.createElement('div');
       holder.innerHTML = html.trim();
       var page = holder.firstElementChild;
-      page.querySelector('[data-title]').value = 'AR Content ' + (pages().length + 1);
+      page.querySelector('[data-title]').value = 'DEx Content ' + (pages().length + 1);
       page.querySelector('[data-page-duration]').value = checked('default_duration') || '';
       page.querySelector('[data-page-mode]').value = checked('default_playback_mode') || 'fullscreen';
       page.querySelector('[data-page-duration]').addEventListener('change', refresh);

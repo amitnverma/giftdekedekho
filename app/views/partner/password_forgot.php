@@ -3,8 +3,8 @@
 $hub = empty($partner);
 $base = $hub ? '/partner' : '/partner/' . $partner['slug'];
 $heading = $hub ? 'Seller sign in' : $partner['name'];
-$subheading = $hub ? 'Reset the password for your partner studio' : ($partner['tagline'] ?: 'AR studio — sign in to continue');
-$initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)($partner['name'] ?? $brand['name'])), 0, 2)) ?: 'AR';
+$subheading = $hub ? 'Reset the password for your partner studio' : ($partner['tagline'] ?: 'DEx studio — sign in to continue');
+$initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)($partner['name'] ?? $brand['name'])), 0, 2)) ?: 'DX';
 ?>
 <!DOCTYPE html>
 <html lang="en">

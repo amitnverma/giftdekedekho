@@ -43,7 +43,7 @@ $headAction = null;
 ob_start();
 require viewPath('partner/' . $_partnerView . '.php');
 $pageHtml = ob_get_clean();
-$initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)$partner['name']), 0, 2)) ?: 'AR';
+$initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)$partner['name']), 0, 2)) ?: 'DX';
 ?>
 <!DOCTYPE html>
 <html lang="en">

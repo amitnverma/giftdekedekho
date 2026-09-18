@@ -18,7 +18,7 @@ $waPhone = preg_replace('/\D/', '', (string)($frame['customer_phone_number'] ?? 
 if (strlen($waPhone) === 10) {
     $waPhone = '91' . $waPhone;
 }
-$waText = 'Your AR gift from ' . $partner['name'] . ' is ready! Scan the QR sticker, or open this link and point your camera at the photo: ' . $scanUrl;
+$waText = 'Your DEx gift from ' . $partner['name'] . ' is ready! Scan the QR sticker, or open this link and point your camera at the photo: ' . $scanUrl;
 
 $editUrl = url($base . '/content/' . $id . '/edit');
 $headAction = '<div class="toolbar">'
@@ -98,7 +98,7 @@ $headAction = '<div class="toolbar">'
                 <div class="item" id="item-<?= $itemId ?>">
                     <img class="item-photo" src="<?= e(ArFrameService::fileUrl($item['photo_path'])) ?>" alt="" loading="lazy">
                     <div>
-                        <h3><?= e($item['title'] ?: ($isAlbum ? 'AR Content ' . ($n + 1) : ($frame['title'] ?: 'Photo'))) ?></h3>
+                        <h3><?= e($item['title'] ?: ($isAlbum ? 'DEx Content ' . ($n + 1) : ($frame['title'] ?: 'Photo'))) ?></h3>
                         <div class="toolbar small">
                             <?php if (empty($item['target_path'])): ?>
                                 <span class="tag tag-used">Not prepared</span>

@@ -8,7 +8,7 @@
  * admin activates the account, which adds the chosen pack's credits.
  */
 $siteName = $brand['name'];
-$initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)$siteName), 0, 2)) ?: 'AR';
+$initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)$siteName), 0, 2)) ?: 'DX';
 $selectedPack = old('pack', '');
 $siteEmail = trim((string)siteSetting('site_email', ''));
 $sitePhone = trim((string)siteSetting('site_phone', ''));
@@ -36,7 +36,7 @@ $sitePhone = trim((string)siteSetting('site_phone', ''));
             <h1><?= $done ? 'Registration received' : 'Become a seller' ?></h1>
             <p><?= $done
                 ? 'Thank you, ' . e($done['business']) . '. One step left.'
-                : 'Sell Living Photo AR to your own customers, from your own branded studio page.' ?></p>
+                : 'Sell Living Photo DEx to your own customers, from your own branded studio page.' ?></p>
         </div>
 
         <?php if ($closed): ?>
@@ -128,7 +128,7 @@ $sitePhone = trim((string)siteSetting('site_phone', ''));
                         <?php endforeach; ?>
                     </div>
                     <p class="hint">
-                        A basic AR item (one photo with a short video) uses <?= number_format((int)$rate['base_credits']) ?> credits.
+                        A basic DEx item (one photo with a short video) uses <?= number_format((int)$rate['base_credits']) ?> credits.
                         <strong>No payment is taken now:</strong> we will contact you to arrange payment, then activate your account and add the credits.
                     </p>
                 </fieldset>
