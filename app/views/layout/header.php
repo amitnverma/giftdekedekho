@@ -172,7 +172,7 @@ function gddNavActive(string $href, string $current): string {
         </a>
         <?php
           // Account menu: customer sign-in and account links on one side, the
-          // seller sign-in on the other, so neither is mistaken for the other.
+          // DEx Studio (partner) sign-in on the other, so neither is mistaken for the other.
           $__signedIn  = isLoggedIn();
           $__firstName = $__signedIn ? (explode(' ', trim((string)($_SESSION['user_name'] ?? '')))[0] ?: 'there') : '';
           $__partnerOn = !empty($_SESSION['partner_auth']['partner_id']);
@@ -220,14 +220,20 @@ function gddNavActive(string $href, string $current): string {
                 <?php endif; ?>
               </div>
               <div class="gdd-acct-col gdd-acct-seller">
-                <h4>Your Seller Account</h4>
+                <div class="gdd-dex-brand">
+                  <span class="gdd-dex-mark" aria-hidden="true">DEx</span>
+                  <div>
+                    <h4>DEx Studio</h4>
+                    <span class="gdd-dex-sub">Digital Experience</span>
+                  </div>
+                </div>
                 <a href="<?= url('/partner/login') ?>" class="gdd-acct-seller-btn">
-                  <span aria-hidden="true">🏪</span>
-                  <?= $__partnerOn ? 'Open your partner studio' : 'Seller sign in' ?>
+                  <?= $__partnerOn ? 'Open DEx Studio' : 'Partner sign in' ?>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </a>
-                <small>Uses your partner login, not your shopping account.</small>
+                <small>Separate login from your shopping account.</small>
                 <?php if (!$__partnerOn): ?>
-                  <p class="gdd-acct-seller-new">New seller? <a href="<?= url('/partner/register') ?>">Register as a partner</a></p>
+                  <p class="gdd-acct-seller-new">New to DEx? <a href="<?= url('/partner/register') ?>">Become a DEx partner</a></p>
                 <?php endif; ?>
               </div>
             </div>
@@ -411,9 +417,9 @@ foreach ($__navCats as $__nc) { $__catLookup[$__nc['slug']] = $__nc; }
     <?php else: ?>
       <a href="<?= url('/account/login') ?>">👤 Customer sign in / Register</a>
     <?php endif; ?>
-    <a href="<?= url('/partner/login') ?>">🏪 <?= !empty($_SESSION['partner_auth']['partner_id']) ? 'Your partner studio' : 'Seller sign in' ?></a>
+    <a href="<?= url('/partner/login') ?>">✨ <?= !empty($_SESSION['partner_auth']['partner_id']) ? 'Open DEx Studio' : 'DEx Studio — partner sign in' ?></a>
     <?php if (empty($_SESSION['partner_auth']['partner_id'])): ?>
-      <a href="<?= url('/partner/register') ?>">🤝 Register as a partner</a>
+      <a href="<?= url('/partner/register') ?>">🤝 Become a DEx partner</a>
     <?php endif; ?>
   </div>
 </div>
