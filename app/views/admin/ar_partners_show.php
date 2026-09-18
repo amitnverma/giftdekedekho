@@ -4,7 +4,54 @@ $pid = (int)$partner['id'];
 $pending = array_values(array_filter($requests, fn($r) => $r['status'] === 'pending'));
 $contentState = ['live' => 'admin-badge-green', 'warn' => 'admin-badge-yellow', 'off' => 'admin-badge-gray'];
 $activeLogins = array_filter($users, fn($u) => !empty($u['is_active']));
+$awaiting = ArPartner::awaitingActivation($partner);
+// The pack chosen at registration is the oldest request still open.
+$signupRequest = $pending ? end($pending) : null;
+$statusBadge = $partner['is_active'] ? ['admin-badge-green', 'Active']
+    : ($awaiting ? ['admin-badge-yellow', 'Awaiting activation']
+    : (($partner['signup_status'] ?? null) === 'rejected' ? ['admin-badge-red', 'Declined'] : ['admin-badge-gray', 'Paused']));
 ?>
+<?php if ($awaiting): ?>
+    <div class="admin-card" style="margin-bottom:16px;border:2px solid #f59e0b;background:#fffbeb">
+        <h3 class="admin-card-title" style="margin-top:0">New seller registration — waiting for payment</h3>
+        <p style="margin:0 0 6px">
+            <strong><?= e($partner['contact_name'] ?: $partner['name']) ?></strong> registered
+            <strong><?= e($partner['name']) ?></strong> on <?= e(date('d M Y, H:i', strtotime($partner['created_at']))) ?>.
+            <?php if ($signupRequest): ?>
+                They chose the <strong><?= e(GDD_CURRENCY_SYMBOL . number_format((int)$signupRequest['price'])) ?></strong> pack
+                for <strong><?= number_format((int)$signupRequest['credits']) ?> credits</strong>.
+            <?php endif; ?>
+        </p>
+        <p class="admin-muted" style="font-size:13px;margin:0 0 12px">
+            <?= e(implode(' · ', array_filter([$partner['contact_phone'], $partner['contact_email']]))) ?>
+            <?php if (!empty($partner['whatsapp'])): ?>
+                · <a href="https://wa.me/<?= e(preg_replace('/\D/', '', $partner['whatsapp'])) ?>" target="_blank" rel="noopener">WhatsApp them ↗</a>
+            <?php endif; ?>
+            <br>They cannot sign in until you activate the account. Check the name and page address under
+            “Edit branding &amp; pricing” first if you want to change them.
+        </p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <?php if ($signupRequest): ?>
+                <form method="post" action="<?= url('/admin/ar-partners/' . $pid . '/activate') ?>"
+                      onsubmit="return confirm('Payment of <?= e(GDD_CURRENCY_SYMBOL . number_format((int)$signupRequest['price'])) ?> received? This activates the account and adds <?= (int)$signupRequest['credits'] ?> credits.')">
+                    <?= csrfField() ?>
+                    <input type="hidden" name="request_id" value="<?= (int)$signupRequest['id'] ?>">
+                    <button class="admin-btn admin-btn-primary" type="submit">Payment received — activate &amp; add <?= number_format((int)$signupRequest['credits']) ?> credits</button>
+                </form>
+            <?php endif; ?>
+            <form method="post" action="<?= url('/admin/ar-partners/' . $pid . '/activate') ?>"
+                  onsubmit="return confirm('Activate without adding credits? You can add credits by hand below.')">
+                <?= csrfField() ?>
+                <button class="admin-btn" type="submit">Activate without credits</button>
+            </form>
+            <form method="post" action="<?= url('/admin/ar-partners/' . $pid . '/reject') ?>"
+                  onsubmit="return confirm('Decline this registration? They will not be able to sign in.')">
+                <?= csrfField() ?>
+                <button class="admin-btn admin-btn-danger" type="submit">Decline</button>
+            </form>
+        </div>
+    </div>
+<?php endif; ?>
 <?php if (!$activeLogins): ?>
     <div class="admin-alert admin-alert-error" style="margin-bottom:16px">
         <strong>Nobody can sign in to this partner's page.</strong> It has no active login —
@@ -20,7 +67,7 @@ $activeLogins = array_filter($users, fn($u) => !empty($u['is_active']));
         <?php endif; ?>
         <div>
             <a href="<?= e($portalUrl) ?>" target="_blank"><?= e(preg_replace('#^https?://#', '', $portalUrl)) ?> ↗</a>
-            <span class="admin-badge <?= $partner['is_active'] ? 'admin-badge-green' : 'admin-badge-gray' ?>"><?= $partner['is_active'] ? 'Active' : 'Paused' ?></span>
+            <span class="admin-badge <?= $statusBadge[0] ?>"><?= e($statusBadge[1]) ?></span>
             <div class="admin-muted" style="font-size:12.5px">
                 <?= e(implode(' · ', array_filter([$partner['contact_name'], $partner['contact_phone'], $partner['contact_email']]))) ?: 'No contact details' ?>
             </div>

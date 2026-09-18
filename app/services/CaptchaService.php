@@ -23,10 +23,10 @@ class CaptchaService
     private const VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
 
     /** The forms that can carry a captcha; anything else is refused. */
-    public const FORMS = ['login', 'register', 'forgot-password', 'partner-login', 'partner-forgot-password'];
+    public const FORMS = ['login', 'register', 'forgot-password', 'partner-login', 'partner-forgot-password', 'partner-register'];
 
     /** Seconds a person needs, at minimum, to fill in each form. */
-    private const MIN_SECONDS = ['register' => 3];
+    private const MIN_SECONDS = ['register' => 3, 'partner-register' => 5];
 
     private const CODE_LENGTH = 5;
 

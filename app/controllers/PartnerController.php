@@ -63,6 +63,10 @@ class PartnerController extends BaseController
             $this->forgotPassword();
             return;
         }
+        if ($page === 'register') {
+            $this->register();
+            return;
+        }
         // Already signed in to a portal: straight there, no second sign-in.
         $auth = $_SESSION['partner_auth'] ?? null;
         if (is_array($auth) && time() - (int)($auth['seen'] ?? 0) < self::SESSION_IDLE_SECONDS
@@ -218,7 +222,12 @@ class PartnerController extends BaseController
                 $this->go('/login');
             }
             if (empty($partner['is_active'])) {
-                flash('error', 'This account is paused. Please contact ' . siteSetting('site_name', SITE_NAME) . '.');
+                $siteName = (string)siteSetting('site_name', SITE_NAME);
+                flash('error', match ($partner['signup_status'] ?? null) {
+                    'pending'  => 'Your seller account is waiting to be activated. We activate it and add your credits once your payment is received — please contact ' . $siteName . ' if you have already paid.',
+                    'rejected' => 'Your seller registration was not approved. Please contact ' . $siteName . '.',
+                    default    => 'This account is paused. Please contact ' . $siteName . '.',
+                });
                 $this->go('/login');
             }
             $this->partner = $partner;
@@ -371,6 +380,157 @@ class PartnerController extends BaseController
             'partner' => $this->partner,
             'brand'   => $this->brand(),
         ]);
+    }
+
+    /**
+     * "Become a seller": /partner/register. There is no online payment yet, so
+     * this creates the shop paused (signup_status 'pending') with a pending
+     * credit request for the pack chosen. The applicant pays outside the site,
+     * and the admin activates the account from Admin → AR Partners, which adds
+     * the pack's credits. Until then the login is refused with an explanation.
+     */
+    private function register(): void
+    {
+        $packs = ArPartner::creditPacks([]);
+        $rate = ['base_credits' => ArPartner::DEFAULT_BASE_CREDITS];
+        $view = [
+            'brand'   => $this->brand(),
+            'packs'   => $packs,
+            'rate'    => $rate,
+            'support' => $this->supportWhatsapp(),
+            'closed'  => !$this->partners->signupsReady(),
+            'done'    => null,
+        ];
+
+        if ($view['closed']) {
+            renderRaw('partner/register', $view);
+            return;
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $this->requireCsrf();
+            $business = trim((string)$this->input('business_name', ''));
+            $name = trim((string)$this->input('name', ''));
+            $phone = substr(preg_replace('/[^\d+]/', '', (string)$this->input('phone', '')), 0, 20);
+            $city = trim((string)$this->input('city', ''));
+            $email = strtolower(trim((string)$this->input('email', '')));
+            $password = (string)$this->input('password', '');
+            $packIndex = (int)$this->input('pack', -1);
+            $this->setOld(['business_name' => $business, 'name' => $name, 'phone' => $phone,
+                'city' => $city, 'email' => $email, 'pack' => (string)$packIndex]);
+
+            if ($captchaError = CaptchaService::verify('partner-register')) {
+                flash('error', $captchaError);
+                $this->go('/register');
+            }
+            // Per address, not per email: one person trying many emails is the case to stop.
+            $identifier = 'partner-register:' . ($_SERVER['REMOTE_ADDR'] ?? '');
+            if ($this->loginRateLimited($identifier, 3)) {
+                flash('error', 'Several registrations were sent from here already. Please wait 15 minutes, or contact us directly.');
+                $this->go('/register');
+            }
+
+            $errors = [];
+            if (mb_strlen($business) < 2) {
+                $errors[] = 'Enter your shop or business name.';
+            }
+            if (mb_strlen($name) < 2) {
+                $errors[] = 'Enter your name.';
+            }
+            $digits = preg_replace('/\D/', '', $phone);
+            if (strlen($digits) < 10 || strlen($digits) > 15) {
+                $errors[] = 'Enter a mobile number we can reach you on, with at least 10 digits.';
+            }
+            $users = new ArPartnerUser();
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $errors[] = 'Enter a valid email address — you will sign in with it.';
+            } elseif ($users->findByEmail($email)) {
+                $errors[] = 'That email already has a seller account. Sign in, or use "Forgot your password?".';
+            }
+            if (strlen($password) < PASSWORD_MIN_LENGTH) {
+                $errors[] = 'Choose a password of at least ' . PASSWORD_MIN_LENGTH . ' characters.';
+            } elseif ($password !== (string)$this->input('password_confirm', '')) {
+                $errors[] = 'The two passwords do not match.';
+            }
+            $pack = $packs[$packIndex] ?? null;
+            if ($pack === null) {
+                $errors[] = 'Choose a credit pack to start with.';
+            }
+            if ($errors) {
+                flash('error', implode(' ', $errors));
+                $this->go('/register');
+            }
+            $this->recordLoginAttempt($identifier);
+
+            $credits = new ArPartnerCredit();
+            $db = $credits->db();
+            $db->beginTransaction();
+            try {
+                $partnerId = $this->partners->create([
+                    'slug'          => $this->partners->uniqueSlug($business),
+                    'name'          => mb_substr($business, 0, 120),
+                    'contact_name'  => mb_substr($name, 0, 120),
+                    'contact_phone' => $phone,
+                    'whatsapp'      => substr($digits, 0, 20),
+                    'contact_email' => mb_substr($email, 0, 180),
+                    'is_active'     => 0,
+                    'signup_status' => 'pending',
+                    'notes'         => 'Registered online on ' . date('d M Y H:i') . ($city !== '' ? '. City: ' . mb_substr($city, 0, 80) : '') . '.',
+                    'created_at'    => date('Y-m-d H:i:s'),
+                ]);
+                $userId = $users->create($partnerId, mb_substr($name, 0, 120), $email, $password, 'owner');
+                $credits->createRequest($partnerId, $pack['price'], $pack['credits'], $userId);
+                $db->commit();
+            } catch (Throwable $e) {
+                if ($db->inTransaction()) {
+                    $db->rollBack();
+                }
+                throw $e;
+            }
+
+            $this->clearOld();
+            $_SESSION['partner_signup_done'] = [
+                'business' => $business,
+                'email'    => $email,
+                'price'    => $pack['price'],
+                'credits'  => $pack['credits'],
+            ];
+
+            // Reply first, then tell the admin: an SMTP round trip takes seconds.
+            header('Location: ' . url('/partner/register'));
+            session_write_close();
+            if (function_exists('fastcgi_finish_request')) {
+                fastcgi_finish_request();
+            } elseif (function_exists('litespeed_finish_request')) {
+                litespeed_finish_request();
+            }
+            $adminEmail = trim((string)siteSetting('site_email', ''));
+            if ($adminEmail !== '') {
+                $rows = [
+                    'Business' => $business,
+                    'Name'     => $name,
+                    'Mobile'   => $phone,
+                    'Email'    => $email,
+                    'City'     => $city !== '' ? $city : '—',
+                    'Pack'     => GDD_CURRENCY_SYMBOL . number_format($pack['price']) . ' for ' . number_format($pack['credits']) . ' credits',
+                ];
+                $html = '<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#1f2937;max-width:520px">'
+                    . '<p>A new seller has registered and is waiting for activation.</p><table style="border-collapse:collapse">';
+                foreach ($rows as $label => $value) {
+                    $html .= '<tr><td style="padding:3px 14px 3px 0;color:#6b7280">' . e($label) . '</td><td style="padding:3px 0"><strong>' . e($value) . '</strong></td></tr>';
+                }
+                $html .= '</table><p>Once their payment is received, open the partner in the admin and press “Activate”. That adds the credits and lets them sign in.</p>'
+                    . '<p><a href="' . e(url('/admin/ar-partners/' . $partnerId)) . '">Open in Admin → AR Partners</a></p></div>';
+                if (!(new NotificationService())->sendEmail($adminEmail, SITE_NAME . ' Admin', 'New seller registration: ' . $business, $html)) {
+                    error_log('Partner registration email to admin failed for partner ' . $partnerId);
+                }
+            }
+            exit;
+        }
+
+        $view['done'] = $_SESSION['partner_signup_done'] ?? null;
+        unset($_SESSION['partner_signup_done']);
+        renderRaw('partner/register', $view);
     }
 
     private function resetPassword(): void

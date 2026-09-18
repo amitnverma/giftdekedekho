@@ -226,6 +226,9 @@ function gddNavActive(string $href, string $current): string {
                   <?= $__partnerOn ? 'Open your partner studio' : 'Seller sign in' ?>
                 </a>
                 <small>Uses your partner login, not your shopping account.</small>
+                <?php if (!$__partnerOn): ?>
+                  <p class="gdd-acct-seller-new">New seller? <a href="<?= url('/partner/register') ?>">Register as a partner</a></p>
+                <?php endif; ?>
               </div>
             </div>
           </div>
@@ -409,6 +412,9 @@ foreach ($__navCats as $__nc) { $__catLookup[$__nc['slug']] = $__nc; }
       <a href="<?= url('/account/login') ?>">👤 Customer sign in / Register</a>
     <?php endif; ?>
     <a href="<?= url('/partner/login') ?>">🏪 <?= !empty($_SESSION['partner_auth']['partner_id']) ? 'Your partner studio' : 'Seller sign in' ?></a>
+    <?php if (empty($_SESSION['partner_auth']['partner_id'])): ?>
+      <a href="<?= url('/partner/register') ?>">🤝 Register as a partner</a>
+    <?php endif; ?>
   </div>
 </div>
 <?php if ($flashSuccess = flash('success')): ?>

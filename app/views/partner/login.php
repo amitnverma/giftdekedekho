@@ -43,7 +43,9 @@ $initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)(
         <?php endif; ?>
 
         <?php if (!$hub && empty($partner['is_active'])): ?>
-            <div class="banner banner-amber"><p>This account is currently paused.</p></div>
+            <div class="banner banner-amber"><p><?= ArPartner::awaitingActivation($partner)
+                ? 'This account is waiting to be activated. You can sign in once your payment has been received.'
+                : 'This account is currently paused.' ?></p></div>
         <?php endif; ?>
 
         <form method="post" action="<?= url($base . '/login') ?>">
@@ -64,6 +66,7 @@ $initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)(
         </p>
         <?php if ($hub): ?>
             <div class="login-switch">
+                <p>New seller? <a href="<?= url('/partner/register') ?>">Register as a partner</a></p>
                 <p>Shopping for a gift? <a href="<?= url('/account/login') ?>">Customer sign in</a></p>
                 <p><a href="<?= url('/') ?>">← Back to <?= e($brand['name']) ?></a></p>
             </div>

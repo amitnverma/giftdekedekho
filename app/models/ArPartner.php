@@ -12,6 +12,9 @@ class ArPartner extends BaseModel
 {
     protected string $table = 'ar_partners';
 
+    /** Credits per basic item for a new partner, until the admin sets their own rate. */
+    public const DEFAULT_BASE_CREDITS = 99;
+
     /** Video lengths a partner can be offered, in seconds. */
     public const DURATIONS = [15, 30, 60, 120, 300, 600];
 
@@ -53,6 +56,30 @@ class ArPartner extends BaseModel
         return $exists;
     }
 
+    /**
+     * Whether the public registration migration has been run. Until it has,
+     * /partner/register says registration is not open yet.
+     */
+    public function signupsReady(): bool
+    {
+        static $ready = null;
+        if ($ready === null) {
+            try {
+                $ready = $this->tableExists()
+                    && $this->db->query("SHOW COLUMNS FROM ar_partners LIKE 'signup_status'")->fetch() !== false;
+            } catch (Throwable $e) {
+                $ready = false;
+            }
+        }
+        return $ready;
+    }
+
+    /** Registered online and waiting for the admin to activate it after payment. */
+    public static function awaitingActivation(array $partner): bool
+    {
+        return empty($partner['is_active']) && ($partner['signup_status'] ?? null) === 'pending';
+    }
+
     public function findBySlug(string $slug): ?array
     {
         $stmt = $this->db->prepare('SELECT * FROM ar_partners WHERE slug = ? LIMIT 1');
@@ -61,13 +88,30 @@ class ArPartner extends BaseModel
     }
 
     /** Addresses under /partner that belong to the shared seller sign-in, not to a partner. */
-    public const RESERVED_SLUGS = ['login', 'forgot-password'];
+    public const RESERVED_SLUGS = ['login', 'forgot-password', 'register'];
 
     public function slugTaken(string $slug, int $exceptId = 0): bool
     {
         $stmt = $this->db->prepare('SELECT 1 FROM ar_partners WHERE slug = ? AND id <> ? LIMIT 1');
         $stmt->execute([$slug, $exceptId]);
         return $stmt->fetch() !== false;
+    }
+
+    /** A free, non-reserved page address based on the name: "rose-gifts", then "rose-gifts-2"... */
+    public function uniqueSlug(string $name): string
+    {
+        $base = substr(trim(preg_replace('/[^a-z0-9]+/', '-', strtolower(slugify($name))), '-'), 0, 50);
+        // slugify() answers "item" for a name with nothing it can transliterate.
+        if (strlen($base) < 2 || ($base === 'item' && stripos($name, 'item') === false)) {
+            $base = 'partner';
+        }
+        for ($n = 1; $n < 500; $n++) {
+            $slug = $n === 1 ? $base : $base . '-' . $n;
+            if (!in_array($slug, self::RESERVED_SLUGS, true) && !$this->slugTaken($slug)) {
+                return $slug;
+            }
+        }
+        return $base . '-' . bin2hex(random_bytes(3));
     }
 
     public function create(array $data): int

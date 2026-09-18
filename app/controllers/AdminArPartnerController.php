@@ -8,6 +8,7 @@
  * credit balance, including the "buy credits" requests they send.
  */
 require_once APP_PATH . '/services/ArPartnerService.php';
+require_once APP_PATH . '/services/NotificationService.php';
 
 class AdminArPartnerController extends BaseController
 {
@@ -27,9 +28,13 @@ class AdminArPartnerController extends BaseController
         $this->requireAdmin();
         if ($this->schemaMissing()) return;
 
+        // Registrations waiting for activation first — they are the ones needing action.
+        $partners = $this->partners->listWithStats();
+        usort($partners, fn($a, $b) => (int)ArPartner::awaitingActivation($b) <=> (int)ArPartner::awaitingActivation($a));
+
         $this->viewAdmin('admin/ar_partners_index', [
             'metaTitle'       => 'AR Partners',
-            'partners'        => $this->partners->listWithStats(),
+            'partners'        => $partners,
             'supportWhatsapp' => (string)(new Settings())->get('ar_partner_support_whatsapp', ''),
         ]);
     }
@@ -64,7 +69,7 @@ class AdminArPartnerController extends BaseController
                 'brand_color' => ArPartnerService::DEFAULT_BRAND_COLOR,
                 'contact_name' => '', 'contact_phone' => '', 'whatsapp' => '', 'contact_email' => '', 'website_url' => '',
                 'allow_singles' => 1, 'allow_albums' => 1, 'max_album_pages' => ArFrameItem::MAX_PER_FRAME, 'max_video_mb' => 20,
-                'base_credits' => 99, 'duration_prices' => null, 'validity_prices' => null, 'credit_packs' => null,
+                'base_credits' => ArPartner::DEFAULT_BASE_CREDITS, 'duration_prices' => null, 'validity_prices' => null, 'credit_packs' => null,
                 'edit_window_days' => 7, 'is_active' => 1, 'notes' => '',
             ], $stash['data'] ?? []),
         ]);
@@ -249,6 +254,12 @@ class AdminArPartnerController extends BaseController
             $data['logo_path'] = null;
         }
 
+        // Switching a pending registration on here counts as activating it.
+        // Its credit request stays open, to be marked paid separately.
+        if ($existing && $data['is_active'] && ($existing['signup_status'] ?? null) === 'pending') {
+            $data['signup_status'] = 'approved';
+        }
+
         if ($id) {
             $this->partners->update($id, $data);
         } else {
@@ -403,7 +414,7 @@ class AdminArPartnerController extends BaseController
     {
         $this->requireAdmin();
         $this->requireCsrf();
-        $this->findOrRedirect($id);
+        $partner = $this->findOrRedirect($id);
 
         $db = $this->credits->db();
         $db->beginTransaction();
@@ -426,6 +437,11 @@ class AdminArPartnerController extends BaseController
                 'handled_by' => currentUserId(),
                 'handled_at' => date('Y-m-d H:i:s'),
             ]);
+            // Paying for a registration's pack is what activates it.
+            $activating = ArPartner::awaitingActivation($partner);
+            if ($activating) {
+                $this->partners->update($id, ['is_active' => 1, 'signup_status' => 'approved']);
+            }
             $db->commit();
         } catch (Throwable $e) {
             if ($db->inTransaction()) {
@@ -434,8 +450,114 @@ class AdminArPartnerController extends BaseController
             throw $e;
         }
 
+        if ($activating) {
+            $this->finishActivation($partner, (int)$request['credits']);
+        }
         flash('success', number_format((int)$request['credits']) . ' credits added.');
         redirect('/admin/ar-partners/' . $id . '#credits');
+    }
+
+    // ------------------------------------------------------- registrations
+
+    /**
+     * Activate a seller who registered online, optionally without adding
+     * credits (when they paid something other than the pack they chose, the
+     * admin activates and then adjusts the balance by hand).
+     */
+    public function activate(int $id): void
+    {
+        $this->requireAdmin();
+        $this->requireCsrf();
+        $partner = $this->findOrRedirect($id);
+        if (!ArPartner::awaitingActivation($partner)) {
+            flash('error', 'This partner is not waiting for activation.');
+            redirect('/admin/ar-partners/' . $id);
+        }
+
+        $added = 0;
+        $db = $this->credits->db();
+        $db->beginTransaction();
+        try {
+            $requestId = (int)$this->input('request_id', 0);
+            $request = $requestId ? $this->credits->lockRequest($id, $requestId) : null;
+            if ($request && $request['status'] === 'pending') {
+                $this->credits->apply($id, (int)$request['credits'], 'added', sprintf(
+                    'Credit pack %s%s (registration, request #%d)',
+                    GDD_CURRENCY_SYMBOL,
+                    number_format((int)$request['price']),
+                    $requestId
+                ), ['request_id' => $requestId, 'created_by' => currentUserId()]);
+                $this->credits->updateRequest($requestId, [
+                    'status'     => 'fulfilled',
+                    'handled_by' => currentUserId(),
+                    'handled_at' => date('Y-m-d H:i:s'),
+                ]);
+                $added = (int)$request['credits'];
+            }
+            $this->partners->update($id, ['is_active' => 1, 'signup_status' => 'approved']);
+            $db->commit();
+        } catch (Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
+
+        $mailed = $this->finishActivation($partner, $added);
+        flash('success', $partner['name'] . ' is active' . ($added ? ' with ' . number_format($added) . ' credits' : '') . '. '
+            . ($mailed ? 'They have been emailed that they can sign in.' : 'The "you are active" email could not be sent — let them know they can sign in at /partner/login.'));
+        redirect('/admin/ar-partners/' . $id);
+    }
+
+    /** Turn a registration down: the account stays switched off and its open requests are cancelled. */
+    public function reject(int $id): void
+    {
+        $this->requireAdmin();
+        $this->requireCsrf();
+        $partner = $this->findOrRedirect($id);
+        if (!ArPartner::awaitingActivation($partner)) {
+            flash('error', 'This partner is not waiting for activation.');
+            redirect('/admin/ar-partners/' . $id);
+        }
+
+        $db = $this->credits->db();
+        $db->beginTransaction();
+        $this->partners->update($id, ['signup_status' => 'rejected']);
+        $db->prepare("UPDATE ar_partner_credit_requests SET status = 'cancelled', handled_by = ?, handled_at = ?
+                      WHERE partner_id = ? AND status = 'pending'")
+           ->execute([currentUserId(), date('Y-m-d H:i:s'), $id]);
+        $db->commit();
+
+        flash('success', 'Registration from ' . $partner['name'] . ' declined. They cannot sign in; nothing was deleted.');
+        redirect('/admin/ar-partners/' . $id);
+    }
+
+    /** Tell the registered owner they can sign in. Returns whether the email went. */
+    private function finishActivation(array $partner, int $credits): bool
+    {
+        $owner = null;
+        foreach ((new ArPartnerUser())->forPartner((int)$partner['id']) as $user) {
+            if (!empty($user['is_active'])) {
+                $owner = $user;
+                break;
+            }
+        }
+        if (!$owner) {
+            return false;
+        }
+        $siteName = (string)siteSetting('site_name', SITE_NAME);
+        $link = url('/partner/' . $partner['slug']);
+        $color = ArPartnerService::safeColor($partner['brand_color'] ?? null);
+        $html = '<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#1f2937;max-width:520px">'
+            . '<p>Hi ' . e((string)$owner['name']) . ',</p>'
+            . '<p>Your seller account for <strong>' . e((string)$partner['name']) . '</strong> is now active'
+            . ($credits > 0 ? ', and <strong>' . number_format($credits) . ' credits</strong> have been added' : '') . '.</p>'
+            . '<p><a href="' . e($link) . '" style="display:inline-block;background:' . $color . ';color:#fff;text-decoration:none;padding:10px 18px;border-radius:6px;font-weight:bold">Sign in to your studio</a></p>'
+            . '<p style="font-size:13px;color:#6b7280">Sign in with ' . e((string)$owner['email']) . ' and the password you chose when you registered.</p>'
+            . '<p style="font-size:12px;color:#9ca3af;word-break:break-all">' . e($link) . '</p>'
+            . '</div>';
+        return (new NotificationService())->sendEmail((string)$owner['email'], (string)$owner['name'],
+            'Your ' . $siteName . ' seller account is active', $html);
     }
 
     public function cancelRequest(int $id, int $requestId): void

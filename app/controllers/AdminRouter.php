@@ -184,6 +184,12 @@ class AdminRouter
             case preg_match('#^/ar-partners/(\d+)/users/(\d+)$#', $path, $m) === 1:
                 (new AdminArPartnerController())->updateUser((int)$m[1], (int)$m[2]);
                 break;
+            case preg_match('#^/ar-partners/(\d+)/activate$#', $path, $m) === 1:
+                (new AdminArPartnerController())->activate((int)$m[1]);
+                break;
+            case preg_match('#^/ar-partners/(\d+)/reject$#', $path, $m) === 1:
+                (new AdminArPartnerController())->reject((int)$m[1]);
+                break;
             case preg_match('#^/ar-partners/(\d+)/credits$#', $path, $m) === 1:
                 (new AdminArPartnerController())->adjustCredits((int)$m[1]);
                 break;
