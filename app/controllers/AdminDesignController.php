@@ -257,6 +257,20 @@ class AdminDesignController extends BaseController
                 ]);
                 break;
 
+            case 'dex_landing':
+                $this->saveSection('dex_landing', $this->collectDexLanding());
+                flash('success', 'DEx landing page saved.');
+                redirect('/admin/design?tab=dex');
+                break;
+
+            case 'dex_landing_reset':
+                // Back to the catalogue's original copy and images. Uploaded files
+                // are left on disk; nothing else references them by path.
+                Database::getInstance()->prepare('DELETE FROM site_sections WHERE section_key = ?')->execute(['dex_landing']);
+                flash('success', 'DEx landing page restored to the original catalogue content.');
+                redirect('/admin/design?tab=dex');
+                break;
+
             case 'nav_category_bar':
                 $slugs   = (array)($_POST['nav_slug']    ?? []);
                 $labels  = (array)($_POST['nav_label']   ?? []);
@@ -464,6 +478,185 @@ class AdminDesignController extends BaseController
         ];
     }
 
+    /**
+     * Reads the DEx Landing form. Every image keeps its current path (saved or
+     * catalogue default) unless a new file was uploaded for that slot.
+     */
+    private function collectDexLanding(): array
+    {
+        $current = dexLandingContent();
+        $defaults = dexLandingDefaults();
+
+        $text = function ($value, string $fallback = '', int $max = 300): string {
+            $value = trim(preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', (string)$value));
+            return $value === '' ? $fallback : mb_substr($value, 0, $max);
+        };
+        $group = fn(string $key): array => is_array($_POST[$key] ?? null) ? $_POST[$key] : [];
+        $image = function (string $field, ?int $index, string $existing, string $prefix): string {
+            $file = $this->uploadedFile($field, $index);
+            if ($file) {
+                $up = $this->handleImageUpload($file, 'dex', $prefix);
+                if ($up) return $up;
+            }
+            return $existing;
+        };
+
+        $colors = [];
+        $postedColors = $group('colors');
+        foreach ($defaults['colors'] as $key => $default) {
+            $v = strtolower(trim((string)($postedColors[$key] ?? '')));
+            $colors[$key] = preg_match('/^#[0-9a-f]{6}$/', $v) ? $v : $default;
+        }
+
+        // Hero
+        $h = $group('hero');
+        $hd = $defaults['hero'];
+        $verbs = [];
+        for ($i = 0; $i < 4; $i++) {
+            $verbs[] = $text($h['verbs'][$i] ?? '', $hd['verbs'][$i], 30);
+        }
+        $promises = [];
+        for ($i = 0; $i < 4; $i++) {
+            $promises[] = [
+                'title' => $text($h['promises'][$i]['title'] ?? '', '', 40),
+                'sub'   => $text($h['promises'][$i]['sub'] ?? '', '', 60),
+            ];
+        }
+        $hero = [
+            'kicker'      => $text($h['kicker'] ?? '', '', 40),
+            'title_gold'  => $text($h['title_gold'] ?? '', $hd['title_gold'], 40),
+            'title'       => $text($h['title'] ?? '', '', 40),
+            'tagline'     => $text($h['tagline'] ?? ''),
+            'verbs'       => $verbs,
+            'script_1'    => $text($h['script_1'] ?? '', '', 60),
+            'script_2'    => $text($h['script_2'] ?? '', '', 60),
+            'cta_primary' => $text($h['cta_primary'] ?? '', $hd['cta_primary'], 40),
+            'cta_demo'    => $text($h['cta_demo'] ?? '', $hd['cta_demo'], 40),
+            'image'       => $image('dex_hero_image', null, $current['hero']['image'], 'dex_hero'),
+            'promises'    => $promises,
+            'bottom_line' => $text($h['bottom_line'] ?? '', '', 80),
+        ];
+
+        // 3 Easy Steps
+        $s = $group('steps');
+        $sd = $defaults['steps'];
+        $stepItems = [];
+        for ($i = 0; $i < 3; $i++) {
+            $stepItems[] = [
+                'title' => $text($s['items'][$i]['title'] ?? '', $sd['items'][$i]['title'], 30),
+                'desc'  => $text($s['items'][$i]['desc'] ?? '', '', 120),
+                'image' => $image('dex_step_image', $i, $current['steps']['items'][$i]['image'] ?? $sd['items'][$i]['image'], 'dex_step'),
+            ];
+        }
+        $benefits = [];
+        for ($i = 0; $i < 4; $i++) {
+            $benefits[] = $text($s['benefits'][$i] ?? '', '', 40);
+        }
+        $steps = [
+            'script'    => $text($s['script'] ?? '', '', 60),
+            'title'     => $text($s['title'] ?? '', '', 60),
+            'title_big' => $text($s['title_big'] ?? '', $sd['title_big'], 40),
+            'banner'    => $text($s['banner'] ?? '', '', 40),
+            'subline'   => $text($s['subline'] ?? '', '', 80),
+            'items'     => $stepItems,
+            'benefits'  => $benefits,
+        ];
+
+        // Experiences + live demo
+        $x = $group('experiences');
+        $xc = $current['experiences'];
+        $gallery = [];
+        for ($i = 0; $i < 3; $i++) {
+            $gallery[] = $image('dex_gallery_image', $i, $xc['gallery'][$i] ?? $defaults['experiences']['gallery'][$i], 'dex_gallery');
+        }
+        $code = strtolower(trim((string)($x['demo_code'] ?? '')));
+        $experiences = [
+            'eyebrow'     => $text($x['eyebrow'] ?? '', '', 60),
+            'heading'     => $text($x['heading'] ?? '', $defaults['experiences']['heading'], 120),
+            'main_image'  => $image('dex_main_image', null, $xc['main_image'], 'dex_main'),
+            'gallery'     => $gallery,
+            'try_eyebrow' => $text($x['try_eyebrow'] ?? '', '', 40),
+            'try_heading' => $text($x['try_heading'] ?? '', '', 80),
+            'qr_image'    => $image('dex_qr_image', null, $xc['qr_image'], 'dex_qr'),
+            // Blank hides the demo card's link; anything else must look like a frame slug.
+            'demo_code'   => preg_match('/^[a-z0-9][a-z0-9-]{0,79}$/', $code) ? $code : '',
+            'scan_label'  => $text($x['scan_label'] ?? '', '', 30),
+            'scan_then'   => $text($x['scan_then'] ?? '', '', 80),
+            'try_hint'    => $text($x['try_hint'] ?? '', '', 200),
+        ];
+
+        // Collection — existing rows, minus any marked for removal, plus new rows with an image
+        $c = $group('collection');
+        $labels  = (array)($_POST['dex_product_label'] ?? []);
+        $removes = (array)($_POST['dex_product_remove'] ?? []);
+        $existingProducts = $current['collection']['products'];
+        $products = [];
+        foreach ($labels as $i => $label) {
+            $i = (int)$i;
+            if (!empty($removes[$i])) continue;
+            $img = $image('dex_product_image', $i, $existingProducts[$i]['image'] ?? '', 'dex_product');
+            $label = $text($label, '', 60);
+            if ($img === '') continue; // a blank "add" row
+            $products[] = ['label' => $label, 'image' => $img];
+            if (count($products) >= 24) break;
+        }
+        $collection = [
+            'eyebrow'  => $text($c['eyebrow'] ?? '', '', 60),
+            'heading'  => $text($c['heading'] ?? '', $defaults['collection']['heading'], 80),
+            'products' => $products,
+        ];
+
+        // Partner call-to-action
+        $p = $group('partners');
+        $points = [];
+        for ($i = 0; $i < 3; $i++) {
+            $points[] = [
+                'title' => $text($p['points'][$i]['title'] ?? '', '', 60),
+                'desc'  => $text($p['points'][$i]['desc'] ?? '', '', 160),
+            ];
+        }
+        $partners = [
+            'heading'    => $text($p['heading'] ?? '', $defaults['partners']['heading'], 80),
+            'text'       => $text($p['text'] ?? '', '', 300),
+            'points'     => $points,
+            'card_title' => $text($p['card_title'] ?? '', '', 40),
+            'card_text'  => $text($p['card_text'] ?? '', '', 120),
+        ];
+
+        return [
+            'is_active'        => $this->input('is_active') ? true : false,
+            'meta_title'       => $text($this->input('meta_title'), $defaults['meta_title'], 120),
+            'meta_description' => $text($this->input('meta_description'), $defaults['meta_description'], 300),
+            'colors'           => $colors,
+            'hero'             => $hero,
+            'steps'            => $steps,
+            'experiences'      => $experiences,
+            'collection'       => $collection,
+            'partners'         => $partners,
+            'footer_line'      => $text($this->input('footer_line'), '', 120),
+        ];
+    }
+
+    /** One file from $_FILES[$field], or $_FILES[$field][...][$index] for an array field. */
+    private function uploadedFile(string $field, ?int $index): ?array
+    {
+        $f = $_FILES[$field] ?? null;
+        if (!$f) return null;
+        if ($index === null) {
+            return (!is_array($f['error']) && $f['error'] === UPLOAD_ERR_OK) ? $f : null;
+        }
+        if (!is_array($f['error']) || ($f['error'][$index] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            return null;
+        }
+        return [
+            'name'     => $f['name'][$index],
+            'type'     => $f['type'][$index],
+            'tmp_name' => $f['tmp_name'][$index],
+            'error'    => $f['error'][$index],
+            'size'     => $f['size'][$index],
+        ];
+    }
+
     private function sectionContent(string $key): array
     {
         $stmt = Database::getInstance()->prepare('SELECT content_json FROM site_sections WHERE section_key = ? LIMIT 1');
@@ -634,6 +827,9 @@ class AdminDesignController extends BaseController
                     ['title' => 'You Receive & Smile',  'desc' => 'Track your order and get it delivered to your door.'],
                 ],
             ],
+            // Its own page (/dex), not a homepage section — so it is deliberately
+            // absent from saveLayout()'s homepage order.
+            'dex_landing' => dexLandingDefaults(),
             'newsletter' => [
                 'is_active'     => true,
                 'heading'       => 'Get 10% off your first customised gift 🎉',

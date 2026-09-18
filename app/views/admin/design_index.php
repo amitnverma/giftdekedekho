@@ -215,6 +215,7 @@ foreach (($categories ?? []) as $cat) {
         <span class="admin-tab" data-tab="newsletter">Newsletter</span>
         <span class="admin-tab" data-tab="footer">Footer &amp; Social</span>
         <span class="admin-tab" data-tab="about">About Us</span>
+        <span class="admin-tab" data-tab="dex">✨ DEx Landing</span>
         <span class="admin-tab" data-tab="layout">📐 Page Layout</span>
     </div>
 
@@ -1424,6 +1425,241 @@ foreach (($categories ?? []) as $cat) {
             })();
             </script>
         </div>
+    </div>
+
+    <!-- ============================================================
+         DEx LANDING — the separate /dex page, not a homepage section
+         ============================================================ -->
+    <?php
+    $dex = dexLandingContent();
+    $dexDef = dexLandingDefaults();
+    // Thumbnail + file input for one image slot; a new file replaces the current one on save.
+    $dexImage = function (string $field, string $label, string $current, string $hint = '') {
+        static $n = 0;
+        $id = 'dexPrev' . (++$n);
+        ?>
+        <div class="dex-admin-img">
+            <img id="<?= $id ?>" src="<?= $current !== '' ? e(asset($current)) : '' ?>" alt=""<?= $current === '' ? ' style="display:none"' : '' ?>>
+            <label><?= e($label) ?><?php if ($hint !== ''): ?> <span class="admin-label-hint"><?= e($hint) ?></span><?php endif; ?>
+                <input type="file" name="<?= e($field) ?>" accept="image/jpeg,image/png,image/webp,image/gif" data-image-preview="#<?= $id ?>">
+            </label>
+        </div>
+        <?php
+    };
+    $dexIn = fn(string $name, string $value, string $placeholder = ''): string =>
+        '<input type="text" name="' . e($name) . '" value="' . e($value) . '"' . ($placeholder !== '' ? ' placeholder="' . e($placeholder) . '"' : '') . '>';
+    ?>
+    <div class="admin-tab-pane" data-pane="dex">
+        <div class="admin-card">
+            <p style="margin:0 0 18px;color:#6b7280;font-size:14px">
+                The DEx — Digital Experience landing page at
+                <a href="<?= url('/dex') ?>" target="_blank" rel="noopener"><code>/dex</code> ↗</a>.
+                It is a page of its own, so it is not in the homepage Page Layout.
+                Every field starts with the Interactive Memories Catalogue's own text and images;
+                uploading a picture replaces only that one.
+                The header's partner sign-in and registration buttons are fixed and always shown.
+            </p>
+            <form method="post" action="<?= url('/admin/design/save') ?>" enctype="multipart/form-data" class="admin-form dex-admin">
+                <?= csrfField() ?>
+                <input type="hidden" name="section" value="dex_landing">
+
+                <label class="admin-checkbox">
+                    <input type="checkbox" name="is_active" value="1" <?= !empty($dex['is_active']) ? 'checked' : '' ?>>
+                    Publish the DEx landing page at /dex
+                </label>
+                <p style="font-size:12.5px;color:#6b7280;margin:-6px 0 12px 26px">When off, /dex shows “page not found” and the shop's “What is DEx?” links are hidden.</p>
+
+                <details class="dex-admin-group" open>
+                    <summary>Colours &amp; page details</summary>
+                    <div class="admin-form-row" style="align-items:stretch">
+                        <?php designColorPicker('colors[navy]', 'Navy', 'Headings, buttons, step badges, partner band', $dex['colors']['navy'], $dexDef['colors']['navy']); ?>
+                        <?php designColorPicker('colors[cream]', 'Cream background', 'Page background', $dex['colors']['cream'], $dexDef['colors']['cream']); ?>
+                    </div>
+                    <div class="admin-form-row" style="align-items:stretch">
+                        <?php designColorPicker('colors[gold]', 'Gold', 'Icons, rings, rules', $dex['colors']['gold'], $dexDef['colors']['gold']); ?>
+                        <?php designColorPicker('colors[ink]', 'Body text', 'Paragraph text', $dex['colors']['ink'], $dexDef['colors']['ink']); ?>
+                    </div>
+                    <div class="admin-form-row" style="align-items:stretch">
+                        <?php designColorPicker('colors[gold_dark]', 'Gold — dark end', 'Edges of the gold gradient', $dex['colors']['gold_dark'], $dexDef['colors']['gold_dark']); ?>
+                        <?php designColorPicker('colors[gold_light]', 'Gold — light shine', 'Middle of the gold gradient', $dex['colors']['gold_light'], $dexDef['colors']['gold_light']); ?>
+                    </div>
+                    <label>Browser tab title <span class="admin-label-hint">The site name is added after it</span>
+                        <?= $dexIn('meta_title', $dex['meta_title']) ?>
+                    </label>
+                    <label>Search description <span class="admin-label-hint">Shown by Google under the title</span>
+                        <textarea name="meta_description" rows="2"><?= e($dex['meta_description']) ?></textarea>
+                    </label>
+                </details>
+
+                <details class="dex-admin-group">
+                    <summary>1 · Hero — Interactive Memories Catalogue</summary>
+                    <div class="admin-form-row">
+                        <label>Small word above <?= $dexIn('hero[kicker]', $dex['hero']['kicker']) ?></label>
+                        <label>Gold word <?= $dexIn('hero[title_gold]', $dex['hero']['title_gold']) ?></label>
+                        <label>Navy word <?= $dexIn('hero[title]', $dex['hero']['title']) ?></label>
+                    </div>
+                    <label>Tagline <span class="admin-label-hint">Each sentence gets its own line on phones</span><?= $dexIn('hero[tagline]', $dex['hero']['tagline']) ?></label>
+                    <div class="admin-form-row">
+                        <?php foreach ($dex['hero']['verbs'] as $i => $verb): ?>
+                            <label>Icon word <?= $i + 1 ?> <?= $dexIn("hero[verbs][$i]", (string)$verb) ?></label>
+                        <?php endforeach; ?>
+                    </div>
+                    <div class="admin-form-row">
+                        <label>Handwritten line 1 <?= $dexIn('hero[script_1]', $dex['hero']['script_1']) ?></label>
+                        <label>Handwritten line 2 <?= $dexIn('hero[script_2]', $dex['hero']['script_2']) ?></label>
+                    </div>
+                    <div class="admin-form-row">
+                        <label>Main button <span class="admin-label-hint">Scrolls to the 3 steps</span><?= $dexIn('hero[cta_primary]', $dex['hero']['cta_primary']) ?></label>
+                        <label>Second button <span class="admin-label-hint">Scrolls to the live demo</span><?= $dexIn('hero[cta_demo]', $dex['hero']['cta_demo']) ?></label>
+                    </div>
+                    <?php $dexImage('dex_hero_image', 'Hero photo', $dex['hero']['image'], 'Landscape, about 5:4') ?>
+                    <p class="dex-admin-sub">Four promise tiles</p>
+                    <div class="admin-form-row">
+                        <?php foreach ($dex['hero']['promises'] as $i => $pr): ?>
+                            <div class="dex-admin-mini">
+                                <label>Title <?= $dexIn("hero[promises][$i][title]", (string)($pr['title'] ?? '')) ?></label>
+                                <label>Line below <?= $dexIn("hero[promises][$i][sub]", (string)($pr['sub'] ?? '')) ?></label>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                    <label>Line under the tiles <?= $dexIn('hero[bottom_line]', $dex['hero']['bottom_line']) ?></label>
+                </details>
+
+                <details class="dex-admin-group">
+                    <summary>2 · 3 Easy Steps</summary>
+                    <div class="admin-form-row">
+                        <label>Handwritten line <?= $dexIn('steps[script]', $dex['steps']['script']) ?></label>
+                        <label>Heading <?= $dexIn('steps[title]', $dex['steps']['title']) ?></label>
+                        <label>Big word <?= $dexIn('steps[title_big]', $dex['steps']['title_big']) ?></label>
+                    </div>
+                    <div class="admin-form-row">
+                        <label>Gold banner <?= $dexIn('steps[banner]', $dex['steps']['banner']) ?></label>
+                        <label>Line under the banner <?= $dexIn('steps[subline]', $dex['steps']['subline']) ?></label>
+                    </div>
+                    <div class="dex-admin-cards">
+                        <?php foreach ($dex['steps']['items'] as $i => $st): ?>
+                            <div class="dex-admin-card">
+                                <p class="dex-admin-sub">Step <?= sprintf('%02d', $i + 1) ?></p>
+                                <label>Title <?= $dexIn("steps[items][$i][title]", (string)($st['title'] ?? '')) ?></label>
+                                <label>Text <?= $dexIn("steps[items][$i][desc]", (string)($st['desc'] ?? '')) ?></label>
+                                <?php $dexImage("dex_step_image[$i]", 'Photo', (string)($st['image'] ?? '')) ?>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                    <p class="dex-admin-sub">Navy bar</p>
+                    <div class="admin-form-row">
+                        <?php foreach ($dex['steps']['benefits'] as $i => $b): ?>
+                            <label>Item <?= $i + 1 ?> <?= $dexIn("steps[benefits][$i]", (string)$b) ?></label>
+                        <?php endforeach; ?>
+                    </div>
+                </details>
+
+                <details class="dex-admin-group">
+                    <summary>3 · Experiences &amp; live demo QR</summary>
+                    <div class="admin-form-row">
+                        <label>Small label <?= $dexIn('experiences[eyebrow]', $dex['experiences']['eyebrow']) ?></label>
+                        <label>Heading <?= $dexIn('experiences[heading]', $dex['experiences']['heading']) ?></label>
+                    </div>
+                    <?php $dexImage('dex_main_image', 'Large framed photo', $dex['experiences']['main_image'], 'The photo the demo QR is pointed at') ?>
+                    <div class="dex-admin-cards">
+                        <?php foreach ($dex['experiences']['gallery'] as $i => $g): ?>
+                            <div class="dex-admin-card"><?php $dexImage("dex_gallery_image[$i]", 'Row photo ' . ($i + 1), (string)$g) ?></div>
+                        <?php endforeach; ?>
+                    </div>
+                    <p class="dex-admin-sub">“Try it live” card</p>
+                    <div class="admin-form-row">
+                        <label>Small label <?= $dexIn('experiences[try_eyebrow]', $dex['experiences']['try_eyebrow']) ?></label>
+                        <label>Heading <?= $dexIn('experiences[try_heading]', $dex['experiences']['try_heading']) ?></label>
+                    </div>
+                    <?php $dexImage('dex_qr_image', 'QR code image', $dex['experiences']['qr_image'], 'Must open the frame named below — upload the sticker QR from AR Frames') ?>
+                    <label>Demo frame code <span class="admin-label-hint">Tapping the QR opens /scan/<em>code</em>. Leave blank to make the QR a plain picture.</span>
+                        <?= $dexIn('experiences[demo_code]', $dex['experiences']['demo_code'], 'gdd-xxxxxx') ?>
+                    </label>
+                    <div class="admin-form-row">
+                        <label>Under the QR <?= $dexIn('experiences[scan_label]', $dex['experiences']['scan_label']) ?></label>
+                        <label>Second line <?= $dexIn('experiences[scan_then]', $dex['experiences']['scan_then']) ?></label>
+                    </div>
+                    <label>Help text <?= $dexIn('experiences[try_hint]', $dex['experiences']['try_hint']) ?></label>
+                </details>
+
+                <details class="dex-admin-group">
+                    <summary>4 · Our Collection (<?= count($dex['collection']['products']) ?> products)</summary>
+                    <div class="admin-form-row">
+                        <label>Small label <?= $dexIn('collection[eyebrow]', $dex['collection']['eyebrow']) ?></label>
+                        <label>Heading <?= $dexIn('collection[heading]', $dex['collection']['heading']) ?></label>
+                    </div>
+                    <p style="font-size:13px;color:#6b7280;margin:0 0 12px">Portrait photos (4:5) fill the tiles best. Writing “1st”, “2nd” … puts the letters in superscript. To add a product, fill an empty slot at the end — it needs a photo.</p>
+                    <div class="dex-admin-cards">
+                        <?php
+                        $dexProducts = $dex['collection']['products'];
+                        $dexSlots = count($dexProducts) + 3;
+                        for ($i = 0; $i < $dexSlots; $i++):
+                            $pr = $dexProducts[$i] ?? null;
+                        ?>
+                            <div class="dex-admin-card<?= $pr ? '' : ' is-new' ?>">
+                                <p class="dex-admin-sub"><?= $pr ? 'Product ' . ($i + 1) : '+ New product' ?></p>
+                                <?php $dexImage("dex_product_image[$i]", 'Photo', (string)($pr['image'] ?? '')) ?>
+                                <label>Name <?= $dexIn("dex_product_label[$i]", (string)($pr['label'] ?? '')) ?></label>
+                                <?php if ($pr): ?>
+                                    <label class="admin-checkbox dex-admin-remove"><input type="checkbox" name="dex_product_remove[<?= $i ?>]" value="1"> Remove</label>
+                                <?php endif; ?>
+                            </div>
+                        <?php endfor; ?>
+                    </div>
+                </details>
+
+                <details class="dex-admin-group">
+                    <summary>5 · Become a partner &amp; footer</summary>
+                    <label>Heading <?= $dexIn('partners[heading]', $dex['partners']['heading']) ?></label>
+                    <label>Text <textarea name="partners[text]" rows="2"><?= e($dex['partners']['text']) ?></textarea></label>
+                    <div class="dex-admin-cards">
+                        <?php foreach ($dex['partners']['points'] as $i => $pt): ?>
+                            <div class="dex-admin-card">
+                                <p class="dex-admin-sub">Point <?= $i + 1 ?></p>
+                                <label>Title <?= $dexIn("partners[points][$i][title]", (string)($pt['title'] ?? '')) ?></label>
+                                <label>Text <textarea name="partners[points][<?= $i ?>][desc]" rows="2"><?= e((string)($pt['desc'] ?? '')) ?></textarea></label>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                    <div class="admin-form-row">
+                        <label>Sign-up card heading <?= $dexIn('partners[card_title]', $dex['partners']['card_title']) ?></label>
+                        <label>Sign-up card text <?= $dexIn('partners[card_text]', $dex['partners']['card_text']) ?></label>
+                    </div>
+                    <label>Footer line under the logo <?= $dexIn('footer_line', $dex['footer_line']) ?></label>
+                </details>
+
+                <p style="font-size:12.5px;color:#6b7280;margin:14px 0">Leaving a text field empty hides that line on the page, except the main headings, which fall back to the catalogue wording.</p>
+                <button type="submit" class="admin-btn admin-btn-primary">Save DEx Landing Page</button>
+            </form>
+
+            <form method="post" action="<?= url('/admin/design/save') ?>" class="dex-admin-reset"
+                  onsubmit="return confirm('Restore every DEx landing field and image to the original catalogue? Your edits on this tab will be lost.');">
+                <?= csrfField() ?>
+                <input type="hidden" name="section" value="dex_landing_reset">
+                <button type="submit" class="admin-btn">↺ Restore original catalogue content</button>
+            </form>
+        </div>
+        <style>
+        .dex-admin-group { border: 1px solid #e5e7eb; border-radius: 12px; margin: 14px 0; background: #fff; }
+        .dex-admin-group > summary { cursor: pointer; padding: 14px 18px; font-weight: 700; font-size: 15px; list-style: none; display: flex; justify-content: space-between; }
+        .dex-admin-group > summary::after { content: '▾'; color: #9ca3af; transition: transform .15s; }
+        .dex-admin-group[open] > summary::after { transform: rotate(180deg); }
+        .dex-admin-group[open] > summary { border-bottom: 1px solid #f0f1f3; }
+        .dex-admin-group > :not(summary) { margin-left: 18px; margin-right: 18px; }
+        .dex-admin-group > :last-child { margin-bottom: 18px; }
+        .dex-admin-group > summary + * { margin-top: 16px; }
+        .dex-admin-sub { font-weight: 600; font-size: 13px; color: #374151; margin: 14px 0 8px; }
+        .dex-admin-mini { display: flex; flex-direction: column; min-width: 160px !important; }
+        .dex-admin-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin-bottom: 14px; }
+        .dex-admin-card { border: 1px solid #eef0f3; background: #fafbfc; border-radius: 10px; padding: 12px; }
+        .dex-admin-card .dex-admin-sub { margin-top: 0; }
+        .dex-admin-card.is-new { border-style: dashed; background: #fff; }
+        .dex-admin-img { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 12px; }
+        .dex-admin-img img { width: 84px; height: 84px; object-fit: cover; border-radius: 8px; border: 1px solid #e5e7eb; background: #f3f4f6; flex: none; }
+        .dex-admin-img label { flex: 1; min-width: 0; }
+        .dex-admin-remove { color: #b91c1c; font-size: 13px; }
+        .dex-admin-reset { margin-top: 18px; padding-top: 16px; border-top: 1px dashed #e5e7eb; }
+        </style>
     </div>
 
     <!-- ============================================================

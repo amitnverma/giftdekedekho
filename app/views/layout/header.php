@@ -235,6 +235,9 @@ function gddNavActive(string $href, string $current): string {
                 <?php if (!$__partnerOn): ?>
                   <p class="gdd-acct-seller-new">New to DEx? <a href="<?= url('/partner/register') ?>">Become a DEx partner</a></p>
                 <?php endif; ?>
+                <?php if (!empty(dexLandingContent()['is_active'])): ?>
+                    <a href="<?= url('/dex') ?>" class="gdd-acct-dex-about">What is DEx? →</a>
+                <?php endif; ?>
               </div>
             </div>
           </div>
@@ -420,6 +423,9 @@ foreach ($__navCats as $__nc) { $__catLookup[$__nc['slug']] = $__nc; }
     <a href="<?= url('/partner/login') ?>">✨ <?= !empty($_SESSION['partner_auth']['partner_id']) ? 'Open DEx Studio' : 'DEx Studio — partner sign in' ?></a>
     <?php if (empty($_SESSION['partner_auth']['partner_id'])): ?>
       <a href="<?= url('/partner/register') ?>">🤝 Become a DEx partner</a>
+    <?php endif; ?>
+    <?php if (!empty(dexLandingContent()['is_active'])): ?>
+      <a href="<?= url('/dex') ?>">🎞 What is DEx?</a>
     <?php endif; ?>
   </div>
 </div>

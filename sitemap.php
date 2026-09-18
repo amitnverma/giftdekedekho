@@ -13,6 +13,9 @@ $urls = [];
 $urls[] = ['loc' => $baseUrl . '/', 'changefreq' => 'daily', 'priority' => '1.0'];
 $urls[] = ['loc' => $baseUrl . '/contact', 'changefreq' => 'monthly', 'priority' => '0.4'];
 $urls[] = ['loc' => $baseUrl . '/about', 'changefreq' => 'monthly', 'priority' => '0.4'];
+if (!empty(dexLandingContent()['is_active'])) {
+    $urls[] = ['loc' => $baseUrl . '/dex', 'changefreq' => 'monthly', 'priority' => '0.6'];
+}
 
 foreach ($db->query('SELECT slug FROM categories WHERE is_active = 1')->fetchAll() as $cat) {
     $urls[] = ['loc' => $baseUrl . '/category/' . $cat['slug'], 'changefreq' => 'weekly', 'priority' => '0.7'];

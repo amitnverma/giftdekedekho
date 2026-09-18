@@ -39,6 +39,26 @@ class PageController extends BaseController
         ]);
     }
 
+    /**
+     * DEx (Digital Experience) landing page — /dex. A standalone page in the
+     * DEx catalogue's own cream, navy and gold, so it skips the shop layout.
+     * Content comes from Admin → Design Editor → DEx Landing.
+     */
+    public function dex(): void
+    {
+        $dex = dexLandingContent();
+        if (empty($dex['is_active'])) {
+            $this->notFound();
+            return;
+        }
+        renderRaw('store/dex_landing', [
+            'dex'        => $dex,
+            'siteName'   => siteSetting('site_name', SITE_NAME),
+            'partnerOn'  => !empty($_SESSION['partner_auth']['partner_id']),
+            'customerOn' => isLoggedIn(),
+        ]);
+    }
+
     public function about(): void
     {
         $settings = new Settings();

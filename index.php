@@ -203,6 +203,14 @@ try {
             (new PageController())->about();
             break;
 
+        case $path === '/dex':
+            (new PageController())->dex();
+            break;
+
+        case $path === '/digital-experience':
+            redirect('/dex');
+            break;
+
         case preg_match('#^/api/#', $path) === 1:
             http_response_code(404);
             jsonResponse(['error' => 'Not found']);

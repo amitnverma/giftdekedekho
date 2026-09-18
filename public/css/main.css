@@ -1051,6 +1051,8 @@ table.data-table th, table.data-table td { padding: 12px 14px; border-bottom: 1p
 .gdd-acct-seller small { margin-top:10px; font-size:11.5px; color:var(--color-muted); line-height:1.4; }
 .gdd-acct-seller-new { margin:12px 0 0; padding-top:10px; border-top:1px dashed var(--color-border); width:100%; font-size:13px; color:var(--color-muted); }
 .gdd-acct-seller-new a { color:var(--color-accent); font-weight:700; text-decoration:underline; text-underline-offset:2px; }
+.gdd-acct-col a.gdd-acct-dex-about { margin-top:10px; padding:0; font-size:12.5px; font-weight:600; color:#8a5a18; }
+.gdd-acct-col a.gdd-acct-dex-about:hover { background:none; text-decoration:underline; text-underline-offset:2px; }
 
 @media (max-width: 880px){
   .gdd-acct-text, .gdd-acct-caret { display:none; }

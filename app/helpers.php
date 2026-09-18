@@ -285,6 +285,135 @@ function sectionStyleDefaults(): array
 }
 
 /**
+ * Factory content of the DEx landing page (/dex): the copy, images and colours
+ * of the Interactive Memories Catalogue PDF. Admin → Design Editor → DEx Landing
+ * saves over this as the `dex_landing` site section; images here are the
+ * originals in /images/dex, uploads replace them with /public/uploads paths.
+ */
+function dexLandingDefaults(): array
+{
+    $img = fn(string $f): string => '/images/dex/' . $f;
+    return [
+        'is_active'         => true,
+        'meta_title'        => 'DEx · Digital Experience — Interactive Memories Catalogue',
+        'meta_description'  => 'DEx turns printed photos, frames, albums and cards into living memories. Scan. Connect. Watch. Relive. Real Moments. Digital Magic. Forever Yours.',
+        'colors' => [
+            'navy'       => '#0b2234',
+            'gold'       => '#b8862f',
+            'gold_dark'  => '#7a4e14',
+            'gold_light' => '#e2bf6c',
+            'cream'      => '#f9f4e9',
+            'ink'        => '#152233',
+        ],
+        'hero' => [
+            'kicker'      => 'Interactive',
+            'title_gold'  => 'Memories',
+            'title'       => 'Catalogue',
+            'tagline'     => 'Real Moments. Digital Magic. Forever Yours.',
+            'verbs'       => ['Scan', 'Connect', 'Watch', 'Relive'],
+            'script_1'    => 'More Than Photos',
+            'script_2'    => 'Living Memories',
+            'cta_primary' => 'See how it works',
+            'cta_demo'    => 'Try the live demo',
+            'image'       => $img('hero-scene.webp'),
+            'promises'    => [
+                ['title' => 'Personalised', 'sub' => 'For every stage'],
+                ['title' => 'Premium',      'sub' => 'Quality'],
+                ['title' => 'Lifetime',     'sub' => 'Emotions'],
+                ['title' => 'Perfect',      'sub' => 'For all ages'],
+            ],
+            'bottom_line' => 'Memories that live beyond time',
+        ],
+        'steps' => [
+            'script'     => '3 Easy Steps to',
+            'title'      => 'Experience your',
+            'title_big'  => 'Memories',
+            'banner'     => 'Personalisation',
+            'subline'    => 'Scan. Connect. Watch. Relive.',
+            'items'      => [
+                ['title' => 'Scan',       'desc' => 'Scan the QR code on your frame.',  'image' => $img('step-1.webp')],
+                ['title' => 'Connect',    'desc' => 'Open the link on your phone.',     'image' => $img('step-2.webp')],
+                ['title' => 'Experience', 'desc' => 'Watch your memories come alive.',  'image' => $img('step-3.webp')],
+            ],
+            'benefits'   => ['Scan instantly', 'One-tap access', 'Watch your moments', 'Relive memories'],
+        ],
+        'experiences' => [
+            'eyebrow'     => 'See it in action',
+            'heading'     => 'Unlocks Multi-Dimensional Experiences',
+            'main_image'  => $img('frame-bride.webp'),
+            'gallery'     => [$img('frame-graduation.webp'), $img('frame-roadtrip.webp'), $img('album-ar.webp')],
+            'try_eyebrow' => 'Try it live',
+            'try_heading' => 'See this photo come alive',
+            'qr_image'    => $img('demo-qr.png'),
+            'demo_code'   => 'gdd-zh2gdv',
+            'scan_label'  => 'Scan me',
+            'scan_then'   => 'then point your camera at the photo',
+            'try_hint'    => "Scan the code with your phone, then hold it over the bride's photo on this screen.",
+        ],
+        'collection' => [
+            'eyebrow'  => 'Turn the page to explore',
+            'heading'  => 'Our Collection',
+            'products' => [
+                ['label' => 'Baby Frame',             'image' => $img('product-baby-frame.webp')],
+                ['label' => 'Car Hanger',             'image' => $img('product-car-hanger.webp')],
+                ['label' => 'Wallet Card',            'image' => $img('product-wallet-card.webp')],
+                ['label' => 'Photo Box',              'image' => $img('product-photo-box.webp')],
+                ['label' => 'Spotify Standee',        'image' => $img('product-spotify-standee.webp')],
+                ['label' => 'My Baby 1st Album',      'image' => $img('product-baby-first-album.webp')],
+                ['label' => 'Advertisement Pamphlet', 'image' => $img('product-advertisement-pamphlet.webp')],
+                ['label' => 'Personalised God Frame', 'image' => $img('product-god-frame.webp')],
+                ['label' => 'Visiting Card',          'image' => $img('product-visiting-card.webp')],
+            ],
+        ],
+        'partners' => [
+            'heading'    => 'Become a DEx partner',
+            'text'       => 'Sell Living Photo DEx to your own customers, from your own branded DEx Studio.',
+            'points'     => [
+                ['title' => 'Your own branded studio',  'desc' => 'Your logo and colours on every page your customers see.'],
+                ['title' => 'Create DEx experiences',   'desc' => 'Link photos and videos to frames, albums, cards and print.'],
+                ['title' => 'Start with a credit pack', 'desc' => 'Pick a pack when you register; we activate your account.'],
+            ],
+            'card_title' => 'Get started',
+            'card_text'  => 'Register your business in a couple of minutes.',
+        ],
+        'footer_line' => 'Real Moments. Digital Magic. Forever Yours.',
+    ];
+}
+
+/**
+ * The DEx landing page content as saved in the Design Editor, laid over the
+ * defaults so a key the form never saved still has its catalogue value.
+ */
+function dexLandingContent(): array
+{
+    static $content = null;
+    if ($content !== null) {
+        return $content;
+    }
+    $saved = [];
+    try {
+        $stmt = Database::getInstance()->prepare('SELECT content_json FROM site_sections WHERE section_key = ? LIMIT 1');
+        $stmt->execute(['dex_landing']);
+        $row = $stmt->fetch();
+        $saved = $row ? (json_decode($row['content_json'], true) ?: []) : [];
+    } catch (Throwable $e) {
+        error_log('dex_landing load failed: ' . $e->getMessage());
+    }
+    // Groups merge one level deep; lists (products, steps …) replace wholesale.
+    $content = dexLandingDefaults();
+    foreach ($saved as $key => $value) {
+        $isGroup = isset($content[$key]) && is_array($content[$key])
+            && array_keys($content[$key]) !== range(0, count($content[$key]) - 1);
+        if (is_array($value) && $isGroup) {
+            $content[$key] = array_replace($content[$key], $value);
+        } else {
+            $content[$key] = $value;
+        }
+    }
+    return $content;
+}
+
+/**
  * Builds an inline style attribute string from a style array,
  * applying only the keys that have been customised.
  */
