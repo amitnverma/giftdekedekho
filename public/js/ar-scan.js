@@ -80,17 +80,31 @@ const WARMUP_CAREFUL = 3;
 const MISS_TOLERANCE = 12;
 
 /**
- * Pages with several photos make the video follow the photo: moving the camera
- * off a photo hides its video, and pointing at another plays that one, with
- * nothing to close in between.
+ * Taking the camera off a photo stops that photo's video, in every playback
+ * mode. Pointing at it again picks it straight back up, with no button to
+ * press in between — the scanner goes back to looking for a photo the moment
+ * the video is gone.
+ *
+ * Full-screen playback used to be the exception on a single-photo frame: it
+ * deliberately kept playing after the target was lost, on the theory that
+ * people lower the phone once the video starts. In practice that left the
+ * scanner wedged — the match was still "current", so coming back to the photo
+ * fired a found event that was ignored, and the only way out was the close
+ * button. Stopping on lost is both what people expect and what makes the next
+ * scan work.
  *
  * MindAR only reports "lost" after MISS_TOLERANCE missed frames, so a wobble is
  * already absorbed there. The grace period on top is for the camera briefly
  * sliding off the edge of the print; coming back within it carries on as if
- * the video never left. The fade is short enough that a switch between two
- * photos reads as one movement rather than two separate events.
+ * the video never left.
+ *
+ * Follow mode keeps the short grace: there, "lost" usually means the camera is
+ * on its way to another photo, and the fade has to read as one movement rather
+ * than two events. Full-screen playback gets a longer one, because the phone is
+ * showing a video rather than a viewfinder and the hand drifts accordingly.
  */
 const LOST_GRACE_MS = 300;
+const FULLSCREEN_LOST_GRACE_MS = 1200;
 const LEAVE_FADE_MS = 220;
 
 /**
@@ -787,6 +801,15 @@ export function initScanner(config) {
       video.addEventListener('error', showVideoError, { once: true });
     }
 
+    // A video that was stopped at the length its partner paid for would
+    // otherwise "resume" there and be paused again by the first timeupdate —
+    // a still frame where the recipient asked for a replay. Same for one that
+    // simply ran to the end, which play() rewinds on its own.
+    const limit = active && active.maxSeconds;
+    if (limit && video.readyState >= 1 && video.currentTime >= limit - 0.05) {
+      video.currentTime = 0;
+    }
+
     video.muted = false;
     const attempt = video.play();
     if (attempt && typeof attempt.catch === 'function') {
@@ -912,10 +935,11 @@ export function initScanner(config) {
     els.status.style.display = 'none';
     if (els.frame) els.frame.classList.add('is-visible');
     if (els.next && config.showProgress) els.next.hidden = false;
-    // The camera is hidden behind the player now, so the torch is only heat and
-    // battery. Overlay playback and follow mode deliberately keep it: both are
-    // still tracking the photo and need the light it was turned on for.
-    if (torchOn && !followPhoto) setTorch(false);
+    // The torch stays on through playback. It used to be switched off here,
+    // since the camera is hidden behind the player — but every mode now goes
+    // back to scanning as soon as the photo is lost, and someone who turned the
+    // light on did so because the room needed it. Killing it after each video
+    // would leave them unable to match the same photo again.
 
     // Vimeo, uploaded files and direct links all start on their own the moment
     // the photo is recognised — no tap. YouTube is the exception: it refuses to
@@ -985,6 +1009,25 @@ export function initScanner(config) {
       active = null;
       startHints();
     }, LEAVE_FADE_MS);
+  }
+
+  /**
+   * The camera came back to the photo while its video was still on screen.
+   *
+   * Nothing to do in the usual case — the video never stopped, only the player
+   * began to fade. A video that ran out (or hit the length its partner paid
+   * for) during those few hundred milliseconds is the exception: leaving it
+   * frozen on its last frame would look exactly like the bug this grace period
+   * is part of fixing, so it starts again.
+   */
+  function replayIfFinished() {
+    if (!currentVideo || currentVideo.style.display === 'none') return;
+    const limit = active && active.maxSeconds;
+    const finished = currentVideo.ended
+      || (limit && currentVideo.currentTime >= limit - 0.05);
+    if (!finished) return;
+    if (currentVideo.readyState >= 1) currentVideo.currentTime = 0;
+    currentVideo.play().catch(() => {});
   }
 
   /** Keep a video that was on its way out. */
@@ -1171,6 +1214,7 @@ export function initScanner(config) {
           // the camera had never left it.
           if (active === target && (hideTimer || leaveTimer)) {
             cancelDismiss();
+            replayIfFinished();
             return;
           }
 
@@ -1232,17 +1276,28 @@ export function initScanner(config) {
         anchor.onTargetLost = () => {
           debug.targetLostCount++;
           renderDebug();
-          if (useOverlay && active === target) {
+          // Another photo's anchor, or one whose video was never playing.
+          if (active !== target || !hasMatched) return;
+
+          if (useOverlay) {
+            // The video is painted onto the photo itself, so there is nothing
+            // left to watch the moment the photo leaves the picture: stop at
+            // once rather than run a fade over a plane that is no longer drawn.
             currentVideo.pause();
             hasMatched = false;
             active = null;
             startHints();
-          } else if (followPhoto && hasMatched && active === target && !hideTimer && !leaveTimer) {
-            hideTimer = setTimeout(dismissPlayer, LOST_GRACE_MS);
+            return;
           }
-          // On a single-photo frame full-screen playback deliberately survives
-          // losing the target — there is nothing else to point at, and people
-          // lower the phone once the video starts.
+
+          // Full-screen and follow mode both fade out after their grace period
+          // — see dismissPlayer, which stops the video, puts the viewfinder
+          // back and leaves the scanner ready for the next photo.
+          if (hideTimer || leaveTimer) return;
+          hideTimer = setTimeout(
+            dismissPlayer,
+            followPhoto ? LOST_GRACE_MS : FULLSCREEN_LOST_GRACE_MS
+          );
         };
       });
 
