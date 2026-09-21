@@ -108,6 +108,13 @@ const FULLSCREEN_LOST_GRACE_MS = 1200;
 const LEAVE_FADE_MS = 220;
 
 /**
+ * How often to check that the camera is still delivering frames — see
+ * watchCameraFeed(). Often enough that a stalled tracker is nudged back to life
+ * inside the pause a recipient would notice, rare enough to cost nothing.
+ */
+const CAMERA_WATCHDOG_MS = 700;
+
+/**
  * How many videos to start downloading before anything has matched.
  *
  * The file used to be fetched from inside onTargetFound, which put a
@@ -169,6 +176,11 @@ export function initScanner(config) {
   // until the camera starts, and stays null where there is no torch to offer.
   let torchTrack = null;
   let torchOn = false;
+  // See watchCameraFeed(). cameraLastTime is the feed's clock at the previous
+  // check: a value that has not moved means the tracker is being handed the
+  // same frame over and over, or none at all.
+  let cameraWatchdog = null;
+  let cameraLastTime = -1;
   // One <video> per photo, created and pointed at its file before anything has
   // matched — see PRELOAD_MAX. Keyed by target index. Giving each photo its own
   // element (rather than reassigning one element's .src) is what lets the files
@@ -234,6 +246,9 @@ export function initScanner(config) {
     targetBundlePrefetched: null,
     torchAvailable: false,
     torchOn: false,
+    // Times the camera feed was found stalled while a video played over it —
+    // the state in which no photo can be recognised or reported lost.
+    cameraStalls: 0,
   };
   window.__arDebug = debug;
 
@@ -384,6 +399,47 @@ export function initScanner(config) {
         torchTrack = null;
         els.torch.style.display = 'none';
       });
+  }
+
+  // ------------------------------------------------------------ camera health
+
+  /**
+   * Keep the camera feed alive while a video plays over it.
+   *
+   * MindAR reads its frames from a <video> element holding the camera stream.
+   * iOS pauses other media when a new element takes the audio session — and an
+   * unmuted gift video starting full-screen is exactly that. When it happens
+   * the tracker goes blind: no frames, so the photo is never reported lost, so
+   * the video plays on and pointing the camera back at the photo does nothing.
+   * Closing the player by hand is what frees the audio session again, which is
+   * why the first video of a visit could wedge the scanner while every scan
+   * after it behaved.
+   *
+   * Nothing here ever takes a video away from the recipient — a stalled feed is
+   * only nudged back into life. Whether it has stalled is measured rather than
+   * assumed: paused is one way, a frozen clock with no error is another, and a
+   * feed that is simply running is left alone.
+   */
+  function watchCameraFeed() {
+    if (cameraWatchdog) return;
+    const feed = mindarThree && mindarThree.video;
+    cameraLastTime = feed ? feed.currentTime : -1;
+
+    cameraWatchdog = setInterval(() => {
+      const el = mindarThree && mindarThree.video;
+      if (!el) return;
+
+      const moving = el.currentTime !== cameraLastTime;
+      cameraLastTime = el.currentTime;
+      if (moving && !el.paused) return;
+
+      debug.cameraStalls++;
+      renderDebug();
+      if (el.paused) {
+        const attempt = el.play();
+        if (attempt && typeof attempt.catch === 'function') attempt.catch(() => {});
+      }
+    }, CAMERA_WATCHDOG_MS);
   }
 
   // ------------------------------------------------------------------ preload
@@ -1218,6 +1274,15 @@ export function initScanner(config) {
             return;
           }
 
+          // State and screen disagree: this photo counts as the current match,
+          // but its player is not on screen. Whatever got them out of step —
+          // a stalled feed, a teardown that raced a match — ignoring the event
+          // is what used to leave the close button as the only way forward.
+          // Treat it as a fresh match instead.
+          if (hasMatched && !useOverlay && els.player.style.display === 'none') {
+            hasMatched = false;
+          }
+
           if (hasMatched) {
             // Ignore a second target firing while a video is already playing —
             // unless the video follows the photo, where the camera arriving on
@@ -1319,8 +1384,9 @@ export function initScanner(config) {
       debug.containerSize = els.container.clientWidth + 'x' + els.container.clientHeight;
       renderDebug();
 
-      // Needs the running stream, so it cannot happen before start().
+      // Both need the running stream, so neither can happen before start().
       setupTorch();
+      watchCameraFeed();
       startHints();
       updateProgress();
     } catch (err) {
