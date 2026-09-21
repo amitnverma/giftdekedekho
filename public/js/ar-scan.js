@@ -249,6 +249,10 @@ export function initScanner(config) {
     // Times the camera feed was found stalled while a video played over it —
     // the state in which no photo can be recognised or reported lost.
     cameraStalls: 0,
+    // Times a video was found playing without being visible — see
+    // repairHiddenPlayback(). Non-zero means a recipient heard their video
+    // over an empty frame, even if only for a moment.
+    playbackRepairs: 0,
   };
   window.__arDebug = debug;
 
@@ -420,12 +424,83 @@ export function initScanner(config) {
    * assumed: paused is one way, a frozen clock with no error is another, and a
    * feed that is simply running is left alone.
    */
+  /**
+   * Catch a video that is playing without being seen.
+   *
+   * The <video> is hidden by the stylesheet and shown by the module, and it
+   * keeps playing its sound either way — so anything that leaves the element
+   * hidden, or its frame unrevealed, while playback runs gives the recipient a
+   * black picture frame with their video's audio coming out of it. iOS reaches
+   * the same screen by itself: showing and hiding a playing element repeatedly,
+   * which is what moving back and forth across the photo does, can cost it the
+   * decoder — which reports as a playing video with no dimensions at all.
+   *
+   * Everything here repairs what should already be true, so a healthy player is
+   * left untouched. The dimension nudge is spent once per playback: a seek to
+   * where the video already is forces a frame to be decoded again, and if that
+   * does not bring the picture back, repeating it every second would only stop
+   * the sound too.
+   */
+  function repairHiddenPlayback() {
+    const video = currentVideo;
+    // Overlay playback hides the element on purpose (it is drawn as a texture)
+    // and never opens the player, so this leaves it alone.
+    if (!video || video.paused || els.player.style.display !== 'flex') return;
+    if (active && active.videoType !== 'upload' && active.videoType !== 'direct') return;
+
+    if (video.style.display !== 'block') {
+      video.style.display = 'block';
+      debug.playbackRepairs++;
+    }
+    // Only ever revealed around a video that has a picture to put in it. The
+    // frame is sized by its contents, so revealing it over an element with no
+    // dimensions is what draws the collapsed gold box with the soundtrack
+    // still running — the screen this whole function exists to prevent. While
+    // there is nothing to show, the spinner stays up and the steps below work
+    // on getting the picture back.
+    if (els.frame && !els.frame.classList.contains('is-ready')
+        && video.videoWidth && video.videoHeight) {
+      fitFrameToVideo(video);
+      revealFrame();
+      debug.playbackRepairs++;
+    }
+    if (!video.videoWidth && video.readyState >= 2 && !video.__arNudged) {
+      video.__arNudged = true;
+      debug.playbackRepairs++;
+      // eslint-disable-next-line no-self-assign
+      video.currentTime = video.currentTime;
+    } else if (!video.videoWidth && video.__arNudged && !video.__arReloaded) {
+      // The nudge did not bring it back, so the element has lost its decoder
+      // for good and only a reload will hand it another. That costs the
+      // recipient the seconds they had already watched — a real cost, and
+      // still better than the video they can hear and cannot see. Once.
+      video.__arReloaded = true;
+      debug.playbackRepairs++;
+      if (els.loading) els.loading.classList.add('is-on');
+      video.load();
+      const attempt = video.play();
+      if (attempt && typeof attempt.catch === 'function') attempt.catch(() => {});
+    } else if (!video.videoWidth && video.__arReloaded
+               && els.frame && !els.frame.classList.contains('is-ready')) {
+      // A reloaded element that still reports no picture has none to give —
+      // an upload with no video track would land here. Show the frame rather
+      // than spin for ever; the sound is what is left of the gift.
+      revealFrame();
+    }
+    renderDebug();
+  }
+
   function watchCameraFeed() {
     if (cameraWatchdog) return;
     const feed = mindarThree && mindarThree.video;
     cameraLastTime = feed ? feed.currentTime : -1;
 
     cameraWatchdog = setInterval(() => {
+      // A stalled camera and a video playing unseen are different failures with
+      // the same symptom — the recipient stuck looking at the wrong thing — and
+      // both are cheap enough to check on one timer.
+      repairHiddenPlayback();
+
       const el = mindarThree && mindarThree.video;
       if (!el) return;
 
@@ -809,6 +884,18 @@ export function initScanner(config) {
   }
 
   /**
+   * Is this element the one the recipient is looking at right now?
+   *
+   * Everything about playback is asynchronous — a play() promise, a metadata
+   * event, a failed load — and any of them can land after the camera has moved
+   * on and the player has been torn down. Acting on a stale one is how a closed
+   * player reopened as an empty frame, so each of them asks this first.
+   */
+  function isOnScreen(video) {
+    return video === currentVideo && els.player.style.display === 'flex';
+  }
+
+  /**
    * Show the frame. Held back until the video inside it has a size, because the
    * frame is sized by its contents — see the two-state CSS.
    */
@@ -840,21 +927,44 @@ export function initScanner(config) {
   function playUploadedVideo() {
     const video = currentVideo;
     video.style.display = 'block';
+    // This playback gets its own decoder nudge, and its own reload, if it
+    // needs them — see repairHiddenPlayback().
+    video.__arNudged = false;
+    video.__arReloaded = false;
 
-    // HAVE_METADATA or better: dimensions are known, so nothing to wait for.
-    // With the file preloaded this is now the usual case rather than the
-    // exception — which is the whole point: no spinner, no empty frame, just
-    // the video.
-    if (video.readyState >= 1) {
+    // The dimensions themselves, not readyState. An element goes on reporting
+    // HAVE_METADATA for the rest of its life once it has read the file's
+    // headers — including after a phone has taken its picture away — so
+    // revealing on that drew the gold frame collapsed around nothing while the
+    // sound played on. With the file preloaded the size is already there,
+    // which is the whole point: no spinner, no empty frame, just the video.
+    if (video.videoWidth && video.videoHeight) {
       fitFrameToVideo(video);
       revealFrame();
     } else {
       if (els.loading) els.loading.classList.add('is-on');
-      video.addEventListener('loadedmetadata', () => {
+      // Both are checked when they fire, not when they are attached. A photo
+      // the camera left in the meantime has already torn the player down, and
+      // reviving its frame — or its error — over whatever is on screen now is
+      // how a closed player came back as an empty box.
+      const onSized = () => {
+        if (!isOnScreen(video)) return;
+        // Metadata can arrive before a picture does. Waiting for the size
+        // itself is what keeps the frame from being drawn around nothing.
+        if (!video.videoWidth || !video.videoHeight) return;
+        video.removeEventListener('loadedmetadata', onSized);
+        video.removeEventListener('resize', onSized);
         fitFrameToVideo(video);
         revealFrame();
+      };
+      video.addEventListener('loadedmetadata', onSized);
+      // Fired whenever the dimensions change, including from none to the real
+      // ones — the event that arrives when a picture comes back.
+      video.addEventListener('resize', onSized);
+      video.addEventListener('error', () => {
+        if (!isOnScreen(video)) return;
+        showVideoError();
       }, { once: true });
-      video.addEventListener('error', showVideoError, { once: true });
     }
 
     // A video that was stopped at the length its partner paid for would
@@ -870,6 +980,12 @@ export function initScanner(config) {
     const attempt = video.play();
     if (attempt && typeof attempt.catch === 'function') {
       attempt.catch(() => {
+        // The pause() inside teardownPlayer rejects a play() that was still in
+        // flight, which is indistinguishable here from autoplay being refused.
+        // Restarting the element then left a hidden video playing behind a
+        // closed player — silent, but still holding the decoder that the next
+        // photo's video needs, and still counting as the one on screen.
+        if (!isOnScreen(video)) return;
         // Priming did not take (or was refused). Rather than leave a still
         // frame, start it muted and offer sound in one tap.
         video.muted = true;
@@ -1038,7 +1154,11 @@ export function initScanner(config) {
     // makes that replay start at the beginning rather than resuming on the last
     // frame. Every pooled element is hidden, not just the current one, so a
     // switch between photos can never leave two videos in the frame.
-    videoPool.forEach((el) => { el.style.display = 'none'; });
+    // Paused as well as hidden. Hiding an element does not stop it, so any
+    // element left running kept its sound going behind a frame showing
+    // something else — a recipient hears a video they cannot see.
+    videoPool.forEach((el) => { el.pause(); el.style.display = 'none'; });
+    if (els.video && !videoPool.has(0)) els.video.pause();
     if (currentVideo) {
       currentVideo.pause();
       currentVideo.style.display = 'none';
@@ -1328,7 +1448,10 @@ export function initScanner(config) {
           if (useOverlay) {
             currentVideo.style.display = 'none'; // drawn through the WebGL texture
             currentVideo.play().catch(() => {
-              // Autoplay refused — fall back to the reliable full-screen path.
+              // Autoplay refused — fall back to the reliable full-screen path,
+              // unless the camera has since left this photo, in which case
+              // there is nothing to fall back to.
+              if (active !== target || !hasMatched) return;
               showFullscreenPlayer();
             });
             els.status.style.display = 'none';
