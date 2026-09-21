@@ -54,7 +54,20 @@ const HINTS = [
  * actually cost something — the scan-anything page, which could play a
  * stranger's video, and the admin live test, where a match is what marks a
  * photo verified and therefore printable. The page decides: config.careful.
+ *
+ * Three tiers, then:
+ *   INSTANT  one photo, one video, nothing to confuse it with — announce on the
+ *            first tracked frame. There is no wrong answer available, so every
+ *            extra frame is pure delay.
+ *   FAST     several photos in one frame: a moment's confirmation, since the
+ *            wrong one would mean the wrong video.
+ *   CAREFUL  a wrong match has a real cost. See above.
+ *
+ * The floor is one genuine feature match plus a successful tracking pass —
+ * MindAR only counts a frame at all once both have succeeded — so even INSTANT
+ * is not guessing.
  */
+const WARMUP_INSTANT = 0;
 const WARMUP_FAST = 1;
 const WARMUP_CAREFUL = 3;
 
@@ -79,6 +92,31 @@ const MISS_TOLERANCE = 12;
  */
 const LOST_GRACE_MS = 300;
 const LEAVE_FADE_MS = 220;
+
+/**
+ * How many videos to start downloading before anything has matched.
+ *
+ * The file used to be fetched from inside onTargetFound, which put a
+ * multi-megabyte download between recognising the photo and seeing it move —
+ * the pause people describe as "it takes a moment to start". Nothing about that
+ * download needs the match: which videos this page could play is known when the
+ * page loads. Starting them while the recipient is still lining the phone up
+ * spends the seconds that were being wasted anyway, so by the time the tracker
+ * locks on, the first frames are already decoded and play() is instant.
+ *
+ * Capped because a frame's videos are ~7MB each and a phone's uplink is not.
+ * Only the scan-anything page is excluded outright (config.preloadVideos),
+ * where the targets are every active frame on the site.
+ */
+const PRELOAD_MAX = 4;
+
+/**
+ * Videos after the first are warmed one at a time, not all at once: several
+ * parallel downloads over one mobile connection would make the photo the
+ * recipient is actually pointing at the slowest of them. Each waits for the
+ * previous to buffer through, or for this long, whichever comes first.
+ */
+const PRELOAD_STAGGER_MS = 2500;
 
 export function initScanner(config) {
   const els = {
@@ -117,10 +155,28 @@ export function initScanner(config) {
   // until the camera starts, and stays null where there is no torch to offer.
   let torchTrack = null;
   let torchOn = false;
-  // The URL currently loaded into the <video>. Assigning .src reloads the media
-  // even when the URL is identical, so this is what makes a second scan of the
-  // same photo reuse the file already in memory instead of fetching it again.
-  let loadedVideoUrl = null;
+  // One <video> per photo, created and pointed at its file before anything has
+  // matched — see PRELOAD_MAX. Keyed by target index. Giving each photo its own
+  // element (rather than reassigning one element's .src) is what lets the files
+  // buffer in advance and what makes a re-scan replay from memory: assigning
+  // .src resets the element even when the URL is identical, dropping the
+  // buffer, the dimensions and the primed-for-autoplay flag with it.
+  const videoPool = new Map();
+  // Target indexes, least recently used first — see recycleOldestEntry().
+  const poolOrder = [];
+  // Scan-anything only: the URL currently loaded into the one shared element,
+  // so a re-scan of the same frame does not reset it and refetch the file.
+  let sharedVideoUrl = null;
+  // The pooled element currently in the picture frame. The one in the markup is
+  // the first slot, so a single-photo frame adds no elements at all.
+  let currentVideo = els.video;
+  let markupVideoTaken = false;
+  // Set once the staggered warm-up has been kicked off, so the button tap and
+  // start() can both ask for it without starting it twice.
+  let preloadStarted = false;
+  // The compiled target file, fetched ahead of the camera — see
+  // prefetchTargetBundle(). Resolves to the URL MindAR should actually load.
+  let targetSrcPromise = null;
   // See LOST_GRACE_MS. hideTimer runs while a lost photo's video waits out the
   // grace period; leaveTimer while it fades away. Either one being set means
   // the video is on its way out but can still be kept.
@@ -160,6 +216,8 @@ export function initScanner(config) {
     foundCount: 0,
     followPhoto: !!config.followPhoto,
     videoPrimed: null,
+    videosPreloaded: 0,
+    targetBundlePrefetched: null,
     torchAvailable: false,
     torchOn: false,
   };
@@ -314,6 +372,258 @@ export function initScanner(config) {
       });
   }
 
+  // ------------------------------------------------------------------ preload
+
+  /** Photos this page could actually play through the <video> element. */
+  function playableTargetIndexes() {
+    const list = [];
+    targets.forEach((target, index) => {
+      if ((target.videoType === 'upload' || target.videoType === 'direct') && target.videoUrl) {
+        list.push(index);
+      }
+    });
+    return list.slice(0, PRELOAD_MAX);
+  }
+
+  /**
+   * The <video> element that belongs to one photo, created on first ask.
+   *
+   * The element in the markup is handed out as the first slot, so the common
+   * case — a frame with one photo — adds nothing to the DOM and behaves exactly
+   * as it always did. Extra photos get a copy of it beside it, which keeps the
+   * stylesheet in charge of how a video is sized and framed (hence the class
+   * rather than the id: an id cannot be cloned).
+   */
+  function videoElementFor(index, target) {
+    if (!target || !target.videoUrl) return null;
+
+    // The scan-anything page keeps the original single shared element, pointed
+    // at whichever frame matched. Its targets are every active photo on the
+    // site, so an element — and a speculative download — per photo is not on
+    // offer there, which is also why that page does not preload at all.
+    if (!config.preloadVideos) {
+      if (sharedVideoUrl !== target.videoUrl) {
+        sharedVideoUrl = target.videoUrl;
+        attachVideoListeners(els.video, target);
+        els.video.src = target.videoUrl;
+      }
+      return els.video;
+    }
+
+    if (videoPool.has(index)) {
+      touchPoolEntry(index);
+      return videoPool.get(index);
+    }
+
+    let el = recycleOldestEntry();
+    if (!el) {
+      if (!markupVideoTaken) {
+        el = els.video;
+        markupVideoTaken = true;
+      } else {
+        el = els.video.cloneNode(false);
+        el.removeAttribute('id');
+        els.video.parentNode.insertBefore(el, els.video.nextSibling);
+      }
+    }
+    el.playsInline = true;
+    // Only headers for now. The warm-up decides which one is allowed to pull
+    // down its whole file first; see startVideoPreload().
+    el.preload = 'metadata';
+    el.src = target.videoUrl;
+    attachVideoListeners(el, target);
+    videoPool.set(index, el);
+    touchPoolEntry(index);
+    return el;
+  }
+
+  /** Most recently used last, so the front of the list is what gets recycled. */
+  function touchPoolEntry(index) {
+    const at = poolOrder.indexOf(index);
+    if (at !== -1) poolOrder.splice(at, 1);
+    poolOrder.push(index);
+  }
+
+  /**
+   * Hand back an element to be pointed at a different photo, once the pool is
+   * full.
+   *
+   * Each entry is holding a buffered video — several megabytes — so the pool
+   * cannot simply grow with every photo that matches. That matters most on the
+   * scan-anything page, where the targets are every active frame on the site
+   * and a curious recipient can keep finding new ones. The one being watched is
+   * never recycled; the least recently used of the rest is.
+   *
+   * @return {HTMLVideoElement|null} null while there is still room.
+   */
+  function recycleOldestEntry() {
+    if (videoPool.size < PRELOAD_MAX) return null;
+
+    for (let i = 0; i < poolOrder.length; i++) {
+      const index = poolOrder[i];
+      const el = videoPool.get(index);
+      if (!el || el === currentVideo) continue;
+      // An overlay plane textures itself from a specific element; recycling one
+      // would quietly show the wrong photo's video on that plane.
+      if (el.__arPinned) continue;
+
+      poolOrder.splice(i, 1);
+      videoPool.delete(index);
+      if (el.__arDetach) el.__arDetach();
+      el.pause();
+      el.removeAttribute('src');
+      // Without this the element keeps the decoded buffer until it is collected.
+      el.load();
+      el.style.display = 'none';
+      return el;
+    }
+    // Everything in the pool is in use — let it grow by one rather than pull
+    // the video out from under the recipient.
+    return null;
+  }
+
+  /**
+   * Per-element, because each photo now has its own <video>: a listener bound
+   * once to the markup element would not fire for the second photo of a frame.
+   *
+   * Detachable, because a recycled element is about to be pointed at a
+   * different photo and must not keep enforcing the previous one's time limit.
+   */
+  function attachVideoListeners(el, target) {
+    if (el.__arDetach) el.__arDetach();
+
+    const onMeta = () => fitFrameToVideo(el);
+    el.addEventListener('loadedmetadata', onMeta);
+
+    // Partner content is sold by video length. A longer upload plays only up to
+    // the length paid for, then stops — the same as trimming it, without
+    // needing a video toolchain on the server. Seeking past the end lands on
+    // the limit.
+    const enforce = () => {
+      const limit = target.maxSeconds;
+      if (!limit || el.currentTime < limit) return;
+      el.pause();
+      // Only when clearly past it: the assignment itself fires 'seeked' again.
+      if (el.currentTime > limit + 0.25) el.currentTime = limit;
+    };
+    el.addEventListener('timeupdate', enforce);
+    el.addEventListener('seeked', enforce);
+
+    el.__arDetach = () => {
+      el.removeEventListener('loadedmetadata', onMeta);
+      el.removeEventListener('timeupdate', enforce);
+      el.removeEventListener('seeked', enforce);
+      el.__arDetach = null;
+    };
+  }
+
+  /**
+   * Create every photo's element up front, without downloading anything yet.
+   *
+   * Separate from the downloading because this half has to run inside the tap
+   * that starts the camera — that is the gesture which unlocks unmuted
+   * playback, and it only unlocks elements that already exist.
+   */
+  function buildVideoPool() {
+    if (!config.preloadVideos) return;
+    playableTargetIndexes().forEach((index) => videoElementFor(index, targets[index]));
+  }
+
+  /**
+   * Start pulling the files down, one at a time.
+   *
+   * Honours Save-Data: someone who has asked their phone not to spend data
+   * should not have megabytes fetched on the chance they point the camera at
+   * the right photo. They simply get the old behaviour — the download starts on
+   * the match — which still works, just not instantly.
+   */
+  function startVideoPreload() {
+    if (preloadStarted || !config.preloadVideos) return;
+    preloadStarted = true;
+
+    const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    if (connection && connection.saveData) return;
+
+    buildVideoPool();
+    const queue = playableTargetIndexes();
+    let next = 0;
+
+    const warmNext = () => {
+      if (next >= queue.length) return;
+      const el = videoPool.get(queue[next++]);
+      if (!el) { warmNext(); return; }
+      // Never restart something the recipient is already watching: by the time
+      // the queue reaches the later photos a match may well have happened.
+      if (el === currentVideo && hasMatched) { warmNext(); return; }
+
+      el.preload = 'auto';
+      // preload is only a hint once loading has begun, so re-run the element's
+      // own resource selection to make it count.
+      //
+      // Not for an element the start tap has already primed: that play() both
+      // started it loading and unlocked it for unmuted autoplay, and there is
+      // no reason to find out the hard way whether a reload would cost the
+      // second of those. The gift playing silently would be a worse failure
+      // than it buffering a little less eagerly.
+      if (!el.__arPrimed) el.load();
+      debug.videosPreloaded = next;
+      renderDebug();
+
+      // Move on when this one has buffered through, or when it has had its
+      // share of the connection — whichever is sooner.
+      let moved = false;
+      const advance = () => {
+        if (moved) return;
+        moved = true;
+        clearTimeout(timer);
+        el.removeEventListener('canplaythrough', advance);
+        el.removeEventListener('error', advance);
+        warmNext();
+      };
+      const timer = setTimeout(advance, PRELOAD_STAGGER_MS);
+      el.addEventListener('canplaythrough', advance);
+      el.addEventListener('error', advance);
+    };
+    warmNext();
+  }
+
+  /**
+   * Fetch the compiled target file ourselves, ahead of the camera.
+   *
+   * MindAR downloads it inside start(), after the camera is already running —
+   * half a megabyte of feature data standing between "camera on" and "able to
+   * recognise anything", on a connection that is idle during the permission
+   * prompt. Fetching it here overlaps the two.
+   *
+   * Handed over as a blob: URL rather than trusting the HTTP cache, so the
+   * saving does not depend on the server's cache headers or on the browser
+   * choosing to reuse the entry. Falls back to the plain URL on any failure —
+   * then MindAR fetches it exactly as before.
+   */
+  function prefetchTargetBundle() {
+    if (targetSrcPromise) return targetSrcPromise;
+
+    // The page starts this from an inline script while it is still parsing,
+    // long before this module has finished downloading. Taking the promise it
+    // left behind is what makes the head start count; fetching here as well
+    // would download the file a second time.
+    const pending = window.__arTargetPrefetch
+      || fetch(config.targetUrl).then((res) => (res.ok ? res.blob() : null));
+
+    targetSrcPromise = Promise.resolve(pending)
+      .then((blob) => {
+        debug.targetBundlePrefetched = !!blob;
+        renderDebug();
+        return blob ? URL.createObjectURL(blob) : config.targetUrl;
+      })
+      .catch(() => {
+        debug.targetBundlePrefetched = false;
+        renderDebug();
+        return config.targetUrl;
+      });
+    return targetSrcPromise;
+  }
+
   // ------------------------------------------------------------------ playback
 
   /**
@@ -329,15 +639,19 @@ export function initScanner(config) {
    * Only possible for a real video element. An iframe cannot be primed, which
    * is why embedded providers still need one tap for sound.
    */
-  function primeVideoElement() {
-    if (!els.video) return;
-    els.video.muted = true;
-    els.video.playsInline = true;
-    const attempt = els.video.play();
+  function primeVideoElement(el) {
+    const video = el || currentVideo;
+    if (!video) return;
+    video.muted = true;
+    video.playsInline = true;
+    const attempt = video.play();
     if (attempt && typeof attempt.then === 'function') {
       attempt.then(() => {
-        els.video.pause();
-        els.video.currentTime = 0;
+        video.pause();
+        video.currentTime = 0;
+        // play() forces the element to start loading, so a primed element is
+        // already buffering and the warm-up must not call load() on it again.
+        video.__arPrimed = true;
         debug.videoPrimed = true;
         renderDebug();
       }).catch(() => {
@@ -345,6 +659,21 @@ export function initScanner(config) {
         renderDebug();
       });
     }
+  }
+
+  /**
+   * Prime every photo's element, not just the first.
+   *
+   * The permission a gesture grants is per-element, so on a frame with several
+   * photos the second one scanned would be refused sound and fall back to the
+   * mute button — for no reason, since the same tap could have unlocked them
+   * all. Called inside the gesture, which is why the whole pool is created
+   * synchronously even though only the first starts downloading immediately.
+   */
+  function primeAllVideos() {
+    buildVideoPool();
+    if (videoPool.size === 0) { primeVideoElement(els.video); return; }
+    videoPool.forEach((el) => primeVideoElement(el));
   }
 
   /**
@@ -364,7 +693,7 @@ export function initScanner(config) {
     const handler = () => {
       cancelTouchPrime();
       // After a match this same call would mute and rewind a playing video.
-      if (!hasMatched) primeVideoElement();
+      if (!hasMatched) primeAllVideos();
     };
 
     document.addEventListener('pointerdown', handler, { passive: true });
@@ -386,31 +715,27 @@ export function initScanner(config) {
    * Set on the element rather than the player, so it can never reshape a
    * provider iframe, whose real ratio is not knowable from here.
    */
-  function fitFrameToVideo() {
-    if (!els.video || !els.video.videoWidth || !els.video.videoHeight) return;
-    els.video.style.setProperty(
+  function fitFrameToVideo(el) {
+    const video = el || currentVideo;
+    if (!video || !video.videoWidth || !video.videoHeight) return;
+    video.style.setProperty(
       '--ar-video-aspect',
-      String(els.video.videoWidth / els.video.videoHeight)
+      String(video.videoWidth / video.videoHeight)
     );
   }
 
-  if (els.video) els.video.addEventListener('loadedmetadata', fitFrameToVideo);
-
   /**
-   * Partner content is sold by video length. A longer upload plays only up to
-   * the length paid for, then stops — the same as trimming it, without needing
-   * a video toolchain on the server. Seeking past the end lands on the limit.
+   * Put this photo's element in the picture frame, and take the previous one
+   * out. Only the current element is ever displayed, so a frame with several
+   * photos never stacks two videos on top of each other.
    */
-  function enforceMaxSeconds() {
-    const limit = active && active.maxSeconds;
-    if (!limit || !els.video || els.video.currentTime < limit) return;
-    els.video.pause();
-    // Only when clearly past it: the assignment itself fires 'seeked' again.
-    if (els.video.currentTime > limit + 0.25) els.video.currentTime = limit;
-  }
-  if (els.video) {
-    els.video.addEventListener('timeupdate', enforceMaxSeconds);
-    els.video.addEventListener('seeked', enforceMaxSeconds);
+  function setCurrentVideo(el) {
+    if (!el || el === currentVideo) return;
+    if (currentVideo) {
+      currentVideo.pause();
+      currentVideo.style.display = 'none';
+    }
+    currentVideo = el;
   }
 
   /**
@@ -443,30 +768,33 @@ export function initScanner(config) {
    * be fetched, and permanently if the fetch failed.
    */
   function playUploadedVideo() {
-    els.video.style.display = 'block';
+    const video = currentVideo;
+    video.style.display = 'block';
 
     // HAVE_METADATA or better: dimensions are known, so nothing to wait for.
-    // This is the usual case on a re-scan now that the file is not reloaded.
-    if (els.video.readyState >= 1) {
-      fitFrameToVideo();
+    // With the file preloaded this is now the usual case rather than the
+    // exception — which is the whole point: no spinner, no empty frame, just
+    // the video.
+    if (video.readyState >= 1) {
+      fitFrameToVideo(video);
       revealFrame();
     } else {
       if (els.loading) els.loading.classList.add('is-on');
-      els.video.addEventListener('loadedmetadata', () => {
-        fitFrameToVideo();
+      video.addEventListener('loadedmetadata', () => {
+        fitFrameToVideo(video);
         revealFrame();
       }, { once: true });
-      els.video.addEventListener('error', showVideoError, { once: true });
+      video.addEventListener('error', showVideoError, { once: true });
     }
 
-    els.video.muted = false;
-    const attempt = els.video.play();
+    video.muted = false;
+    const attempt = video.play();
     if (attempt && typeof attempt.catch === 'function') {
       attempt.catch(() => {
         // Priming did not take (or was refused). Rather than leave a still
         // frame, start it muted and offer sound in one tap.
-        els.video.muted = true;
-        els.video.play().catch(() => {});
+        video.muted = true;
+        video.play().catch(() => {});
         showUnmuteButton();
       });
     }
@@ -478,8 +806,8 @@ export function initScanner(config) {
     els.unmute.style.display = 'block';
     els.unmute.onclick = () => {
       els.unmute.style.display = 'none';
-      els.video.muted = false;
-      els.video.play().catch(() => {});
+      currentVideo.muted = false;
+      currentVideo.play().catch(() => {});
     };
   }
 
@@ -625,13 +953,16 @@ export function initScanner(config) {
     if (els.loading) els.loading.classList.remove('is-on');
     if (els.videoError) els.videoError.classList.remove('is-on');
     if (els.frame) els.frame.classList.remove('is-visible', 'is-ready');
-    if (els.video) {
-      els.video.pause();
-      els.video.style.display = 'none';
-      // The src is deliberately left in place so a second scan replays from
-      // memory instead of refetching. Rewinding here is what makes that replay
-      // start at the beginning rather than resuming on the last frame.
-      if (rewind && els.video.readyState >= 1) els.video.currentTime = 0;
+    // Each photo keeps its own element and its own buffered file, so a second
+    // scan replays from memory instead of refetching. Rewinding here is what
+    // makes that replay start at the beginning rather than resuming on the last
+    // frame. Every pooled element is hidden, not just the current one, so a
+    // switch between photos can never leave two videos in the frame.
+    videoPool.forEach((el) => { el.style.display = 'none'; });
+    if (currentVideo) {
+      currentVideo.pause();
+      currentVideo.style.display = 'none';
+      if (rewind && currentVideo.readyState >= 1) currentVideo.currentTime = 0;
     }
     els.tapToPlay.style.display = 'none';
     if (els.next) els.next.hidden = true;
@@ -670,16 +1001,17 @@ export function initScanner(config) {
    * the camera view. Only available for uploaded files — a YouTube iframe cannot
    * be used as a WebGL texture, so those always play full-screen.
    */
-  function buildOverlayPlane(anchor, target) {
-    // Uses els.video directly. A module runs in strict mode, so the alias this
-    // previously assigned to had to be declared — losing that declaration threw
-    // a ReferenceError while the anchors were being built, which surfaced to the
-    // recipient as "the camera could not be started".
-    els.video.muted = false;
-    els.video.loop = false;
-    els.video.playsInline = true;
+  function buildOverlayPlane(anchor, target, video) {
+    // The photo's own element, so a frame with several overlay photos textures
+    // each plane with the right video. A module runs in strict mode, so the
+    // alias this once assigned to had to be declared — losing that declaration
+    // threw a ReferenceError while the anchors were being built, which surfaced
+    // to the recipient as "the camera could not be started".
+    video.muted = false;
+    video.loop = false;
+    video.playsInline = true;
 
-    const texture = new THREE.VideoTexture(els.video);
+    const texture = new THREE.VideoTexture(video);
     // Each photo's own shape — photos in one frame need not share one.
     const geometry = new THREE.PlaneGeometry(1, 1 / (target.aspect || 1));
     const material = new THREE.MeshBasicMaterial({ map: texture });
@@ -743,10 +1075,43 @@ export function initScanner(config) {
     els.status.style.display = 'flex';
     els.hint.textContent = 'Starting camera…';
 
+    // Both downloads start now and run while the permission prompt is on
+    // screen, which is otherwise dead time on an idle connection.
+    prefetchTargetBundle();
+    startVideoPreload();
+
     try {
+      // Ask for the camera before building anything.
+      //
+      // MindAR rejects with no error object at all when getUserMedia fails
+      // (`.catch((err) => { console.log(...); reject(); })`), so by the time it
+      // reaches our handler there is nothing left to report and every failure
+      // looks identical. Requesting first means we see the real DOMException
+      // and can say what actually went wrong. The permission is then already
+      // granted, so MindAR's own request resolves immediately.
+      let probeStream = null;
+      try {
+        probeStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' },
+          audio: false,
+        });
+      } catch (permErr) {
+        // Re-thrown so the single handler below formats the message.
+        permErr.__fromProbe = true;
+        throw permErr;
+      } finally {
+        // Release it immediately — MindAR opens its own stream, and holding two
+        // can fail on devices that allow only one consumer of the camera.
+        if (probeStream) probeStream.getTracks().forEach((t) => t.stop());
+      }
+
+      // Resolved by now in all but the fastest permission grants, since it was
+      // started before the prompt went up.
+      const imageTargetSrc = await prefetchTargetBundle();
+
       mindarThree = new MindARThree({
         container: els.container,
-        imageTargetSrc: config.targetUrl,
+        imageTargetSrc: imageTargetSrc,
         // Our own guidance replaces MindAR's built-in overlays.
         uiScanning: 'no',
         uiLoading: 'no',
@@ -755,7 +1120,16 @@ export function initScanner(config) {
         // careful bar is for pages where a wrong match has a cost: /scan, which
         // could play someone else's video, and the admin test, where a match
         // marks the frame verified. config.verifyUrl is only set for the latter.
-        warmupTolerance: config.careful ? WARMUP_CAREFUL : WARMUP_FAST,
+        //
+        // A recipient's own frame with a single photo goes all the way down to
+        // zero — play on the first tracked frame. There is exactly one image in
+        // that .mind file and exactly one video it could play, so "wrong match"
+        // is not a category that exists here, and every frame spent confirming
+        // what the matcher already decided is a frame of the pause this is
+        // meant to remove.
+        warmupTolerance: config.careful
+          ? WARMUP_CAREFUL
+          : (targets.length === 1 ? WARMUP_INSTANT : WARMUP_FAST),
         missTolerance: MISS_TOLERANCE,
       });
 
@@ -773,9 +1147,18 @@ export function initScanner(config) {
         // "the camera could not be started" because of one frame's settings.
         let useOverlay = target.playbackMode === 'overlay'
           && (target.videoType === 'upload' || target.videoType === 'direct');
+        // The photo's own preloaded element where this page pools them, and
+        // the single shared one otherwise. Only resolved for overlay targets:
+        // the full-screen path creates its element on the match instead, so
+        // registering a hundred anchors never opens a hundred videos.
+        const overlayVideo = useOverlay
+          ? (config.preloadVideos ? videoElementFor(index, target) : els.video)
+          : null;
+        if (useOverlay && !overlayVideo) useOverlay = false;
         if (useOverlay) {
           try {
-            buildOverlayPlane(anchor, target);
+            buildOverlayPlane(anchor, target, overlayVideo);
+            overlayVideo.__arPinned = true;
           } catch (overlayErr) {
             useOverlay = false;   // fall back to full-screen for this frame
             debug.overlayErrors = (debug.overlayErrors || 0) + 1;
@@ -821,26 +1204,21 @@ export function initScanner(config) {
             return;
           }
 
-          // Direct links and uploaded files both play from a URL in the
+          // Direct links and uploaded files both play from this photo's own
           // <video> element; embedded providers build an iframe instead.
           //
-          // Only assigned when it actually changes. Setting .src resets the
-          // media element even when the URL is identical — readyState drops to
-          // nothing, the dimensions go to zero and the whole file is fetched
-          // again. On a second scan of the same photo that meant the frame
-          // reappeared empty while the video reloaded, and stayed empty if the
-          // reload failed. On /scan, where a different frame really can match,
-          // the URL differs and the load happens as before.
-          if ((target.videoType === 'upload' || target.videoType === 'direct') && target.videoUrl) {
-            if (loadedVideoUrl !== target.videoUrl) {
-              loadedVideoUrl = target.videoUrl;
-              els.video.src = target.videoUrl;
-            }
-          }
+          // Nothing is assigned here any more. The element already exists with
+          // its .src set and, on every page but scan-anything, with the file
+          // already buffering — which is what makes playback start now rather
+          // than after a download. Assigning .src at this point would throw all
+          // of that away: it resets the element even when the URL is identical,
+          // dropping readyState to nothing and the dimensions to zero.
+          const playbackVideo = videoElementFor(index, target);
+          if (playbackVideo) setCurrentVideo(playbackVideo);
 
           if (useOverlay) {
-            els.video.style.display = 'none'; // drawn through the WebGL texture
-            els.video.play().catch(() => {
+            currentVideo.style.display = 'none'; // drawn through the WebGL texture
+            currentVideo.play().catch(() => {
               // Autoplay refused — fall back to the reliable full-screen path.
               showFullscreenPlayer();
             });
@@ -855,7 +1233,7 @@ export function initScanner(config) {
           debug.targetLostCount++;
           renderDebug();
           if (useOverlay && active === target) {
-            els.video.pause();
+            currentVideo.pause();
             hasMatched = false;
             active = null;
             startHints();
@@ -868,31 +1246,9 @@ export function initScanner(config) {
         };
       });
 
-      // Ask for the camera ourselves before handing over to MindAR.
-      //
-      // MindAR rejects with no error object at all when getUserMedia fails
-      // (`.catch((err) => { console.log(...); reject(); })`), so by the time it
-      // reaches our handler there is nothing left to report and every failure
-      // looks identical. Requesting first means we see the real DOMException and
-      // can say what actually went wrong. The permission is then already
-      // granted, so MindAR's own request resolves immediately.
-      let probeStream = null;
-      try {
-        probeStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment' },
-          audio: false,
-        });
-      } catch (permErr) {
-        // Re-thrown so the single handler below formats the message.
-        permErr.__fromProbe = true;
-        throw permErr;
-      } finally {
-        // Release it immediately — MindAR opens its own stream, and holding two
-        // can fail on devices that allow only one consumer of the camera.
-        if (probeStream) probeStream.getTracks().forEach((t) => t.stop());
-      }
-
       await mindarThree.start();
+      // MindAR has read the bundle, so the blob it was handed can be released.
+      if (imageTargetSrc !== config.targetUrl) URL.revokeObjectURL(imageTargetSrc);
       const { renderer, scene, camera } = mindarThree;
       renderer.setAnimationLoop(() => renderer.render(scene, camera));
 
@@ -948,11 +1304,20 @@ export function initScanner(config) {
     }
   }
 
+  // The tap is preceded by a press, and the press is preceded by the pointer
+  // arriving. Neither is a decision, but by the time either fires the camera is
+  // already going to be started, so the downloads may as well be under way —
+  // it is a couple of hundred milliseconds off the wait, for free.
+  els.startBtn.addEventListener('pointerdown', () => {
+    prefetchTargetBundle();
+    startVideoPreload();
+  }, { passive: true });
+
   els.startBtn.addEventListener('click', () => {
     if (cancelTouchPrime) cancelTouchPrime();
-    // Must happen inside the tap itself — this is what allows the video to
-    // start on its own, with sound, when the photo is later recognised.
-    primeVideoElement();
+    // Must happen inside the tap itself — this is what allows every photo's
+    // video to start on its own, with sound, when it is later recognised.
+    primeAllVideos();
     start(false);
   });
   els.closeBtn.addEventListener('click', closePlayer);
@@ -965,10 +1330,9 @@ export function initScanner(config) {
     retryVideo.addEventListener('click', () => {
       els.videoError.classList.remove('is-on');
       if (els.fallback) els.fallback.style.display = 'none';
-      if (active && active.videoUrl) {
-        loadedVideoUrl = active.videoUrl;
-        els.video.src = active.videoUrl;
-      }
+      // The one place a genuine reload is wanted, so the reset that .load()
+      // performs is the point rather than something to avoid.
+      if (currentVideo && currentVideo.src) currentVideo.load();
       playUploadedVideo();
     });
   }

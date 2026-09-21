@@ -55,3 +55,54 @@ AddDefaultCharset UTF-8
     ExpiresByType text/css "access plus 1 week"
     ExpiresByType application/javascript "access plus 1 week"
 </IfModule>
+
+# ---- Compress text assets ----
+# The Living Photo scanner alone is ~3.8MB of JavaScript (three.js, MindAR and
+# its tracking chunk). Uncompressed, that is most of the wait before a phone can
+# start looking for the photo; gzipped it is roughly a quarter of the size.
+# LiteSpeed/Apache on the production host may offer either module, so both are
+# tried and each is skipped when absent.
+#
+# application/x-javascript is listed alongside the two modern spellings because
+# it is what several Apache builds still send for .js — including XAMPP, where
+# leaving it out meant the whole scanner was served uncompressed while the rules
+# below looked correct.
+#
+# The compiled .mind targets are matched by extension rather than by type: they
+# are half a megabyte of feature data that gzips to little over half that, and
+# giving them a MIME type broad enough to catch here (octet-stream) would sweep
+# in every other binary download with them.
+<IfModule mod_brotli.c>
+    AddOutputFilterByType BROTLI_COMPRESS text/html text/plain text/css text/xml \
+        application/javascript text/javascript application/x-javascript \
+        application/json application/xml image/svg+xml
+    AddOutputFilter BROTLI_COMPRESS mind
+</IfModule>
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/css text/xml \
+        application/javascript text/javascript application/x-javascript \
+        application/json application/xml image/svg+xml
+    AddOutputFilter DEFLATE mind
+</IfModule>
+
+# ---- Long cache for the AR payloads ----
+# Every one of these URLs carries a ?v=<mtime> stamp from asset(), so a changed
+# file is a changed URL and there is never a stale copy to worry about. Without
+# these rules Apache sends no cache headers at all for .mind and .mp4, so a
+# recipient who scans the same frame twice downloads both again — a 500KB target
+# bundle and a 7MB video, on a phone, for a gift they have already opened.
+<IfModule mod_mime.c>
+    AddType application/octet-stream .mind
+</IfModule>
+<FilesMatch "\.(mind|mp4|m4v|webm|mov)$">
+    <IfModule mod_headers.c>
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </IfModule>
+</FilesMatch>
+# The vendored tracking library is pinned (see tools/mindar-compile/README.txt),
+# so it only ever changes with a deploy.
+<IfModule mod_headers.c>
+    <FilesMatch "^(three\.module|mindar-image-three\.prod|controller-.*|ui-.*|CSS3DRenderer)\.js$">
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
+</IfModule>

@@ -73,6 +73,14 @@ $scanConfig = [
     // multi-megabyte download unasked, and not on the admin test, where the
     // intro carries the instructions for running the test.
     'autoStart' => !$isAdminTest && !$isMulti,
+    // Start downloading this frame's videos while the recipient is still
+    // lining the phone up, instead of at the moment the photo is recognised —
+    // a 7MB file fetched then is the pause between pointing and playing.
+    //
+    // Off for the scan-anything page, whose targets are every active frame on
+    // the site: speculatively pulling down strangers' videos is a different
+    // proposition entirely, and that page already warns about its own size.
+    'preloadVideos' => !$isMulti,
 ];
 ?>
 <!DOCTYPE html>
@@ -82,6 +90,65 @@ $scanConfig = [
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <title><?= $isAdminTest ? 'Live Scan Test' : 'Your Living Photo' ?> · <?= e($siteName) ?></title>
+
+<?php
+/*
+ * Warm the scanner's payload while the page is still parsing.
+ *
+ * Left alone, these files arrive in a queue, each one only discovered once the
+ * previous has been downloaded and parsed: the page finds ar-scan.js, which
+ * imports three.js and MindAR, which in turn imports a 2.2MB tracking chunk of
+ * its own. Four round trips, ~3.8MB, before the camera can even be asked for.
+ * Declaring them here lets all four download at once, from the first moment the
+ * browser reads the page.
+ *
+ * The vendor URLs deliberately carry no ?v= stamp. A relative import inside a
+ * module resolves against the importing module's URL with the query dropped, so
+ * ar-scan.js asks for exactly these URLs — a stamped copy here would be a
+ * second, unused download. They are pinned and only change with a deploy (see
+ * tools/mindar-compile/README.txt), so there is nothing to bust.
+ */
+$vendorBase = rtrim(SITE_URL, '/') . '/public/js/vendor/mindar/';
+$vendorModules = [
+    'three.module.js',              // imported by ar-scan.js and by MindAR
+    'mindar-image-three.prod.js',
+    'controller-mGt1s8dJ.js',       // MindAR's tracker, loaded dynamically
+    'ui-fBadYuor.js',
+    'CSS3DRenderer.js',
+];
+?>
+<link rel="modulepreload" href="<?= e(asset('public/js/ar-scan.js')) ?>">
+<?php foreach ($vendorModules as $module): ?>
+    <link rel="modulepreload" href="<?= e($vendorBase . $module) ?>">
+<?php endforeach; ?>
+
+<?php /* Only where the camera starts by itself. The other two pages open on a
+         button — the scan-anything page because its bundle covers every frame
+         on the site and says so in a size warning, the admin test because the
+         intro carries the instructions. Downloading half a megabyte before
+         either has been agreed to would be taking the decision for them; there
+         the same fetch starts on the press of the button instead. */ ?>
+<?php if ($scanConfig['autoStart']): ?>
+<script>
+    /*
+     * Start the compiled target file downloading now, at parse time.
+     *
+     * MindAR fetches it from inside its own start(), which is after the camera
+     * is already running — so half a megabyte of feature data sits between
+     * "camera on" and "able to recognise anything", on a connection that was
+     * idle throughout the permission prompt. The scanner picks this promise up
+     * and hands MindAR the bytes, so it is fetched once, early, and never again.
+     *
+     * Deliberately not a <link rel="preload">: whether a preloaded entry is
+     * reused by a later fetch() depends on the two agreeing about CORS and
+     * credentials, and getting that wrong downloads the file twice. Sharing the
+     * actual promise cannot be got wrong.
+     */
+    window.__arTargetPrefetch = fetch(<?= json_encode($targetUrl, JSON_UNESCAPED_SLASHES) ?>)
+        .then(function (res) { return res.ok ? res.blob() : null; })
+        .catch(function () { return null; });
+</script>
+<?php endif; ?>
 <style>
     * { box-sizing: border-box; }
     :root { --ar-accent: <?= e($brand['color']) ?>; }
@@ -470,7 +537,7 @@ $scanConfig = [
        width available, and by the height available once turned back into a
        width. --ar-video-aspect is per-element, so a portrait upload resizing
        itself never reshapes a 16:9 provider embed. */
-    #arVideo, #arYoutube {
+    .ar-video, #arYoutube {
         display: none; background: #000;
         width: min(var(--ar-avail-w), calc(var(--ar-avail-h) * var(--ar-video-aspect)));
         max-width: 100%;
@@ -691,7 +758,11 @@ $scanConfig = [
             <div class="ar-frame-moulding">
                 <div class="ar-frame-mat">
                     <div class="ar-frame-window">
-                        <video id="arVideo" playsinline controls preload="auto"></video>
+                        <?php // The class, not the id, is what the stylesheet
+                              // matches: a frame with several photos gets one
+                              // <video> per photo by cloning this one, and an
+                              // id cannot be duplicated. ?>
+                        <video id="arVideo" class="ar-video" playsinline controls preload="metadata"></video>
                         <div id="arYoutube"></div>
                     </div>
                 </div>
