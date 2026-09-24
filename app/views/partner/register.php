@@ -4,14 +4,17 @@
  *
  * Three states: the form; $done, the "what happens next" page shown once after
  * registering; and $closed, until the registration migration has been run.
- * With $trial set (the free trial is on), registering opens DEx Studio at
- * once and $done is never shown; buying a pack is optional. Without it there
- * is no online payment: the applicant pays outside the site and the admin
- * activates the account, which adds the chosen pack's credits.
+ * With $trial set (the free trial is on), the applicant first chooses how to
+ * start — a free trial or buying credits — and nothing is chosen for them
+ * unless $plan (?plan=trial|buy) came from a button that already said which.
+ * The trial opens DEx Studio at once. Buying has no online payment: the
+ * applicant pays outside the site and the admin activates the account, which
+ * adds the chosen pack's credits ($done). Without $trial, buying is the only way.
  */
 $siteName = $brand['name'];
 $initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)$siteName), 0, 2)) ?: 'DX';
-$selectedPack = old('pack', $trial ? '-1' : '');
+$selectedPack = old('pack', '');
+$selectedPlan = $trial ? old('plan', $plan ?? '') : 'buy';
 $trialDays = $trial ? $trial['days'] . ' day' . ($trial['days'] === 1 ? '' : 's') : '';
 $siteEmail = trim((string)siteSetting('site_email', ''));
 $sitePhone = trim((string)siteSetting('site_phone', ''));
@@ -41,7 +44,7 @@ $sitePhone = trim((string)siteSetting('site_phone', ''));
             <p><?= $done
                 ? 'Thank you, ' . e($done['business']) . '. One step left.'
                 : ($trial
-                    ? 'Start a free trial of DEx Studio — no payment needed.'
+                    ? 'Sell Living Photo DEx to your own customers. Start with a free trial, or buy credits straight away.'
                     : 'Sell Living Photo DEx to your own customers, from your own branded DEx Studio.') ?></p>
         </div>
 
@@ -86,25 +89,34 @@ $sitePhone = trim((string)siteSetting('site_phone', ''));
             <?php endif; ?>
 
             <?php if (!empty($trialUsed)): ?>
-                <div class="banner banner-amber"><p>A free trial has already been used in this browser. You can register by choosing a credit
-                    pack below, or <a href="<?= url('/partner/login') ?>">sign in to your existing DEx account</a>.</p></div>
-            <?php endif; ?>
-            <?php if ($trial): ?>
-                <div class="trial-box">
-                    <p class="trial-box-title">Free trial · <?= number_format($trial['credits']) ?> credits</p>
-                    <ul>
-                        <li>Your DEx Studio opens as soon as you register — create DEx content and test it on your phone straight away.</li>
-                        <li>A basic DEx item (one photo with a short video) uses <?= number_format((int)$rate['base_credits']) ?> credits.</li>
-                        <li>One free trial per business — mobile number, email and device.</li>
-                        <li><strong>Trial content is temporary:</strong> every photo, video and QR link you create during the trial is
-                            <strong>deleted automatically <?= e($trialDays) ?> after it is created</strong>.
-                            Buy a credit pack to create content that stays live.</li>
-                    </ul>
-                </div>
+                <div class="banner banner-amber"><p>A free trial has already been used in this browser. You can register by buying credits
+                    below, or <a href="<?= url('/partner/login') ?>">sign in to your existing DEx account</a>.</p></div>
             <?php endif; ?>
 
-            <form method="post" action="<?= url('/partner/register') ?>">
+            <form method="post" action="<?= url('/partner/register') ?>" data-register-form>
                 <?= csrfField() ?>
+                <?php if ($trial): ?>
+                    <fieldset class="field plan-pick">
+                        <legend class="field-label">How would you like to start?</legend>
+                        <div class="plans">
+                            <label class="plan-option">
+                                <input type="radio" name="plan" value="trial" required <?= $selectedPlan === 'trial' ? 'checked' : '' ?>>
+                                <span class="plan-title">Free trial</span>
+                                <span class="plan-sub"><?= number_format($trial['credits']) ?> credits · no payment · start right away</span>
+                                <span class="plan-note">Trial content is <strong>deleted automatically <?= e($trialDays) ?> after it is created</strong>. One trial per business.</span>
+                            </label>
+                            <label class="plan-option">
+                                <input type="radio" name="plan" value="buy" required <?= $selectedPlan === 'buy' ? 'checked' : '' ?>>
+                                <span class="plan-title">Buy credits</span>
+                                <span class="plan-sub">Choose a credit pack · no trial</span>
+                                <span class="plan-note">Your DEx content stays live for its full validity. We activate your account once payment is received.</span>
+                            </label>
+                        </div>
+                        <p class="hint">On the trial you can buy credits at any time — that ends the trial, and what you create afterwards stays live.</p>
+                    </fieldset>
+                <?php else: ?>
+                    <input type="hidden" name="plan" value="buy">
+                <?php endif; ?>
                 <div class="field">
                     <label for="business_name">Shop or business name</label>
                     <input type="text" id="business_name" name="business_name" value="<?= old('business_name') ?>" maxlength="120" autocomplete="organization" required autofocus>
@@ -139,20 +151,12 @@ $sitePhone = trim((string)siteSetting('site_phone', ''));
                     </div>
                 </div>
 
-                <fieldset class="field pack-pick">
-                    <legend class="field-label"><?= $trial ? 'Buy credits now as well? <span class="muted" style="font-weight:400">(optional)</span>' : 'Starting credits' ?></legend>
+                <fieldset class="field pack-pick" data-buy-only<?= $trial && $selectedPlan !== 'buy' ? ' hidden' : '' ?>>
+                    <legend class="field-label">Credit pack to buy</legend>
                     <div class="packs">
-                        <?php if ($trial): ?>
-                            <label class="pack pack-option pack-option-trial">
-                                <input type="radio" name="pack" value="-1" <?= $selectedPack === '-1' ? 'checked' : '' ?>>
-                                <span class="price">Free</span>
-                                <span class="get">Trial only</span>
-                                <span class="per"><?= number_format($trial['credits']) ?> credits</span>
-                            </label>
-                        <?php endif; ?>
                         <?php foreach ($packs as $i => $pack): ?>
                             <label class="pack pack-option">
-                                <input type="radio" name="pack" value="<?= (int)$i ?>" <?= $trial ? '' : 'required' ?> <?= $selectedPack === (string)$i ? 'checked' : '' ?>>
+                                <input type="radio" name="pack" value="<?= (int)$i ?>" <?= $selectedPlan === 'buy' ? 'required' : '' ?> <?= $selectedPack === (string)$i ? 'checked' : '' ?>>
                                 <span class="price"><?= e(GDD_CURRENCY_SYMBOL . number_format($pack['price'])) ?></span>
                                 <span class="get"><?= number_format($pack['credits']) ?> credits</span>
                                 <span class="per"><?= e(GDD_CURRENCY_SYMBOL . number_format(ArPartnerService::packItemPrice($pack, $rate), 2)) ?>/item</span>
@@ -160,19 +164,33 @@ $sitePhone = trim((string)siteSetting('site_phone', ''));
                         <?php endforeach; ?>
                     </div>
                     <p class="hint">
-                        <?php if ($trial): ?>
-                            <strong>No payment is taken now.</strong> If you pick a pack, we will contact you to arrange payment and add the
-                            credits once it is received — that also ends your trial, so what you create afterwards stays live.
-                        <?php else: ?>
-                            A basic DEx item (one photo with a short video) uses <?= number_format((int)$rate['base_credits']) ?> credits.
-                            <strong>No payment is taken now:</strong> we will contact you to arrange payment, then activate your account and add the credits.
-                        <?php endif; ?>
+                        A basic DEx item (one photo with a short video) uses <?= number_format((int)$rate['base_credits']) ?> credits.
+                        <strong>No payment is taken now:</strong> we will contact you to arrange payment, then activate your account and add the credits.
                     </p>
                 </fieldset>
 
                 <?= CaptchaService::field('partner-register') ?>
-                <button class="btn" type="submit" style="width:100%"><?= $trial ? 'Start my free trial' : 'Register as a DEx partner' ?></button>
+                <button class="btn" type="submit" style="width:100%" data-submit-label><?= $selectedPlan === 'trial' ? 'Start my free trial' : ($selectedPlan === 'buy' ? 'Register and buy credits' : 'Register as a DEx partner') ?></button>
             </form>
+            <?php if ($trial): ?>
+                <script>
+                // Packs belong to "Buy credits" only; the button says what will happen.
+                (function () {
+                    var form = document.querySelector('[data-register-form]');
+                    var packs = form.querySelector('[data-buy-only]');
+                    var button = form.querySelector('[data-submit-label]');
+                    function sync() {
+                        var chosen = form.querySelector('input[name="plan"]:checked');
+                        var buying = chosen && chosen.value === 'buy';
+                        packs.hidden = !buying;
+                        packs.querySelectorAll('input[name="pack"]').forEach(function (r) { r.required = buying; });
+                        button.textContent = !chosen ? 'Register as a DEx partner' : (buying ? 'Register and buy credits' : 'Start my free trial');
+                    }
+                    form.addEventListener('change', function (e) { if (e.target.name === 'plan') sync(); });
+                    sync();
+                })();
+                </script>
+            <?php endif; ?>
             <div class="login-switch">
                 <p>Already a DEx partner? <a href="<?= url('/partner/login') ?>">Sign in</a></p>
                 <p><a href="<?= url('/') ?>">← Back to <?= e($siteName) ?></a></p>

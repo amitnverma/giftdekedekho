@@ -379,6 +379,7 @@ function dexLandingDefaults(): array
             'trial_badge' => 'Free trial · {credits} credits',
             'trial_text'  => 'Try DEx Studio free — no payment needed. Content made on the trial is deleted automatically after {days} days.',
             'trial_cta'   => 'Start your free trial',
+            'buy_cta'     => 'Buy credits instead',
         ],
         'footer_line' => 'Real Moments. Digital Magic. Forever Yours.',
     ];

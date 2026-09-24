@@ -140,6 +140,7 @@ class AdminDesignController extends BaseController
                     'heading'   => trim((string)$this->input('heading', '')) ?: 'Sell Living Photo DEx to your own customers',
                     'text'      => trim((string)$this->input('text', '')),
                     'cta_text'  => trim((string)$this->input('cta_text', '')) ?: 'Start free trial',
+                    'buy_text'  => trim((string)$this->input('buy_text', '')),
                     'link_text' => trim((string)$this->input('link_text', '')),
                     'is_active' => $this->input('is_active') ? true : false,
                     'style'     => $style,
@@ -636,6 +637,7 @@ class AdminDesignController extends BaseController
             'trial_badge' => $text($p['trial_badge'] ?? '', '', 60),
             'trial_text'  => $text($p['trial_text'] ?? '', '', 240),
             'trial_cta'   => $text($p['trial_cta'] ?? '', $defaults['partners']['trial_cta'], 40),
+            'buy_cta'     => $text($p['buy_cta'] ?? '', $defaults['partners']['buy_cta'], 40),
         ];
 
         return [
@@ -752,6 +754,7 @@ class AdminDesignController extends BaseController
                 'heading'   => 'Sell Living Photo DEx to your own customers',
                 'text'      => 'Start a free DEx Studio trial with {credits} credits — no payment needed. Content made on the trial is deleted automatically after {days} days.',
                 'cta_text'  => 'Start free trial',
+                'buy_text'  => 'Buy credits',
                 'link_text' => 'Learn about DEx',
                 'is_active' => true,
             ],

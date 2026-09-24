@@ -386,15 +386,22 @@ class PartnerController extends BaseController
     /**
      * "Become a seller": /partner/register.
      *
-     * With the free trial on (Admin → AR Partners, the default), the shop is
-     * created active and on trial with the trial credits, signed in, and sent
-     * straight to its DEx Studio. Everything it makes during the trial is
-     * deleted automatically a few days later, which every portal page says.
+     * The applicant chooses how to start — the trial is an option, never a
+     * step on the way to buying:
      *
-     * With the trial off, there is no online payment yet, so this creates the
-     * shop paused (signup_status 'pending') with a pending credit request for
-     * the pack chosen. The applicant pays outside the site, and the admin
-     * activates the account, which adds the pack's credits.
+     *  - "Free trial" (offered while the trial is on in Admin → AR Partners and
+     *    this business has not had one): the shop is created active and on
+     *    trial with the trial credits, signed in, and sent straight to its DEx
+     *    Studio. What it makes on the trial is deleted automatically a few days
+     *    later, which every portal page says. Buying a pack later ends the trial.
+     *
+     *  - "Buy credits": a normal paid account, never a trial. There is no online
+     *    payment yet, so the shop is created paused (signup_status 'pending')
+     *    with a pending request for the pack chosen; the applicant pays outside
+     *    the site and the admin activates it, which adds the pack's credits.
+     *
+     * ?plan=trial or ?plan=buy (from the /dex and home page buttons) only
+     * preselects the choice.
      */
     private function register(): void
     {
@@ -409,6 +416,7 @@ class PartnerController extends BaseController
             'rate'    => $rate,
             'trial'   => $trial['enabled'] && !$browserUsedTrial ? $trial : null,
             'trialUsed' => $trial['enabled'] && $browserUsedTrial,
+            'plan'      => in_array($_GET['plan'] ?? '', ['trial', 'buy'], true) ? $_GET['plan'] : '',
             'support' => $this->supportWhatsapp(),
             'closed'  => !$this->partners->signupsReady(),
             'done'    => null,
@@ -427,9 +435,13 @@ class PartnerController extends BaseController
             $city = trim((string)$this->input('city', ''));
             $email = strtolower(trim((string)$this->input('email', '')));
             $password = (string)$this->input('password', '');
-            $packIndex = (int)$this->input('pack', -1);
+            // Blank must stay "none": (int)'' would silently pick the first pack.
+            $packRaw = (string)$this->input('pack', '');
+            $packIndex = ctype_digit($packRaw) ? (int)$packRaw : -1;
+            // Without a trial on offer, buying is the only way in.
+            $plan = $view['trial'] ? (string)$this->input('plan', '') : 'buy';
             $this->setOld(['business_name' => $business, 'name' => $name, 'phone' => $phone,
-                'city' => $city, 'email' => $email, 'pack' => (string)$packIndex]);
+                'city' => $city, 'email' => $email, 'pack' => (string)$packIndex, 'plan' => $plan]);
 
             if ($captchaError = CaptchaService::verify('partner-register')) {
                 flash('error', $captchaError);
@@ -464,28 +476,32 @@ class PartnerController extends BaseController
             } elseif ($password !== (string)$this->input('password_confirm', '')) {
                 $errors[] = 'The two passwords do not match.';
             }
-            $pack = $packs[$packIndex] ?? null;
-            if ($pack === null && !$view['trial']) {
-                $errors[] = 'Choose a credit pack to start with.';
+            // A pack belongs to the buy path only: a trial never comes with a pending purchase.
+            $pack = null;
+            if ($plan === 'buy') {
+                $pack = $packs[$packIndex] ?? null;
+                if ($pack === null) {
+                    $errors[] = 'Choose a credit pack to buy.';
+                }
+            } elseif ($plan !== 'trial') {
+                $errors[] = 'Choose how you would like to start: a free trial, or buying credits.';
             }
             if ($errors) {
                 flash('error', implode(' ', $errors));
                 $this->go('/register');
             }
 
-            // One free trial per business: a repeat still registers, but pays.
-            $trial = $view['trial'];
+            // One free trial per business. Refused, they can still choose to buy.
+            $trial = $plan === 'trial' ? $view['trial'] : null;
             $ip = substr((string)($_SERVER['REMOTE_ADDR'] ?? ''), 0, 45);
-            $noTrialReason = null;
             if ($trial) {
                 $noTrialReason = $this->partners->trialRefusal($email, $phone, $ip, $browserUsedTrial);
                 if ($noTrialReason !== null) {
-                    if ($pack === null) {
-                        flash('error', 'We can\'t start a free trial: ' . $noTrialReason . '. You can still register by choosing a credit pack below'
-                            . ' — or sign in to your existing DEx account.');
-                        $this->go('/register');
-                    }
-                    $trial = null;
+                    $this->setOld(['business_name' => $business, 'name' => $name, 'phone' => $phone,
+                        'city' => $city, 'email' => $email, 'pack' => '', 'plan' => 'buy']);
+                    flash('error', 'We can\'t start a free trial: ' . $noTrialReason . '. You can still register by buying credits'
+                        . ' — or sign in to your existing DEx account.');
+                    $this->go('/register');
                 }
             }
             $this->recordLoginAttempt($identifier);
@@ -504,7 +520,7 @@ class PartnerController extends BaseController
                     'is_active'     => $trial ? 1 : 0,
                     'signup_status' => $trial ? 'approved' : 'pending',
                     'notes'         => 'Registered online on ' . date('d M Y H:i') . ($city !== '' ? '. City: ' . mb_substr($city, 0, 80) : '') . '.'
-                        . ($noTrialReason !== null ? ' Free trial not given: ' . $noTrialReason . '.' : ''),
+                        . ($trial ? ' Started a free trial.' : ''),
                     'created_at'    => date('Y-m-d H:i:s'),
                 ] + ($trial ? ['is_trial' => 1] : [])
                   + ($trial && $this->partners->trialIpReady() ? ['trial_ip' => $ip] : []));
@@ -512,7 +528,7 @@ class PartnerController extends BaseController
                 if ($trial && $trial['credits'] > 0) {
                     $credits->apply($partnerId, $trial['credits'], 'added', 'Free trial credits');
                 }
-                // A pack picked alongside the trial waits for payment, like any request.
+                // Buying: the chosen pack waits for payment, which activates the account.
                 if ($pack !== null) {
                     $credits->createRequest($partnerId, $pack['price'], $pack['credits'], $userId);
                 }
@@ -574,8 +590,8 @@ class PartnerController extends BaseController
                     'Mobile'   => $phone,
                     'Email'    => $email,
                     'City'     => $city !== '' ? $city : '—',
-                    'Free trial' => $trial ? 'Yes' : ($noTrialReason !== null ? 'Not given — ' . $noTrialReason : 'No'),
-                    'Pack'     => $pack === null ? ($trial ? 'Free trial only' : '—')
+                    'Started with' => $trial ? 'Free trial' : 'Buying credits',
+                    'Pack'     => $pack === null ? '—'
                         : GDD_CURRENCY_SYMBOL . number_format($pack['price']) . ' for ' . number_format($pack['credits']) . ' credits',
                 ];
                 $html = '<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#1f2937;max-width:520px">'
@@ -1272,7 +1288,8 @@ class PartnerController extends BaseController
     {
         $this->requireCsrf();
         $packs = ArPartner::creditPacks($this->partner);
-        $pack = $packs[(int)$this->input('pack', -1)] ?? null;
+        $packRaw = (string)$this->input('pack', '');
+        $pack = ctype_digit($packRaw) ? ($packs[(int)$packRaw] ?? null) : null;
         if ($pack === null) {
             flash('error', 'Choose a credit pack.');
             $this->go('/credits');
