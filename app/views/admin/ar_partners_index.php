@@ -74,7 +74,7 @@ $awaitingCount = count(array_filter($partners, fn($p) => ArPartner::awaitingActi
 </div>
 
 <div class="admin-card admin-mt" style="max-width:620px" id="trial">
-    <h3 class="admin-card-title">Free trial</h3>
+    <h3 class="admin-card-title">Seller sign-up &amp; free trial</h3>
     <?php if (!$trialsReady): ?>
         <p class="admin-muted" style="font-size:13px;margin:0">
             Run <code>php tools/run-migration.php migrations/2026_09_23_partner_trials.sql</code> to switch on free trials.
@@ -102,6 +102,13 @@ $awaitingCount = count(array_filter($partners, fn($p) => ArPartner::awaitingActi
                     <input type="number" name="dex_trial_days" min="1" max="365" required value="<?= (int)$trial['days'] ?>">
                 </label>
             </div>
+            <label>“Most popular” pack on the sign-up page <span class="admin-label-hint">Highlighted and preselected — sign-up leads with buying; the trial is offered below the packs</span>
+                <select name="dex_recommended_pack">
+                    <?php foreach ($signupPacks as $i => $pack): ?>
+                        <option value="<?= (int)$i ?>" <?= $i === $recommendedPack ? 'selected' : '' ?>><?= e(GDD_CURRENCY_SYMBOL . number_format($pack['price']) . ' → ' . number_format($pack['credits']) . ' credits') ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
             <p class="admin-muted" style="font-size:12.5px;margin:0">
                 Changes apply to trial accounts created from now on, and to content created from now on — existing trial content keeps
                 the deletion date it was given.

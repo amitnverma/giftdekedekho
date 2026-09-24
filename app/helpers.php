@@ -375,11 +375,13 @@ function dexLandingDefaults(): array
             ],
             'card_title' => 'Get started',
             'card_text'  => 'Register your business in a couple of minutes.',
-            // Shown only while the free trial is on; {credits} and {days} are filled in live.
+            // The main button: register and buy credits.
+            'buy_cta'     => 'Register & buy credits',
+            // Shown only while the free trial is on, beneath the main button;
+            // {credits} and {days} are filled in live.
             'trial_badge' => 'Free trial · {credits} credits',
-            'trial_text'  => 'Try DEx Studio free — no payment needed. Content made on the trial is deleted automatically after {days} days.',
-            'trial_cta'   => 'Start your free trial',
-            'buy_cta'     => 'Buy credits instead',
+            'trial_cta'   => 'Not ready to buy? Try it free',
+            'trial_text'  => '{credits} free credits, no payment. Trial content is deleted automatically after {days} days.',
         ],
         'footer_line' => 'Real Moments. Digital Magic. Forever Yours.',
     ];

@@ -39,6 +39,8 @@ class AdminArPartnerController extends BaseController
             'supportWhatsapp' => (string)(new Settings())->get('ar_partner_support_whatsapp', ''),
             'trialsReady'     => $this->partners->trialsReady(),
             'trial'           => ArPartner::trialSettings(),
+            'signupPacks'     => ArPartner::creditPacks([]),
+            'recommendedPack' => ArPartner::recommendedPack(ArPartner::creditPacks([])),
         ]);
     }
 
@@ -53,8 +55,9 @@ class AdminArPartnerController extends BaseController
             'dex_trial_enabled' => $this->input('dex_trial_enabled') ? '1' : '0',
             'dex_trial_credits' => (string)$credits,
             'dex_trial_days'    => (string)$days,
+            'dex_recommended_pack' => (string)max(0, (int)$this->input('dex_recommended_pack', 1)),
         ]);
-        flash('success', sprintf('Free trial saved: %s credits, content deleted after %d day%s. Applies to new trial accounts and new trial content.',
+        flash('success', sprintf('Sign-up settings saved. Free trial: %s credits, content deleted after %d day%s — applies to new trial accounts and new trial content.',
             number_format($credits), $days, $days === 1 ? '' : 's'));
         redirect('/admin/ar-partners#trial');
     }

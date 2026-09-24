@@ -25,9 +25,9 @@ if (!empty($_dtStyle['subtext_size'])) $_dtTextStyle .= 'font-size:' . (int)$_dt
 
 $_dtKicker  = dexTrialText((string)($promo['kicker'] ?? 'For businesses · DEx Studio'), $trial);
 $_dtHeading = dexTrialText((string)($promo['heading'] ?? 'Sell Living Photo DEx to your own customers'), $trial);
-$_dtText    = dexTrialText((string)($promo['text'] ?? 'Start a free DEx Studio trial with {credits} credits — no payment needed. Content made on the trial is deleted automatically after {days} days.'), $trial);
-$_dtCta     = dexTrialText((string)($promo['cta_text'] ?? 'Start free trial'), $trial);
-$_dtBuy     = dexTrialText((string)($promo['buy_text'] ?? 'Buy credits'), $trial);
+$_dtText    = dexTrialText((string)($promo['text'] ?? 'Your own branded DEx Studio — pay only for what you create, no subscription. Not sure yet? Try it free with {credits} credits; trial content is deleted automatically after {days} days.'), $trial);
+$_dtCta     = dexTrialText((string)($promo['cta_text'] ?? 'or try it free first'), $trial);
+$_dtBuy     = dexTrialText((string)($promo['buy_text'] ?? 'Become a DEx partner'), $trial);
 $_dtLink    = dexTrialText((string)($promo['link_text'] ?? 'Learn about DEx'), $trial);
 ?>
 <section class="section" style="<?= sectionBgStyle($_dtStyle) ?>">
@@ -37,10 +37,10 @@ $_dtLink    = dexTrialText((string)($promo['link_text'] ?? 'Learn about DEx'), $
       <h2 style="<?= $_dtHeadStyle ?>"><?= e($_dtHeading) ?></h2>
       <?php if ($_dtText !== ''): ?><p style="<?= $_dtTextStyle ?>"><?= e($_dtText) ?></p><?php endif; ?>
       <div style="display:flex;gap:14px;flex-wrap:wrap;justify-content:<?= $_dtAlign === 'left' ? 'flex-start' : ($_dtAlign === 'right' ? 'flex-end' : 'center') ?>;align-items:center">
-        <?php /* Both ways in: the trial is an option, never a step before buying. */ ?>
-        <a href="<?= url('/partner/register?plan=trial') ?>" class="btn btn-primary" style="font-size:16px;padding:14px 32px"><?= e($_dtCta ?: 'Start free trial') ?></a>
-        <?php if ($_dtBuy !== ''): ?>
-          <a href="<?= url('/partner/register?plan=buy') ?>" class="btn" style="font-size:16px;padding:13px 30px;background:transparent;color:#fff;border:1px solid rgba(255,255,255,.55)"><?= e($_dtBuy) ?></a>
+        <?php /* Buying leads; the trial is the secondary way in for those not ready to pay. */ ?>
+        <a href="<?= url('/partner/register') ?>" class="btn btn-primary" style="font-size:16px;padding:14px 32px"><?= e($_dtBuy ?: 'Become a DEx partner') ?></a>
+        <?php if ($_dtCta !== ''): ?>
+          <a href="<?= url('/partner/register?plan=trial') ?>" style="color:#fff;font-weight:600;text-decoration:underline"><?= e($_dtCta) ?></a>
         <?php endif; ?>
         <?php if ($_dtLink !== ''): ?>
           <a href="<?= url('/dex') ?>" style="color:<?= e($_dtKickerCol) ?>;font-weight:600;text-decoration:underline"><?= e($_dtLink) ?></a>

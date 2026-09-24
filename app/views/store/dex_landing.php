@@ -21,8 +21,8 @@ $part  = $dex['partners'];
 $trial = dexTrialOffer();
 $trialBadge = $trial ? dexTrialText((string)($part['trial_badge'] ?? ''), $trial) : '';
 $trialText  = $trial ? dexTrialText((string)($part['trial_text'] ?? ''), $trial) : '';
-$trialCta   = $trial ? dexTrialText((string)($part['trial_cta'] ?? '') ?: 'Start your free trial', $trial) : '';
-$buyCta     = (string)($part['buy_cta'] ?? '') ?: 'Buy credits instead';
+$trialCta   = $trial ? dexTrialText((string)($part['trial_cta'] ?? ''), $trial) : '';
+$buyCta     = (string)($part['buy_cta'] ?? '') ?: 'Register & buy credits';
 $demoUrl = $exp['demo_code'] !== '' ? url('/scan/' . $exp['demo_code']) : '';
 
 // "My Baby 1st Album" → 1<sup>st</sup>, after escaping.
@@ -368,19 +368,13 @@ $studioLabel = $partnerOn ? 'Open DEx Studio' : 'Partner sign in';
         <p>You're signed in to DEx Studio.</p>
         <a href="<?= url('/partner/login') ?>" class="dex-btn dex-btn-gold dex-btn-block">Open DEx Studio <?= $icon('arrow') ?></a>
       <?php else: ?>
-        <?php if ($trial && $trialBadge !== ''): ?><span class="dex-trial-badge"><?= e($trialBadge) ?></span><?php endif; ?>
         <?php if ($part['card_title'] !== ''): ?><h3><?= e($part['card_title']) ?></h3><?php endif; ?>
-        <?php if ($trial && $trialText !== ''): ?>
-          <p><?= e($trialText) ?></p>
-        <?php elseif ($part['card_text'] !== ''): ?>
-          <p><?= e($part['card_text']) ?></p>
-        <?php endif; ?>
-        <?php if ($trial): ?>
-          <?php /* Two ways in: a trial is an option, never a step before buying. */ ?>
-          <a href="<?= url('/partner/register?plan=trial') ?>" class="dex-btn dex-btn-gold dex-btn-block"><?= e($trialCta) ?> <?= $icon('arrow') ?></a>
-          <a href="<?= url('/partner/register?plan=buy') ?>" class="dex-btn dex-btn-ghost dex-btn-block" style="margin-top:10px"><?= e($buyCta) ?></a>
-        <?php else: ?>
-          <a href="<?= url('/partner/register') ?>" class="dex-btn dex-btn-gold dex-btn-block">Register as a DEx partner <?= $icon('arrow') ?></a>
+        <?php if ($part['card_text'] !== ''): ?><p><?= e($part['card_text']) ?></p><?php endif; ?>
+        <?php /* Buying leads; the trial is the secondary way in for those not ready to pay. */ ?>
+        <a href="<?= url('/partner/register') ?>" class="dex-btn dex-btn-gold dex-btn-block"><?= e($buyCta) ?> <?= $icon('arrow') ?></a>
+        <?php if ($trial && $trialCta !== ''): ?>
+          <a href="<?= url('/partner/register?plan=trial') ?>" class="dex-trial-link"><?= e($trialCta) ?></a>
+          <?php if ($trialText !== ''): ?><small class="dex-trial-note"><?= e($trialText) ?></small><?php endif; ?>
         <?php endif; ?>
         <div class="dex-or"><span>Already a partner?</span></div>
         <a href="<?= url('/partner/login') ?>" class="dex-btn dex-btn-ghost dex-btn-block">Partner sign in</a>

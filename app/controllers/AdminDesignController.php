@@ -139,8 +139,8 @@ class AdminDesignController extends BaseController
                     'kicker'    => trim((string)$this->input('kicker', '')),
                     'heading'   => trim((string)$this->input('heading', '')) ?: 'Sell Living Photo DEx to your own customers',
                     'text'      => trim((string)$this->input('text', '')),
-                    'cta_text'  => trim((string)$this->input('cta_text', '')) ?: 'Start free trial',
-                    'buy_text'  => trim((string)$this->input('buy_text', '')),
+                    'cta_text'  => trim((string)$this->input('cta_text', '')),
+                    'buy_text'  => trim((string)$this->input('buy_text', '')) ?: 'Become a DEx partner',
                     'link_text' => trim((string)$this->input('link_text', '')),
                     'is_active' => $this->input('is_active') ? true : false,
                     'style'     => $style,
@@ -636,7 +636,7 @@ class AdminDesignController extends BaseController
             'card_text'  => $text($p['card_text'] ?? '', '', 120),
             'trial_badge' => $text($p['trial_badge'] ?? '', '', 60),
             'trial_text'  => $text($p['trial_text'] ?? '', '', 240),
-            'trial_cta'   => $text($p['trial_cta'] ?? '', $defaults['partners']['trial_cta'], 40),
+            'trial_cta'   => $text($p['trial_cta'] ?? '', '', 60),   // blank hides the trial link
             'buy_cta'     => $text($p['buy_cta'] ?? '', $defaults['partners']['buy_cta'], 40),
         ];
 
@@ -752,9 +752,9 @@ class AdminDesignController extends BaseController
             'dex_trial_promo' => [
                 'kicker'    => 'For businesses · DEx Studio',
                 'heading'   => 'Sell Living Photo DEx to your own customers',
-                'text'      => 'Start a free DEx Studio trial with {credits} credits — no payment needed. Content made on the trial is deleted automatically after {days} days.',
-                'cta_text'  => 'Start free trial',
-                'buy_text'  => 'Buy credits',
+                'text'      => 'Your own branded DEx Studio — pay only for what you create, no subscription. Not sure yet? Try it free with {credits} credits; trial content is deleted automatically after {days} days.',
+                'cta_text'  => 'or try it free first',
+                'buy_text'  => 'Become a DEx partner',
                 'link_text' => 'Learn about DEx',
                 'is_active' => true,
             ],

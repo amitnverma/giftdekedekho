@@ -1201,11 +1201,11 @@ foreach (($categories ?? []) as $cat) {
                     <textarea name="text" rows="3"><?= e($dexTrialPromo['text'] ?? '') ?></textarea>
                 </label>
                 <div class="admin-form-row">
-                    <label>Trial Button Text <small style="font-weight:400;color:#888">(starts a free trial)</small>
-                        <input type="text" name="cta_text" value="<?= e($dexTrialPromo['cta_text'] ?? '') ?>">
-                    </label>
-                    <label>Buy Button Text <small style="font-weight:400;color:#888">(registers and buys credits, no trial; blank hides it)</small>
+                    <label>Main Button Text <small style="font-weight:400;color:#888">(register &amp; buy credits)</small>
                         <input type="text" name="buy_text" value="<?= e($dexTrialPromo['buy_text'] ?? '') ?>">
+                    </label>
+                    <label>Trial Link Text <small style="font-weight:400;color:#888">(secondary, starts a free trial; blank hides it)</small>
+                        <input type="text" name="cta_text" value="<?= e($dexTrialPromo['cta_text'] ?? '') ?>">
                     </label>
                     <label>Link Text <small style="font-weight:400;color:#888">(links to /dex; blank hides it)</small>
                         <input type="text" name="link_text" value="<?= e($dexTrialPromo['link_text'] ?? '') ?>">
@@ -1677,14 +1677,14 @@ foreach (($categories ?? []) as $cat) {
                         <label>Sign-up card heading <?= $dexIn('partners[card_title]', $dex['partners']['card_title']) ?></label>
                         <label>Sign-up card text <?= $dexIn('partners[card_text]', $dex['partners']['card_text']) ?></label>
                     </div>
-                    <p class="dex-admin-sub" style="margin-top:12px">Free trial — shown only while the trial is switched on in AR Partners.
-                        <code>{credits}</code> and <code>{days}</code> are filled in from the trial settings. The trial text replaces the sign-up card text.</p>
+                    <label>Main button <small style="font-weight:400;color:#888">(register &amp; buy credits)</small> <?= $dexIn('partners[buy_cta]', (string)($dex['partners']['buy_cta'] ?? '')) ?></label>
+                    <p class="dex-admin-sub" style="margin-top:12px">Free trial — a secondary link under the main button, shown only while the trial is switched on in AR Partners.
+                        <code>{credits}</code> and <code>{days}</code> are filled in from the trial settings. Leave the trial link blank to hide it.</p>
                     <div class="admin-form-row">
-                        <label>Trial badge <?= $dexIn('partners[trial_badge]', (string)($dex['partners']['trial_badge'] ?? '')) ?></label>
-                        <label>Trial button <?= $dexIn('partners[trial_cta]', (string)($dex['partners']['trial_cta'] ?? '')) ?></label>
-                        <label>Buy button <small style="font-weight:400;color:#888">(for businesses who want to pay straight away)</small> <?= $dexIn('partners[buy_cta]', (string)($dex['partners']['buy_cta'] ?? '')) ?></label>
+                        <label>Trial link <?= $dexIn('partners[trial_cta]', (string)($dex['partners']['trial_cta'] ?? '')) ?></label>
+                        <label>Trial badge <small style="font-weight:400;color:#888">(small link under the hero buttons)</small> <?= $dexIn('partners[trial_badge]', (string)($dex['partners']['trial_badge'] ?? '')) ?></label>
                     </div>
-                    <label>Trial text <textarea name="partners[trial_text]" rows="2"><?= e((string)($dex['partners']['trial_text'] ?? '')) ?></textarea></label>
+                    <label>Trial small print <textarea name="partners[trial_text]" rows="2"><?= e((string)($dex['partners']['trial_text'] ?? '')) ?></textarea></label>
                     <label>Footer line under the logo <?= $dexIn('footer_line', $dex['footer_line']) ?></label>
                 </details>
 

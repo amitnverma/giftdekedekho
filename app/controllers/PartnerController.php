@@ -386,8 +386,8 @@ class PartnerController extends BaseController
     /**
      * "Become a seller": /partner/register.
      *
-     * The applicant chooses how to start — the trial is an option, never a
-     * step on the way to buying:
+     * Buying leads and is the default; the trial is offered as the fallback
+     * for those not ready to pay, never as a step on the way to buying:
      *
      *  - "Free trial" (offered while the trial is on in Admin → AR Partners and
      *    this business has not had one): the shop is created active and on
@@ -416,7 +416,8 @@ class PartnerController extends BaseController
             'rate'    => $rate,
             'trial'   => $trial['enabled'] && !$browserUsedTrial ? $trial : null,
             'trialUsed' => $trial['enabled'] && $browserUsedTrial,
-            'plan'      => in_array($_GET['plan'] ?? '', ['trial', 'buy'], true) ? $_GET['plan'] : '',
+            'plan'      => in_array($_GET['plan'] ?? '', ['trial', 'buy'], true) ? $_GET['plan'] : 'buy',
+            'recommended' => ArPartner::recommendedPack($packs),
             'support' => $this->supportWhatsapp(),
             'closed'  => !$this->partners->signupsReady(),
             'done'    => null,
@@ -438,8 +439,8 @@ class PartnerController extends BaseController
             // Blank must stay "none": (int)'' would silently pick the first pack.
             $packRaw = (string)$this->input('pack', '');
             $packIndex = ctype_digit($packRaw) ? (int)$packRaw : -1;
-            // Without a trial on offer, buying is the only way in.
-            $plan = $view['trial'] ? (string)$this->input('plan', '') : 'buy';
+            // Buying unless the trial was explicitly chosen (and is on offer).
+            $plan = $view['trial'] && (string)$this->input('plan', '') === 'trial' ? 'trial' : 'buy';
             $this->setOld(['business_name' => $business, 'name' => $name, 'phone' => $phone,
                 'city' => $city, 'email' => $email, 'pack' => (string)$packIndex, 'plan' => $plan]);
 
@@ -483,8 +484,6 @@ class PartnerController extends BaseController
                 if ($pack === null) {
                     $errors[] = 'Choose a credit pack to buy.';
                 }
-            } elseif ($plan !== 'trial') {
-                $errors[] = 'Choose how you would like to start: a free trial, or buying credits.';
             }
             if ($errors) {
                 flash('error', implode(' ', $errors));

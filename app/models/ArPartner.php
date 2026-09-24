@@ -212,6 +212,23 @@ class ArPartner extends BaseModel
         return $local . '@' . $domain;
     }
 
+    /**
+     * Index of the pack the sign-up page marks "Most popular" and preselects:
+     * the admin's choice (Admin → AR Partners), else the second pack — the
+     * usual anchor between the entry pack and the bulk ones.
+     */
+    public static function recommendedPack(array $packs): int
+    {
+        if (!$packs) {
+            return -1;
+        }
+        $chosen = siteSetting('dex_recommended_pack', '');
+        if ($chosen !== '' && isset($packs[(int)$chosen])) {
+            return (int)$chosen;
+        }
+        return count($packs) > 1 ? 1 : 0;
+    }
+
     public static function isTrial(array $partner): bool
     {
         return !empty($partner['is_trial']);
