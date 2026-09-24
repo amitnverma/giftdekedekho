@@ -401,11 +401,14 @@ class PartnerController extends BaseController
         $packs = ArPartner::creditPacks([]);
         $rate = ['base_credits' => ArPartner::DEFAULT_BASE_CREDITS];
         $trial = $this->partners->trialsReady() ? ArPartner::trialSettings() : ['enabled' => false];
+        // A browser that already started a trial is shown the paid form straight away.
+        $browserUsedTrial = !empty($_COOKIE[ArPartner::TRIAL_COOKIE]);
         $view = [
             'brand'   => $this->brand(),
             'packs'   => $packs,
             'rate'    => $rate,
-            'trial'   => $trial['enabled'] ? $trial : null,
+            'trial'   => $trial['enabled'] && !$browserUsedTrial ? $trial : null,
+            'trialUsed' => $trial['enabled'] && $browserUsedTrial,
             'support' => $this->supportWhatsapp(),
             'closed'  => !$this->partners->signupsReady(),
             'done'    => null,
@@ -469,9 +472,24 @@ class PartnerController extends BaseController
                 flash('error', implode(' ', $errors));
                 $this->go('/register');
             }
+
+            // One free trial per business: a repeat still registers, but pays.
+            $trial = $view['trial'];
+            $ip = substr((string)($_SERVER['REMOTE_ADDR'] ?? ''), 0, 45);
+            $noTrialReason = null;
+            if ($trial) {
+                $noTrialReason = $this->partners->trialRefusal($email, $phone, $ip, $browserUsedTrial);
+                if ($noTrialReason !== null) {
+                    if ($pack === null) {
+                        flash('error', 'We can\'t start a free trial: ' . $noTrialReason . '. You can still register by choosing a credit pack below'
+                            . ' — or sign in to your existing DEx account.');
+                        $this->go('/register');
+                    }
+                    $trial = null;
+                }
+            }
             $this->recordLoginAttempt($identifier);
 
-            $trial = $view['trial'];
             $credits = new ArPartnerCredit();
             $db = $credits->db();
             $db->beginTransaction();
@@ -485,9 +503,11 @@ class PartnerController extends BaseController
                     'contact_email' => mb_substr($email, 0, 180),
                     'is_active'     => $trial ? 1 : 0,
                     'signup_status' => $trial ? 'approved' : 'pending',
-                    'notes'         => 'Registered online on ' . date('d M Y H:i') . ($city !== '' ? '. City: ' . mb_substr($city, 0, 80) : '') . '.',
+                    'notes'         => 'Registered online on ' . date('d M Y H:i') . ($city !== '' ? '. City: ' . mb_substr($city, 0, 80) : '') . '.'
+                        . ($noTrialReason !== null ? ' Free trial not given: ' . $noTrialReason . '.' : ''),
                     'created_at'    => date('Y-m-d H:i:s'),
-                ] + ($trial ? ['is_trial' => 1] : []));
+                ] + ($trial ? ['is_trial' => 1] : [])
+                  + ($trial && $this->partners->trialIpReady() ? ['trial_ip' => $ip] : []));
                 $userId = $users->create($partnerId, mb_substr($name, 0, 120), $email, $password, 'owner');
                 if ($trial && $trial['credits'] > 0) {
                     $credits->apply($partnerId, $trial['credits'], 'added', 'Free trial credits');
@@ -506,6 +526,13 @@ class PartnerController extends BaseController
 
             $this->clearOld();
             if ($trial) {
+                setcookie(ArPartner::TRIAL_COOKIE, '1', [
+                    'expires'  => time() + 86400 * 400,
+                    'path'     => '/',
+                    'secure'   => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
+                    'httponly' => true,
+                    'samesite' => 'Lax',
+                ]);
                 // Straight into the new DEx Studio, signed in, like a login would.
                 $this->partner = $this->partners->find($partnerId);
                 session_regenerate_id(true);
@@ -547,6 +574,7 @@ class PartnerController extends BaseController
                     'Mobile'   => $phone,
                     'Email'    => $email,
                     'City'     => $city !== '' ? $city : '—',
+                    'Free trial' => $trial ? 'Yes' : ($noTrialReason !== null ? 'Not given — ' . $noTrialReason : 'No'),
                     'Pack'     => $pack === null ? ($trial ? 'Free trial only' : '—')
                         : GDD_CURRENCY_SYMBOL . number_format($pack['price']) . ' for ' . number_format($pack['credits']) . ' credits',
                 ];

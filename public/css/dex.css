@@ -383,6 +383,18 @@ body.dex-page {
 .dex-partner-card h3 { font: 700 24px/1.2 var(--dex-serif); color: #fff; }
 .dex-partner-card p { margin: 8px 0 24px !important; color: #c9bfa8; font-size: 14.5px; }
 .dex-partner-card small { display: block; margin-top: 12px; font-size: 12px; color: #a99f88; }
+.dex-trial-badge {
+  display: inline-block; margin-bottom: 14px; padding: 5px 14px; border-radius: 999px;
+  background: var(--dex-gold-light); color: var(--dex-navy); font-size: 12.5px; font-weight: 700; letter-spacing: .03em;
+}
+.dex-hero-trial {
+  display: inline-flex; align-items: center; gap: 8px; margin-top: 18px; padding: 8px 16px; border-radius: 999px;
+  border: 1px solid var(--dex-gold); color: var(--dex-ink); font-size: 14px; text-decoration: none;
+  background: rgba(226,191,108,.12);
+}
+.dex-hero-trial strong { color: var(--dex-gold-dark); }
+.dex-hero-trial .dex-ico { width: 16px; height: 16px; }
+.dex-hero-trial:hover { background: rgba(226,191,108,.25); }
 .dex-or { display: flex; align-items: center; gap: 12px; margin: 22px 0 14px; font-size: 12.5px; color: #a99f88; }
 .dex-or::before, .dex-or::after { content: ""; flex: 1; height: 1px; background: rgba(226,191,108,.25); }
 

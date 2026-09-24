@@ -85,12 +85,17 @@ $sitePhone = trim((string)siteSetting('site_phone', ''));
                 <div class="banner banner-danger" role="alert"><p><?= e($msg) ?></p></div>
             <?php endif; ?>
 
+            <?php if (!empty($trialUsed)): ?>
+                <div class="banner banner-amber"><p>A free trial has already been used in this browser. You can register by choosing a credit
+                    pack below, or <a href="<?= url('/partner/login') ?>">sign in to your existing DEx account</a>.</p></div>
+            <?php endif; ?>
             <?php if ($trial): ?>
                 <div class="trial-box">
                     <p class="trial-box-title">Free trial · <?= number_format($trial['credits']) ?> credits</p>
                     <ul>
                         <li>Your DEx Studio opens as soon as you register — create DEx content and test it on your phone straight away.</li>
                         <li>A basic DEx item (one photo with a short video) uses <?= number_format((int)$rate['base_credits']) ?> credits.</li>
+                        <li>One free trial per business — mobile number, email and device.</li>
                         <li><strong>Trial content is temporary:</strong> every photo, video and QR link you create during the trial is
                             <strong>deleted automatically <?= e($trialDays) ?> after it is created</strong>.
                             Buy a credit pack to create content that stays live.</li>

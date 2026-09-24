@@ -165,6 +165,7 @@ $topbarButtons = $sections['topbar_buttons'] ?? ['items' => []];
 $igGallery = $sections['instagram_gallery'] ?? ['items' => []];
 $sigFeature = $sections['signature_feature'] ?? [];
 $livingPhoto = $sections['living_photo_scan'] ?? [];
+$dexTrialPromo = $sections['dex_trial_promo'] ?? [];
 $marqueeSection = $sections['marquee_strip'] ?? [];
 $catSection = $sections['shop_by_category'] ?? [];
 $whyChoose = $sections['why_choose_us'] ?? [];
@@ -209,6 +210,7 @@ foreach (($categories ?? []) as $cat) {
         <span class="admin-tab" data-tab="featured">Featured Section</span>
         <span class="admin-tab" data-tab="signature">Signature Feature</span>
         <span class="admin-tab" data-tab="livingphoto">Living Photo Scan</span>
+        <span class="admin-tab" data-tab="dextrial">DEx Free Trial</span>
         <span class="admin-tab" data-tab="badges">Trust Badges</span>
         <span class="admin-tab" data-tab="testimonials">Testimonials</span>
         <span class="admin-tab" data-tab="instagram">Instagram Gallery</span>
@@ -1177,6 +1179,53 @@ foreach (($categories ?? []) as $cat) {
         </div>
     </div>
 
+    <!-- DEx free trial (homepage invitation to businesses) -->
+    <div class="admin-tab-pane" data-pane="dextrial">
+        <div class="admin-card">
+            <p style="margin:0 0 18px;color:#6b7280;font-size:14px">
+                Invites businesses to start a free DEx Studio trial at <code>/partner/register</code>.
+                It hides itself automatically while the free trial is switched off in
+                <a href="<?= url('/admin/ar-partners#trial') ?>">AR Partners</a>, so it never promises a trial that sign-up would not give.
+                Write <code>{credits}</code> and <code>{days}</code> anywhere to show the current trial credits and days.
+            </p>
+            <form method="post" action="<?= url('/admin/design/save') ?>" class="admin-form">
+                <?= csrfField() ?>
+                <input type="hidden" name="section" value="dex_trial_promo">
+                <label>Kicker Label <small style="font-weight:400;color:#888">(leave blank to hide)</small>
+                    <input type="text" name="kicker" value="<?= e($dexTrialPromo['kicker'] ?? '') ?>">
+                </label>
+                <label>Heading
+                    <input type="text" name="heading" value="<?= e($dexTrialPromo['heading'] ?? '') ?>">
+                </label>
+                <label>Description <small style="font-weight:400;color:#888">(say that trial content is deleted after {days} days)</small>
+                    <textarea name="text" rows="3"><?= e($dexTrialPromo['text'] ?? '') ?></textarea>
+                </label>
+                <div class="admin-form-row">
+                    <label>Button Text <small style="font-weight:400;color:#888">(links to /partner/register)</small>
+                        <input type="text" name="cta_text" value="<?= e($dexTrialPromo['cta_text'] ?? '') ?>">
+                    </label>
+                    <label>Link Text <small style="font-weight:400;color:#888">(links to /dex; blank hides it)</small>
+                        <input type="text" name="link_text" value="<?= e($dexTrialPromo['link_text'] ?? '') ?>">
+                    </label>
+                </div>
+                <?php
+                // Dark DEx-navy panel by default, so seed the pickers with its own colours.
+                designAppearancePanel($dexTrialPromo['style'] ?? [
+                    'kicker_color'  => '#e2bf6c',
+                    'heading_color' => '#ffffff',
+                    'subtext_color' => '#d9cfb8',
+                    'bg_color'      => '#0b2234',
+                ]);
+                ?>
+                <label class="admin-checkbox">
+                    <input type="checkbox" name="is_active" value="1" <?= ($dexTrialPromo['is_active'] ?? true) ? 'checked' : '' ?>>
+                    Show DEx Free Trial section on homepage
+                </label>
+                <button type="submit" class="admin-btn admin-btn-primary">Save DEx Free Trial Section</button>
+            </form>
+        </div>
+    </div>
+
     <!-- Trust badges -->
     <div class="admin-tab-pane" data-pane="badges">
         <div class="admin-card">
@@ -1625,6 +1674,13 @@ foreach (($categories ?? []) as $cat) {
                         <label>Sign-up card heading <?= $dexIn('partners[card_title]', $dex['partners']['card_title']) ?></label>
                         <label>Sign-up card text <?= $dexIn('partners[card_text]', $dex['partners']['card_text']) ?></label>
                     </div>
+                    <p class="dex-admin-sub" style="margin-top:12px">Free trial — shown only while the trial is switched on in AR Partners.
+                        <code>{credits}</code> and <code>{days}</code> are filled in from the trial settings. The trial text replaces the sign-up card text.</p>
+                    <div class="admin-form-row">
+                        <label>Trial badge <?= $dexIn('partners[trial_badge]', (string)($dex['partners']['trial_badge'] ?? '')) ?></label>
+                        <label>Trial button <?= $dexIn('partners[trial_cta]', (string)($dex['partners']['trial_cta'] ?? '')) ?></label>
+                    </div>
+                    <label>Trial text <textarea name="partners[trial_text]" rows="2"><?= e((string)($dex['partners']['trial_text'] ?? '')) ?></textarea></label>
                     <label>Footer line under the logo <?= $dexIn('footer_line', $dex['footer_line']) ?></label>
                 </details>
 
@@ -1680,6 +1736,7 @@ foreach (($categories ?? []) as $cat) {
                 'featured_products_section' => 'Featured Products',
                 'signature_feature'         => 'Signature Feature / QR',
                 'living_photo_scan'         => 'Living Photo Scan',
+                'dex_trial_promo'           => 'DEx Free Trial',
                 'trust_badges'              => 'Trust Badges',
                 'testimonials_section'      => 'Testimonials',
                 'instagram_gallery'         => 'Instagram Gallery',

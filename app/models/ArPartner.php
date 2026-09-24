@@ -121,6 +121,97 @@ class ArPartner extends BaseModel
         ];
     }
 
+    /** Free trials registration may start from one network address in TRIAL_IP_WINDOW_DAYS. */
+    public const TRIALS_PER_IP = 2;
+    public const TRIAL_IP_WINDOW_DAYS = 30;
+
+    /** Set in a browser that has started a free trial, so it cannot start another. */
+    public const TRIAL_COOKIE = 'gdd_dex_trial';
+
+    /** Whether the trial_ip column exists (2026_09_24_partner_trial_guard.sql). */
+    public function trialIpReady(): bool
+    {
+        static $ready = null;
+        if ($ready === null) {
+            try {
+                $ready = $this->trialsReady()
+                    && $this->db->query("SHOW COLUMNS FROM ar_partners LIKE 'trial_ip'")->fetch() !== false;
+            } catch (Throwable $e) {
+                $ready = false;
+            }
+        }
+        return $ready;
+    }
+
+    /**
+     * Why a registration may not have a free trial, or null when it may.
+     *
+     * A trial is for a business's first try, so it is refused when that
+     * business has evidently had one or an account already: the same mobile
+     * number, the same email written another way (Gmail ignores dots and
+     * "+anything"), a browser that already started a trial, or a network
+     * address that started TRIALS_PER_IP trials recently. None of this stops
+     * the registration itself — the applicant can still choose a paid pack,
+     * and the admin can still grant a trial by hand.
+     */
+    public function trialRefusal(string $email, string $phone, string $ip, bool $browserUsedTrial): ?string
+    {
+        if ($browserUsedTrial) {
+            return 'a free trial was already started in this browser';
+        }
+
+        $digits = substr(preg_replace('/\D/', '', $phone), -10);
+        if (strlen($digits) === 10) {
+            foreach ($this->db->query('SELECT whatsapp, contact_phone FROM ar_partners')->fetchAll() as $row) {
+                foreach ([$row['whatsapp'], $row['contact_phone']] as $known) {
+                    if ($known !== null && substr(preg_replace('/\D/', '', (string)$known), -10) === $digits) {
+                        return 'this mobile number already has a DEx partner account';
+                    }
+                }
+            }
+        }
+
+        $wanted = self::canonicalEmail($email);
+        $domain = substr($wanted, strrpos($wanted, '@') + 1);
+        $stmt = $this->db->prepare('SELECT email FROM ar_partner_users WHERE email LIKE ? OR email LIKE ?');
+        $stmt->execute(['%@' . $domain, $domain === 'gmail.com' ? '%@googlemail.com' : '%@' . $domain]);
+        foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $known) {
+            if (self::canonicalEmail((string)$known) === $wanted) {
+                return 'this email address already has a DEx partner account';
+            }
+        }
+
+        if ($ip !== '' && $this->trialIpReady()) {
+            $stmt = $this->db->prepare('SELECT COUNT(*) FROM ar_partners WHERE trial_ip = ? AND created_at > ?');
+            $stmt->execute([$ip, date('Y-m-d H:i:s', time() - 86400 * self::TRIAL_IP_WINDOW_DAYS)]);
+            if ((int)$stmt->fetchColumn() >= self::TRIALS_PER_IP) {
+                return 'free trials were already started from this internet connection recently';
+            }
+        }
+        return null;
+    }
+
+    /** One spelling per mailbox: lower case, no "+tag", and for Gmail no dots. */
+    public static function canonicalEmail(string $email): string
+    {
+        $email = strtolower(trim($email));
+        $at = strrpos($email, '@');
+        if ($at === false) {
+            return $email;
+        }
+        $local = substr($email, 0, $at);
+        $domain = substr($email, $at + 1);
+        $plus = strpos($local, '+');
+        if ($plus !== false) {
+            $local = substr($local, 0, $plus);
+        }
+        if ($domain === 'gmail.com' || $domain === 'googlemail.com') {
+            $local = str_replace('.', '', $local);
+            $domain = 'gmail.com';
+        }
+        return $local . '@' . $domain;
+    }
+
     public static function isTrial(array $partner): bool
     {
         return !empty($partner['is_trial']);

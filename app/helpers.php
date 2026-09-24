@@ -371,13 +371,51 @@ function dexLandingDefaults(): array
             'points'     => [
                 ['title' => 'Your own branded studio',  'desc' => 'Your logo and colours on every page your customers see.'],
                 ['title' => 'Create DEx experiences',   'desc' => 'Link photos and videos to frames, albums, cards and print.'],
-                ['title' => 'Start with a credit pack', 'desc' => 'Pick a pack when you register; we activate your account.'],
+                ['title' => 'Pay as you go',            'desc' => 'Buy credit packs as you need them — no subscription.'],
             ],
             'card_title' => 'Get started',
             'card_text'  => 'Register your business in a couple of minutes.',
+            // Shown only while the free trial is on; {credits} and {days} are filled in live.
+            'trial_badge' => 'Free trial · {credits} credits',
+            'trial_text'  => 'Try DEx Studio free — no payment needed. Content made on the trial is deleted automatically after {days} days.',
+            'trial_cta'   => 'Start your free trial',
         ],
         'footer_line' => 'Real Moments. Digital Magic. Forever Yours.',
     ];
+}
+
+/**
+ * The free DEx trial new partners get, or null when there is none to offer
+ * (switched off in Admin → AR Partners, or its migration not run yet). Public
+ * pages advertise the trial only through this, so they never promise one
+ * that registration would not give.
+ *
+ * @return array{enabled: bool, credits: int, days: int}|null
+ */
+function dexTrialOffer(): ?array
+{
+    static $offer = false;
+    if ($offer === false) {
+        $offer = null;
+        try {
+            if ((new ArPartner())->trialsReady()) {
+                $trial = ArPartner::trialSettings();
+                $offer = $trial['enabled'] ? $trial : null;
+            }
+        } catch (Throwable $e) {
+            error_log('DEx trial offer unavailable: ' . $e->getMessage());
+        }
+    }
+    return $offer;
+}
+
+/** Fill {credits} and {days} in admin-written trial copy with the live trial settings. */
+function dexTrialText(string $text, array $trial): string
+{
+    return strtr($text, [
+        '{credits}' => number_format((int)$trial['credits']),
+        '{days}'    => (string)(int)$trial['days'],
+    ]);
 }
 
 /**

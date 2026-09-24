@@ -134,6 +134,18 @@ class AdminDesignController extends BaseController
                 ]);
                 break;
 
+            case 'dex_trial_promo':
+                $this->saveSection('dex_trial_promo', [
+                    'kicker'    => trim((string)$this->input('kicker', '')),
+                    'heading'   => trim((string)$this->input('heading', '')) ?: 'Sell Living Photo DEx to your own customers',
+                    'text'      => trim((string)$this->input('text', '')),
+                    'cta_text'  => trim((string)$this->input('cta_text', '')) ?: 'Start free trial',
+                    'link_text' => trim((string)$this->input('link_text', '')),
+                    'is_active' => $this->input('is_active') ? true : false,
+                    'style'     => $style,
+                ]);
+                break;
+
             case 'trust_badges':
                 $items = [];
                 $icons = (array)($_POST['badge_icon'] ?? []);
@@ -436,7 +448,7 @@ class AdminDesignController extends BaseController
         $allowed = [
             'hero_banner', 'marquee_strip', 'why_choose_us', 'shop_by_category',
             'how_it_works', 'featured_products_section', 'signature_feature',
-            'living_photo_scan', 'trust_badges', 'testimonials_section',
+            'living_photo_scan', 'dex_trial_promo', 'trust_badges', 'testimonials_section',
             'instagram_gallery', 'newsletter',
         ];
 
@@ -621,6 +633,9 @@ class AdminDesignController extends BaseController
             'points'     => $points,
             'card_title' => $text($p['card_title'] ?? '', '', 40),
             'card_text'  => $text($p['card_text'] ?? '', '', 120),
+            'trial_badge' => $text($p['trial_badge'] ?? '', '', 60),
+            'trial_text'  => $text($p['trial_text'] ?? '', '', 240),
+            'trial_cta'   => $text($p['trial_cta'] ?? '', $defaults['partners']['trial_cta'], 40),
         ];
 
         return [
@@ -731,6 +746,14 @@ class AdminDesignController extends BaseController
                 // Off by default: the QR sticker on each frame is the way in now,
                 // so this section is an optional fallback rather than the norm.
                 'is_active' => false,
+            ],
+            'dex_trial_promo' => [
+                'kicker'    => 'For businesses · DEx Studio',
+                'heading'   => 'Sell Living Photo DEx to your own customers',
+                'text'      => 'Start a free DEx Studio trial with {credits} credits — no payment needed. Content made on the trial is deleted automatically after {days} days.',
+                'cta_text'  => 'Start free trial',
+                'link_text' => 'Learn about DEx',
+                'is_active' => true,
             ],
             'trust_badges' => [
                 'is_active' => true,

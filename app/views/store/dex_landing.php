@@ -17,6 +17,11 @@ $steps = $dex['steps'];
 $exp   = $dex['experiences'];
 $coll  = $dex['collection'];
 $part  = $dex['partners'];
+// The free partner trial, advertised only while registration really gives one.
+$trial = dexTrialOffer();
+$trialBadge = $trial ? dexTrialText((string)($part['trial_badge'] ?? ''), $trial) : '';
+$trialText  = $trial ? dexTrialText((string)($part['trial_text'] ?? ''), $trial) : '';
+$trialCta   = $trial ? dexTrialText((string)($part['trial_cta'] ?? '') ?: 'Start your free trial', $trial) : '';
 $demoUrl = $exp['demo_code'] !== '' ? url('/scan/' . $exp['demo_code']) : '';
 
 // "My Baby 1st Album" → 1<sup>st</sup>, after escaping.
@@ -149,7 +154,7 @@ $studioLabel = $partnerOn ? 'Open DEx Studio' : 'Partner sign in';
       </div>
 
       <?php if (!$partnerOn): ?>
-        <a href="<?= url('/partner/register') ?>" class="dex-btn dex-btn-gold dex-nav-cta">Become a Partner</a>
+        <a href="<?= url('/partner/register') ?>" class="dex-btn dex-btn-gold dex-nav-cta"><?= $trial ? 'Start free trial' : 'Become a Partner' ?></a>
       <?php endif; ?>
 
       <button type="button" class="dex-burger" aria-expanded="false" aria-controls="dexMobile" aria-label="Open menu">
@@ -167,7 +172,7 @@ $studioLabel = $partnerOn ? 'Open DEx Studio' : 'Partner sign in';
       <div class="dex-mobile-cta">
         <a href="<?= url('/partner/login') ?>" class="dex-btn dex-btn-navy"><?= e($studioLabel) ?></a>
         <?php if (!$partnerOn): ?>
-          <a href="<?= url('/partner/register') ?>" class="dex-btn dex-btn-gold">Become a DEx partner</a>
+          <a href="<?= url('/partner/register') ?>" class="dex-btn dex-btn-gold"><?= $trial ? 'Start a free partner trial' : 'Become a DEx partner' ?></a>
         <?php endif; ?>
       </div>
       <a href="<?= url('/') ?>" class="dex-mobile-shop">← Shop <?= e($siteName) ?></a>
@@ -202,6 +207,9 @@ $studioLabel = $partnerOn ? 'Open DEx Studio' : 'Partner sign in';
         <a href="#how-it-works" class="dex-btn dex-btn-navy"><?= e($hero['cta_primary']) ?></a>
         <a href="#try-it" class="dex-btn dex-btn-line"><?= e($hero['cta_demo']) ?></a>
       </div>
+      <?php if ($trial && !$partnerOn && $trialBadge !== ''): ?>
+        <a href="#partners" class="dex-hero-trial">For businesses · <strong><?= e($trialBadge) ?></strong> <?= $icon('arrow') ?></a>
+      <?php endif; ?>
     </div>
 
     <div class="dex-hero-visual">
@@ -359,9 +367,14 @@ $studioLabel = $partnerOn ? 'Open DEx Studio' : 'Partner sign in';
         <p>You're signed in to DEx Studio.</p>
         <a href="<?= url('/partner/login') ?>" class="dex-btn dex-btn-gold dex-btn-block">Open DEx Studio <?= $icon('arrow') ?></a>
       <?php else: ?>
+        <?php if ($trial && $trialBadge !== ''): ?><span class="dex-trial-badge"><?= e($trialBadge) ?></span><?php endif; ?>
         <?php if ($part['card_title'] !== ''): ?><h3><?= e($part['card_title']) ?></h3><?php endif; ?>
-        <?php if ($part['card_text'] !== ''): ?><p><?= e($part['card_text']) ?></p><?php endif; ?>
-        <a href="<?= url('/partner/register') ?>" class="dex-btn dex-btn-gold dex-btn-block">Register as a DEx partner <?= $icon('arrow') ?></a>
+        <?php if ($trial && $trialText !== ''): ?>
+          <p><?= e($trialText) ?></p>
+        <?php elseif ($part['card_text'] !== ''): ?>
+          <p><?= e($part['card_text']) ?></p>
+        <?php endif; ?>
+        <a href="<?= url('/partner/register') ?>" class="dex-btn dex-btn-gold dex-btn-block"><?= e($trial ? $trialCta : 'Register as a DEx partner') ?> <?= $icon('arrow') ?></a>
         <div class="dex-or"><span>Already a partner?</span></div>
         <a href="<?= url('/partner/login') ?>" class="dex-btn dex-btn-ghost dex-btn-block">Partner sign in</a>
         <small>Separate login from your shopping account.</small>
