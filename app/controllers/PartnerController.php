@@ -439,10 +439,10 @@ class PartnerController extends BaseController
             // Blank must stay "none": (int)'' would silently pick the first pack.
             $packRaw = (string)$this->input('pack', '');
             $packIndex = ctype_digit($packRaw) ? (int)$packRaw : -1;
-            // Buying unless the trial was explicitly chosen (and is on offer).
-            $plan = $view['trial'] && (string)$this->input('plan', '') === 'trial' ? 'trial' : 'buy';
+            // The chosen card decides: the trial card (when on offer), else a pack.
+            $plan = $view['trial'] && $packRaw === 'trial' ? 'trial' : 'buy';
             $this->setOld(['business_name' => $business, 'name' => $name, 'phone' => $phone,
-                'city' => $city, 'email' => $email, 'pack' => (string)$packIndex, 'plan' => $plan]);
+                'city' => $city, 'email' => $email, 'pack' => $packRaw]);
 
             if ($captchaError = CaptchaService::verify('partner-register')) {
                 flash('error', $captchaError);
@@ -482,7 +482,7 @@ class PartnerController extends BaseController
             if ($plan === 'buy') {
                 $pack = $packs[$packIndex] ?? null;
                 if ($pack === null) {
-                    $errors[] = 'Choose a credit pack to buy.';
+                    $errors[] = $view['trial'] ? 'Choose a credit pack, or the free trial.' : 'Choose a credit pack to buy.';
                 }
             }
             if ($errors) {
@@ -497,7 +497,7 @@ class PartnerController extends BaseController
                 $noTrialReason = $this->partners->trialRefusal($email, $phone, $ip, $browserUsedTrial);
                 if ($noTrialReason !== null) {
                     $this->setOld(['business_name' => $business, 'name' => $name, 'phone' => $phone,
-                        'city' => $city, 'email' => $email, 'pack' => '', 'plan' => 'buy']);
+                        'city' => $city, 'email' => $email, 'pack' => (string)$view['recommended']]);
                     flash('error', 'We can\'t start a free trial: ' . $noTrialReason . '. You can still register by buying credits'
                         . ' — or sign in to your existing DEx account.');
                     $this->go('/register');

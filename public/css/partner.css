@@ -346,8 +346,13 @@ table.p-table { width: 100%; border-collapse: collapse; min-width: 640px; }
 .pack-option .save { display: inline-block; align-self: center; margin-top: 4px; padding: 1px 8px; border-radius: 999px; background: var(--green-bg); color: var(--green-ink); font-size: 11px; font-weight: 700; }
 .pack-option.is-popular { border-color: color-mix(in srgb, var(--brand) 55%, var(--line)); }
 .pack-ribbon { position: absolute; top: -10px; left: 50%; transform: translateX(-50%); white-space: nowrap; padding: 2px 9px; border-radius: 999px; background: var(--brand); color: #fff; font-size: 10.5px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; }
+.login-card-xl { width: min(760px, 100%); }
+.packs.packs-sale { grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); }
+.pack-trial { border-style: dashed; background: var(--amber-bg); }
+.pack-trial .per { color: var(--ink-3); }
+.pack-trial:has(input:checked) { border-style: solid; background: var(--amber-bg); }
+.pack-ribbon-trial { background: var(--amber-ink); }
+.pack-option .save-warn { background: #fee2e2; color: var(--danger-ink); white-space: nowrap; font-size: 10.5px; padding: 1px 6px; }
+@media (max-width: 520px) { .pack-trial { grid-column: 1 / -1; } }
 .reg-perks { list-style: none; margin: 14px 0 6px; padding: 0; display: grid; gap: 5px; font-size: 13.5px; color: var(--ink-2); }
 .reg-perks li::before { content: "✓"; margin-right: 8px; color: var(--green-ink); font-weight: 700; }
-.trial-offer { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 16px; padding: 12px 14px; border: 1px dashed var(--line); border-radius: var(--radius); background: var(--bg); font-size: 13.5px; }
-.trial-offer p { margin: 0; flex: 1; min-width: 220px; }
-.trial-offer .muted { display: block; font-size: 12.5px; margin-top: 2px; }

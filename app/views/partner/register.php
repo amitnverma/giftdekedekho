@@ -4,11 +4,12 @@
  *
  * Three states: the form; $done, the "what happens next" page shown once after
  * registering; and $closed, until the registration migration has been run.
- * Buying leads: the credit packs come first, with the admin's recommended
- * pack marked "Most popular" and preselected, and the button names the pack.
- * With $trial set, the free trial is offered underneath as the fallback for
- * those not ready to pay ("Not ready to buy?"); it becomes the form only when
- * chosen there or when a "try free" button sent ?plan=trial. Buying has no
+ * One choice, made in the pack grid: the paid packs lead, with the admin's
+ * recommended pack marked "Most popular" and preselected, and — with $trial
+ * set — the free trial is the last card, marked with its deletion terms.
+ * The chosen card decides the path (pack=trial or a pack index) and the
+ * button names it. A "try free" button elsewhere sends ?plan=trial, which
+ * preselects the trial card. Buying has no
  * online payment: the applicant pays outside the site and the admin activates
  * the account, which adds the pack's credits ($done). The trial opens DEx
  * Studio at once.
@@ -17,11 +18,8 @@ $siteName = $brand['name'];
 $initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)$siteName), 0, 2)) ?: 'DX';
 // Buying is the default path; only an explicit trial choice (a "try free"
 // button, or the switch on this page) opens the trial.
-$selectedPlan = $trial && old('plan', $plan ?? '') === 'trial' ? 'trial' : 'buy';
-$selectedPack = old('pack', (string)$recommended);
-// "from ₹x/item" on the trial side's link back to the packs.
-$perItem = array_map(fn($p) => ArPartnerService::packItemPrice($p, $rate), $packs);
-$cheapestPer = $perItem ? min($perItem) : 0;
+$selectedPack = old('pack', $trial && ($plan ?? '') === 'trial' ? 'trial' : (string)$recommended);
+$selectedPlan = $trial && $selectedPack === 'trial' ? 'trial' : 'buy';
 $trialDays = $trial ? $trial['days'] . ' day' . ($trial['days'] === 1 ? '' : 's') : '';
 $siteEmail = trim((string)siteSetting('site_email', ''));
 $sitePhone = trim((string)siteSetting('site_phone', ''));
@@ -39,7 +37,7 @@ $sitePhone = trim((string)siteSetting('site_phone', ''));
 </head>
 <body>
 <main class="login-page">
-    <div class="login-card login-card-wide">
+    <div class="login-card login-card-wide<?= $closed || $done ? '' : ' login-card-xl' ?>">
         <div class="login-brand">
             <?php if (!empty($brand['logo'])): ?>
                 <img src="<?= e($brand['logo']) ?>" alt="<?= e($siteName) ?>">
@@ -103,11 +101,10 @@ $sitePhone = trim((string)siteSetting('site_phone', ''));
             <form method="post" action="<?= url('/partner/register') ?>" data-register-form
                   data-mode="<?= $selectedPlan === 'trial' ? 'trial' : 'buy' ?>">
                 <?= csrfField() ?>
-                <input type="hidden" name="plan" value="<?= $selectedPlan === 'trial' ? 'trial' : 'buy' ?>" data-plan-input>
 
-                <?php /* Buying leads; the trial is the fallback for those not ready to pay. */ ?>
-                <section class="reg-step" data-show-for="buy"<?= $selectedPlan === 'trial' ? ' hidden' : '' ?>>
-                    <h2 class="reg-step-title"><span>1</span> Choose your credit pack</h2>
+                <?php /* One choice for everyone: the paid packs lead, the free trial is the last card. */ ?>
+                <section class="reg-step">
+                    <h2 class="reg-step-title"><span>1</span> <?= $trial ? 'Choose a credit pack — or try it free' : 'Choose your credit pack' ?></h2>
                     <div class="packs packs-sale" role="radiogroup" aria-label="Credit pack">
                         <?php foreach ($packs as $i => $pack):
                             $per = ArPartnerService::packItemPrice($pack, $rate);
@@ -116,54 +113,53 @@ $sitePhone = trim((string)siteSetting('site_phone', ''));
                             $isPopular = $i === $recommended; ?>
                             <label class="pack pack-option<?= $isPopular ? ' is-popular' : '' ?>">
                                 <?php if ($isPopular): ?><span class="pack-ribbon">Most popular</span><?php endif; ?>
-                                <input type="radio" name="pack" value="<?= (int)$i ?>" <?= $selectedPlan === 'trial' ? '' : 'required' ?>
+                                <input type="radio" name="pack" value="<?= (int)$i ?>" required
                                        <?= $selectedPack === (string)$i ? 'checked' : '' ?>
-                                       data-label="<?= e(GDD_CURRENCY_SYMBOL . number_format($pack['price'])) ?>">
+                                       data-label="Register — <?= e(GDD_CURRENCY_SYMBOL . number_format($pack['price'])) ?> pack">
                                 <span class="price"><?= e(GDD_CURRENCY_SYMBOL . number_format($pack['price'])) ?></span>
                                 <span class="get"><?= number_format($pack['credits']) ?> credits</span>
                                 <span class="per"><?= e(GDD_CURRENCY_SYMBOL . number_format($per, 2)) ?>/item</span>
                                 <?php if ($bonus > 0): ?><span class="save">+<?= number_format($bonus) ?> bonus</span><?php endif; ?>
                             </label>
                         <?php endforeach; ?>
+                        <?php if ($trial): ?>
+                            <label class="pack pack-option pack-trial">
+                                <span class="pack-ribbon pack-ribbon-trial">Try first</span>
+                                <input type="radio" name="pack" value="trial" required <?= $selectedPack === 'trial' ? 'checked' : '' ?>
+                                       data-label="Start my free trial">
+                                <span class="price">Free</span>
+                                <span class="get"><?= number_format($trial['credits']) ?> credits</span>
+                                <span class="per">No payment</span>
+                                <span class="save save-warn" title="Everything created on the trial is deleted automatically <?= e($trialDays) ?> after it is made">Deletes in <?= e($trialDays) ?></span>
+                            </label>
+                        <?php endif; ?>
                     </div>
-                    <ul class="reg-perks">
-                        <li>Your DEx content stays live for its full validity</li>
-                        <li>Your own branded DEx Studio</li>
-                        <li>No subscription — top up whenever you need</li>
-                    </ul>
-                    <p class="hint">
-                        A basic DEx item (one photo with a short video) uses <?= number_format((int)$rate['base_credits']) ?> credits.
-                        <strong>No payment is taken now:</strong> we contact you to arrange payment, then activate your account and add the credits.
-                    </p>
 
+                    <div data-show-for="buy"<?= $selectedPlan === 'trial' ? ' hidden' : '' ?>>
+                        <ul class="reg-perks">
+                            <li>Your DEx content stays live for its full validity</li>
+                            <li>Your own branded DEx Studio</li>
+                            <li>No subscription — top up whenever you need</li>
+                        </ul>
+                        <p class="hint">
+                            A basic DEx item (one photo with a short video) uses <?= number_format((int)$rate['base_credits']) ?> credits.
+                            <strong>No payment is taken now:</strong> we contact you to arrange payment, then activate your account and add the credits.
+                        </p>
+                    </div>
                     <?php if ($trial): ?>
-                        <div class="trial-offer">
-                            <p><strong>Not ready to buy?</strong> Try DEx Studio free with <?= number_format($trial['credits']) ?> credits — no payment, start right away.
-                                <span class="muted">Trial content is deleted automatically after <?= e($trialDays) ?>.</span></p>
-                            <a class="btn btn-ghost btn-sm" href="<?= url('/partner/register?plan=trial') ?>" data-switch-plan="trial">Start a free trial instead</a>
-                        </div>
-                    <?php endif; ?>
-                </section>
-
-                <?php if ($trial): ?>
-                    <section class="reg-step" data-show-for="trial"<?= $selectedPlan === 'trial' ? '' : ' hidden' ?>>
-                        <div class="trial-box">
+                        <div class="trial-box" data-show-for="trial"<?= $selectedPlan === 'trial' ? '' : ' hidden' ?>>
                             <p class="trial-box-title">Free trial · <?= number_format($trial['credits']) ?> credits</p>
                             <ul>
                                 <li>No payment — your DEx Studio opens as soon as you register.</li>
                                 <li><strong>Trial content is temporary:</strong> every photo, video and QR link is
                                     <strong>deleted automatically <?= e($trialDays) ?> after it is created</strong>.</li>
-                                <li>One free trial per business. Buy credits at any time to keep what you create from then on.</li>
+                                <li>One free trial per business. Buy a credit pack at any time to keep what you create from then on.</li>
                             </ul>
                         </div>
-                        <p class="hint" style="margin-top:-8px">
-                            Want your DEx content to stay live?
-                            <a href="<?= url('/partner/register?plan=buy') ?>" data-switch-plan="buy">See credit packs<?= $cheapestPer > 0 ? ' — from ' . e(GDD_CURRENCY_SYMBOL . number_format($cheapestPer, 2)) . '/item' : '' ?></a>
-                        </p>
-                    </section>
-                <?php endif; ?>
+                    <?php endif; ?>
+                </section>
 
-                <h2 class="reg-step-title"><span data-step-num><?= $selectedPlan === 'trial' ? '1' : '2' ?></span> Your business details</h2>
+                <h2 class="reg-step-title"><span>2</span> Your business details</h2>
                 <div class="field">
                     <label for="business_name">Shop or business name</label>
                     <input type="text" id="business_name" name="business_name" value="<?= old('business_name') ?>" maxlength="120" autocomplete="organization" required>
@@ -209,34 +205,17 @@ $sitePhone = trim((string)siteSetting('site_phone', ''));
                 <p class="hint" style="text-align:center;margin-top:8px" data-show-for="buy"<?= $selectedPlan === 'trial' ? ' hidden' : '' ?>>No payment now · we activate your account once payment is received</p>
             </form>
             <script>
-            // Switch between buying and the trial without a reload (the links work without it),
-            // and keep the button naming exactly what will happen.
+            // The chosen card decides: show its terms, and name what the button will do.
             (function () {
                 var form = document.querySelector('[data-register-form]');
-                var planInput = form.querySelector('[data-plan-input]');
                 var button = form.querySelector('[data-submit-label]');
-                var stepNum = form.querySelector('[data-step-num]');
-                function label() {
-                    if (planInput.value === 'trial') return 'Start my free trial';
-                    var pack = form.querySelector('input[name="pack"]:checked');
-                    return pack ? 'Register — ' + pack.getAttribute('data-label') + ' pack' : 'Register and choose payment';
-                }
-                function setPlan(plan) {
-                    planInput.value = plan;
+                form.addEventListener('change', function (e) {
+                    if (e.target.name !== 'pack') return;
+                    var plan = e.target.value === 'trial' ? 'trial' : 'buy';
                     form.setAttribute('data-mode', plan);
                     form.querySelectorAll('[data-show-for]').forEach(function (el) { el.hidden = el.getAttribute('data-show-for') !== plan; });
-                    form.querySelectorAll('input[name="pack"]').forEach(function (r) { r.required = plan === 'buy'; });
-                    if (stepNum) stepNum.textContent = plan === 'trial' ? '1' : '2';
-                    button.textContent = label();
-                }
-                form.addEventListener('click', function (e) {
-                    var link = e.target.closest('[data-switch-plan]');
-                    if (!link) return;
-                    e.preventDefault();
-                    setPlan(link.getAttribute('data-switch-plan'));
-                    form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    button.textContent = e.target.getAttribute('data-label');
                 });
-                form.addEventListener('change', function (e) { if (e.target.name === 'pack') button.textContent = label(); });
             })();
             </script>
             <div class="login-switch">
