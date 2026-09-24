@@ -1185,7 +1185,7 @@ foreach (($categories ?? []) as $cat) {
             <p style="margin:0 0 18px;color:#6b7280;font-size:14px">
                 Invites businesses to start a free DEx Studio trial at <code>/partner/register</code>.
                 It hides itself automatically while the free trial is switched off in
-                <a href="<?= url('/admin/ar-partners#trial') ?>">AR Partners</a>, so it never promises a trial that sign-up would not give.
+                <a href="<?= url('/admin/ar-partners/plans#trial') ?>">AR Partners → Sign-up plans &amp; pricing</a>, so it never promises a trial that sign-up would not give.
                 Write <code>{credits}</code> and <code>{days}</code> anywhere to show the current trial credits and days.
             </p>
             <form method="post" action="<?= url('/admin/design/save') ?>" class="admin-form">

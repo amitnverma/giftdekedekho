@@ -74,50 +74,21 @@ $awaitingCount = count(array_filter($partners, fn($p) => ArPartner::awaitingActi
 </div>
 
 <div class="admin-card admin-mt" style="max-width:620px" id="trial">
-    <h3 class="admin-card-title">Seller sign-up &amp; free trial</h3>
-    <?php if (!$trialsReady): ?>
-        <p class="admin-muted" style="font-size:13px;margin:0">
-            Run <code>php tools/run-migration.php migrations/2026_09_23_partner_trials.sql</code> to switch on free trials.
-            Until then, new registrations wait for payment and activation as before.
-        </p>
-    <?php else: ?>
-        <p class="admin-muted" style="font-size:13px;margin-top:0">
-            A shop that registers at <a href="<?= url('/partner/register') ?>" target="_blank">/partner/register</a> gets its DEx Studio
-            straight away, on a free trial with these credits. Everything a trial account creates — photos, videos and QR links —
-            is <strong>deleted automatically</strong> this many days after it is made, and their portal says so on every page.
-            The trial ends when you mark one of their credit packs paid, or press “End trial” on their page.
-            You can also create a trial account yourself with <a href="<?= url('/admin/ar-partners/create') ?>">+ New Partner</a>.
-        </p>
-        <form method="post" action="<?= url('/admin/ar-partners/trial-settings') ?>" class="admin-form">
-            <?= csrfField() ?>
-            <label class="admin-checkbox">
-                <input type="checkbox" name="dex_trial_enabled" value="1" <?= $trial['enabled'] ? 'checked' : '' ?>>
-                Give new registrations a free trial — untick to go back to “pay first, then we activate”
-            </label>
-            <div class="admin-form-row">
-                <label>Trial credits <span class="admin-label-hint">Default <?= ArPartner::DEFAULT_TRIAL_CREDITS ?></span>
-                    <input type="number" name="dex_trial_credits" min="0" max="1000000" required value="<?= (int)$trial['credits'] ?>">
-                </label>
-                <label>Delete trial content after (days) <span class="admin-label-hint">Default <?= ArPartner::DEFAULT_TRIAL_DAYS ?></span>
-                    <input type="number" name="dex_trial_days" min="1" max="365" required value="<?= (int)$trial['days'] ?>">
-                </label>
-            </div>
-            <label>“Most popular” pack on the sign-up page <span class="admin-label-hint">Highlighted and preselected — sign-up leads with buying; the trial is offered below the packs</span>
-                <select name="dex_recommended_pack">
-                    <?php foreach ($signupPacks as $i => $pack): ?>
-                        <option value="<?= (int)$i ?>" <?= $i === $recommendedPack ? 'selected' : '' ?>><?= e(GDD_CURRENCY_SYMBOL . number_format($pack['price']) . ' → ' . number_format($pack['credits']) . ' credits') ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </label>
-            <p class="admin-muted" style="font-size:12.5px;margin:0">
-                Changes apply to trial accounts created from now on, and to content created from now on — existing trial content keeps
-                the deletion date it was given.
-            </p>
-            <div class="admin-form-actions">
-                <button class="admin-btn admin-btn-primary" type="submit">Save</button>
-            </div>
-        </form>
-    <?php endif; ?>
+    <h3 class="admin-card-title">Sign-up plans &amp; pricing</h3>
+    <p class="admin-muted" style="font-size:13px;margin-top:0">
+        What <a href="<?= url('/partner/register') ?>" target="_blank">/partner/register ↗</a> offers — the credit packs, the highlighted pack,
+        the free trial and their wording — and the pricing new partners start with.
+    </p>
+    <ul style="margin:0 0 12px;padding-left:18px;font-size:13.5px">
+        <li><?= count($offer['packs']) ?> credit pack<?= count($offer['packs']) === 1 ? '' : 's' ?>:
+            <?= e(implode(', ', array_map(fn($p) => GDD_CURRENCY_SYMBOL . number_format($p['price']), $offer['packs']))) ?></li>
+        <li>Base rate: <?= number_format($offer['base_credits']) ?> credits per item</li>
+        <li>Free trial:
+            <?php if (!$trialsReady): ?>not available until its migration is run
+            <?php elseif ($trial['enabled']): ?>on — <?= number_format($trial['credits']) ?> credits, content deleted after <?= (int)$trial['days'] ?> day<?= (int)$trial['days'] === 1 ? '' : 's' ?>
+            <?php else: ?>off<?php endif; ?></li>
+    </ul>
+    <a class="admin-btn admin-btn-primary" href="<?= url('/admin/ar-partners/plans') ?>">Edit sign-up plans &amp; pricing</a>
 </div>
 
 <div class="admin-card admin-mt" style="max-width:620px">

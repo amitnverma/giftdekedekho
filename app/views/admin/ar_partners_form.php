@@ -192,42 +192,7 @@ $action = $isEdit ? '/admin/ar-partners/' . (int)$partner['id'] . '/edit' : '/ad
             <input type="number" name="base_credits" min="1" required value="<?= (int)$partner['base_credits'] ?>">
         </label>
 
-        <div class="admin-form-row" style="align-items:flex-start">
-            <div style="flex:1">
-                <p class="admin-section-title" style="margin:6px 0">Video duration surcharge</p>
-                <table class="admin-table">
-                    <thead><tr><th>Offer</th><th>Length</th><th>+ Credits</th></tr></thead>
-                    <tbody>
-                        <?php foreach (ArPartner::DURATIONS as $seconds):
-                            $offered = array_key_exists($seconds, $durationPrices);
-                            $price = $offered ? $durationPrices[$seconds] : (ArPartner::DEFAULT_DURATION_PRICES[(string)$seconds] ?? 0); ?>
-                            <tr>
-                                <td><input type="checkbox" name="duration_offered[<?= $seconds ?>]" value="1" <?= $offered ? 'checked' : '' ?> aria-label="Offer <?= $seconds ?>s"></td>
-                                <td><?= $seconds ?>s</td>
-                                <td><input type="number" name="duration_prices[<?= $seconds ?>]" min="0" value="<?= (int)$price ?>" style="width:100px"></td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-            <div style="flex:1">
-                <p class="admin-section-title" style="margin:6px 0">Validity surcharge</p>
-                <table class="admin-table">
-                    <thead><tr><th>Offer</th><th>Active for</th><th>+ Credits</th></tr></thead>
-                    <tbody>
-                        <?php foreach (ArPartner::VALIDITIES as $key => [$label]):
-                            $offered = array_key_exists($key, $validityPrices);
-                            $price = $offered ? $validityPrices[$key] : (ArPartner::DEFAULT_VALIDITY_PRICES[$key] ?? 0); ?>
-                            <tr>
-                                <td><input type="checkbox" name="validity_offered[<?= e($key) ?>]" value="1" <?= $offered ? 'checked' : '' ?> aria-label="Offer <?= e($label) ?>"></td>
-                                <td><?= e($label) ?></td>
-                                <td><input type="number" name="validity_prices[<?= e($key) ?>]" min="0" value="<?= (int)$price ?>" style="width:100px"></td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-        </div>
+        <?php require viewPath('admin/partials/_ar_pricing_tables.php'); ?>
 
         <p class="admin-section-title" style="margin:16px 0 6px">Credit packs <span class="admin-label-hint">Shown on their My Credits page. Leave a row blank to drop it.</span></p>
         <table class="admin-table" style="max-width:420px">

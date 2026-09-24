@@ -39,37 +39,168 @@ class AdminArPartnerController extends BaseController
             'supportWhatsapp' => (string)(new Settings())->get('ar_partner_support_whatsapp', ''),
             'trialsReady'     => $this->partners->trialsReady(),
             'trial'           => ArPartner::trialSettings(),
-            'signupPacks'     => ArPartner::creditPacks([]),
-            'recommendedPack' => ArPartner::recommendedPack(ArPartner::creditPacks([])),
+            'offer'           => ArPartner::signupPlan(),
         ]);
     }
 
-    /** The free trial new registrations get: on or off, its credits, and how long its content lives. */
-    public function saveTrialSettings(): void
+    /**
+     * Admin → AR Partners → Sign-up plans & pricing: everything the public
+     * sign-up page offers — the credit packs, which one is highlighted, the
+     * free trial and all the wording — and the pricing every new partner
+     * starts with.
+     */
+    public function plans(): void
     {
         $this->requireAdmin();
-        $this->requireCsrf();
-        $credits = max(0, min(1000000, (int)$this->input('dex_trial_credits', ArPartner::DEFAULT_TRIAL_CREDITS)));
-        $days = max(1, min(365, (int)$this->input('dex_trial_days', ArPartner::DEFAULT_TRIAL_DAYS)));
-        (new Settings())->setMany([
-            'dex_trial_enabled' => $this->input('dex_trial_enabled') ? '1' : '0',
-            'dex_trial_credits' => (string)$credits,
-            'dex_trial_days'    => (string)$days,
-            'dex_recommended_pack' => (string)max(0, (int)$this->input('dex_recommended_pack', 1)),
+        if ($this->schemaMissing()) return;
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $this->requireCsrf();
+            $this->savePlans();
+            return;
+        }
+
+        $stash = $_SESSION['ar_partner_plans_form'] ?? null;
+        unset($_SESSION['ar_partner_plans_form']);
+        $offer = is_array($stash) ? array_replace(ArPartner::signupPlan(), $stash) : ArPartner::signupPlan();
+        $this->viewAdmin('admin/ar_partners_plans', [
+            'metaTitle'   => 'Sign-up plans & pricing',
+            'offer'       => $offer,
+            'trial'       => is_array($stash['trial'] ?? null) ? $stash['trial'] : ArPartner::trialSettings(),
+            'trialsReady' => $this->partners->trialsReady(),
         ]);
-        flash('success', sprintf('Sign-up settings saved. Free trial: %s credits, content deleted after %d day%s — applies to new trial accounts and new trial content.',
-            number_format($credits), $days, $days === 1 ? '' : 's'));
-        redirect('/admin/ar-partners#trial');
     }
 
-    public function saveSettings(): void
+    private function savePlans(): void
     {
-        $this->requireAdmin();
-        $this->requireCsrf();
-        $digits = preg_replace('/[^\d+]/', '', (string)$this->input('ar_partner_support_whatsapp', ''));
-        (new Settings())->set('ar_partner_support_whatsapp', $digits);
-        flash('success', 'Partner support WhatsApp number saved.');
-        redirect('/admin/ar-partners');
+        $errors = [];
+        $text = fn(string $key, int $max): string => mb_substr(trim((string)$this->input($key, '')), 0, $max);
+
+        // Packs: rows with a price and credits; the preselected radio names a row.
+        $packs = [];
+        $preselectedRow = (string)$this->input('preselected', '');
+        $preselectedPack = null;
+        foreach ((array)($_POST['packs'] ?? []) as $row => $pack) {
+            $price = (int)($pack['price'] ?? 0);
+            $credits = (int)($pack['credits'] ?? 0);
+            if ($price <= 0 && $credits <= 0) {
+                continue; // a blank row
+            }
+            if ($price <= 0 || $credits <= 0) {
+                $errors[] = 'Every credit pack needs both a price and a number of credits.';
+                continue;
+            }
+            $entry = ['price' => $price, 'credits' => $credits, 'badge' => mb_substr(trim((string)($pack['badge'] ?? '')), 0, 24)];
+            if ((string)$row === $preselectedRow) {
+                $preselectedPack = $entry;
+            }
+            $packs[] = $entry;
+        }
+        if (!$packs) {
+            $errors[] = 'Offer at least one credit pack.';
+        }
+        if (count(array_unique(array_column($packs, 'price'))) !== count($packs)) {
+            $errors[] = 'Two packs have the same price — give each pack its own price.';
+        }
+        usort($packs, fn($a, $b) => $a['price'] <=> $b['price']);
+        $preselected = $preselectedPack === null ? -1 : (int)array_search($preselectedPack, $packs, true);
+
+        [$durationPrices, $validityPrices, $pricingErrors] = $this->pricingInput();
+        $errors = array_merge($errors, $pricingErrors);
+        $base = (int)$this->input('base_credits', 0);
+        if ($base < 1) {
+            $errors[] = 'The base rate must be at least 1 credit per item.';
+        }
+
+        $lines = fn(string $key): array => array_values(array_filter(array_map(
+            fn($l) => mb_substr(trim($l), 0, 160),
+            preg_split('/\R/', (string)$this->input($key, ''))
+        ), fn($l) => $l !== ''));
+        $perks = $lines('perks');
+
+        $plan = [
+            'packs'            => $packs,
+            'preselected'      => $preselected,
+            'show_per_item'    => $this->input('show_per_item') ? 1 : 0,
+            'base_credits'     => $base,
+            'duration_prices'  => $durationPrices,
+            'validity_prices'  => $validityPrices,
+            'heading'          => $text('heading', 80),
+            'heading_no_trial' => $text('heading_no_trial', 80),
+            'bonus_label'      => $text('bonus_label', 30),
+            'perks'            => array_slice($perks, 0, 6),
+            'trial_ribbon'     => $text('trial_ribbon', 24),
+            'trial_title'      => $text('trial_title', 20),
+            'trial_sub'        => $text('trial_sub', 30),
+            'trial_warning'    => $text('trial_warning', 40),
+            'buy_button'       => $text('buy_button', 40),
+            'trial_button'     => $text('trial_button', 40),
+            'buy_note'         => $text('buy_note', 240),
+            'buy_footnote'     => $text('buy_footnote', 120),
+            'trial_terms'      => array_slice($lines('trial_terms'), 0, 5),
+        ];
+        $trial = [
+            'enabled' => (bool)$this->input('dex_trial_enabled'),
+            'credits' => max(0, min(1000000, (int)$this->input('dex_trial_credits', ArPartner::DEFAULT_TRIAL_CREDITS))),
+            'days'    => max(1, min(365, (int)$this->input('dex_trial_days', ArPartner::DEFAULT_TRIAL_DAYS))),
+        ];
+        // The trial card must always say its content is deleted.
+        if ($plan['trial_warning'] !== '' && stripos($plan['trial_warning'], '{days}') === false) {
+            $errors[] = 'The trial warning must include {days}, so it always states when trial content is deleted.';
+        }
+        if ($plan['buy_button'] !== '' && stripos($plan['buy_button'], '{price}') === false) {
+            $errors[] = 'The buy button must include {price}, so it names the pack being bought.';
+        }
+
+        if ($errors) {
+            $_SESSION['ar_partner_plans_form'] = $plan + ['trial' => $trial];
+            flash('error', implode(' ', array_unique($errors)));
+            redirect('/admin/ar-partners/plans');
+        }
+
+        $settings = new Settings();
+        $settings->setMany([
+            ArPartner::PLAN_SETTING => json_encode($plan, JSON_UNESCAPED_UNICODE),
+            'dex_trial_enabled'     => $trial['enabled'] ? '1' : '0',
+            'dex_trial_credits'     => (string)$trial['credits'],
+            'dex_trial_days'        => (string)$trial['days'],
+        ]);
+        flash('success', 'Sign-up plans & pricing saved. The sign-up page uses them now; partners created from now on start with this pricing.'
+            . ' Existing partners keep their own prices — change those on each partner\'s page.');
+        redirect('/admin/ar-partners/plans');
+    }
+
+    /**
+     * The duration and validity surcharges posted by a pricing table (the plans
+     * page and the partner form share the markup). A blank or unticked price
+     * withholds that option.
+     *
+     * @return array{0: array, 1: array, 2: string[]}
+     */
+    private function pricingInput(): array
+    {
+        $durationPrices = [];
+        foreach (ArPartner::DURATIONS as $seconds) {
+            $raw = trim((string)($_POST['duration_prices'][$seconds] ?? ''));
+            if ($raw !== '' && !empty($_POST['duration_offered'][$seconds])) {
+                $durationPrices[(string)$seconds] = max(0, (int)$raw);
+            }
+        }
+        $validityPrices = [];
+        foreach (array_keys(ArPartner::VALIDITIES) as $key) {
+            $raw = trim((string)($_POST['validity_prices'][$key] ?? ''));
+            if ($raw !== '' && !empty($_POST['validity_offered'][$key])) {
+                $validityPrices[$key] = max(0, (int)$raw);
+            }
+        }
+        $errors = [];
+        if (!$durationPrices) {
+            $errors[] = 'Offer at least one video duration.';
+        }
+        if (!$validityPrices) {
+            $errors[] = 'Offer at least one validity period.';
+        }
+        return [$durationPrices, $validityPrices, $errors];
     }
 
     public function create(): void
@@ -94,7 +225,8 @@ class AdminArPartnerController extends BaseController
                 'brand_color' => ArPartnerService::DEFAULT_BRAND_COLOR,
                 'contact_name' => '', 'contact_phone' => '', 'whatsapp' => '', 'contact_email' => '', 'website_url' => '',
                 'allow_singles' => 1, 'allow_albums' => 1, 'max_album_pages' => ArFrameItem::MAX_PER_FRAME, 'max_video_mb' => 20,
-                'base_credits' => ArPartner::DEFAULT_BASE_CREDITS, 'duration_prices' => null, 'validity_prices' => null, 'credit_packs' => null,
+                // Prefilled from Sign-up plans & pricing (the pricing columns are null, so they read it too).
+                'base_credits' => ArPartner::signupPlan()['base_credits'], 'duration_prices' => null, 'validity_prices' => null, 'credit_packs' => null,
                 'edit_window_days' => 7, 'is_active' => 1, 'notes' => '',
             ], $stash['data'] ?? []),
         ]);
@@ -178,26 +310,8 @@ class AdminArPartnerController extends BaseController
         }
 
         // --- pricing: a blank price withholds that option from the partner
-        $durationPrices = [];
-        foreach (ArPartner::DURATIONS as $seconds) {
-            $raw = trim((string)($_POST['duration_prices'][$seconds] ?? ''));
-            if ($raw !== '' && !empty($_POST['duration_offered'][$seconds])) {
-                $durationPrices[(string)$seconds] = max(0, (int)$raw);
-            }
-        }
-        $validityPrices = [];
-        foreach (array_keys(ArPartner::VALIDITIES) as $key) {
-            $raw = trim((string)($_POST['validity_prices'][$key] ?? ''));
-            if ($raw !== '' && !empty($_POST['validity_offered'][$key])) {
-                $validityPrices[$key] = max(0, (int)$raw);
-            }
-        }
-        if (!$durationPrices) {
-            $errors[] = 'Offer at least one video duration.';
-        }
-        if (!$validityPrices) {
-            $errors[] = 'Offer at least one validity period.';
-        }
+        [$durationPrices, $validityPrices, $pricingErrors] = $this->pricingInput();
+        $errors = array_merge($errors, $pricingErrors);
         $packs = [];
         foreach ((array)($_POST['packs'] ?? []) as $pack) {
             $price = (int)($pack['price'] ?? 0);

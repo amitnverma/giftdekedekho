@@ -405,8 +405,10 @@ class PartnerController extends BaseController
      */
     private function register(): void
     {
-        $packs = ArPartner::creditPacks([]);
-        $rate = ['base_credits' => ArPartner::DEFAULT_BASE_CREDITS];
+        // Packs, rate and wording all come from Admin → AR Partners → Sign-up plans & pricing.
+        $offer = ArPartner::signupPlan();
+        $packs = $offer['packs'];
+        $rate = ['base_credits' => $offer['base_credits']];
         $trial = $this->partners->trialsReady() ? ArPartner::trialSettings() : ['enabled' => false];
         // A browser that already started a trial is shown the paid form straight away.
         $browserUsedTrial = !empty($_COOKIE[ArPartner::TRIAL_COOKIE]);
@@ -417,7 +419,8 @@ class PartnerController extends BaseController
             'trial'   => $trial['enabled'] && !$browserUsedTrial ? $trial : null,
             'trialUsed' => $trial['enabled'] && $browserUsedTrial,
             'plan'      => in_array($_GET['plan'] ?? '', ['trial', 'buy'], true) ? $_GET['plan'] : 'buy',
-            'recommended' => ArPartner::recommendedPack($packs),
+            'recommended' => $offer['preselected'],
+            'offer'     => $offer,
             'support' => $this->supportWhatsapp(),
             'closed'  => !$this->partners->signupsReady(),
             'done'    => null,
@@ -521,7 +524,8 @@ class PartnerController extends BaseController
                     'notes'         => 'Registered online on ' . date('d M Y H:i') . ($city !== '' ? '. City: ' . mb_substr($city, 0, 80) : '') . '.'
                         . ($trial ? ' Started a free trial.' : ''),
                     'created_at'    => date('Y-m-d H:i:s'),
-                ] + ($trial ? ['is_trial' => 1] : [])
+                ] + ArPartner::defaultPricingColumns()
+                  + ($trial ? ['is_trial' => 1] : [])
                   + ($trial && $this->partners->trialIpReady() ? ['trial_ip' => $ip] : []));
                 $userId = $users->create($partnerId, mb_substr($name, 0, 120), $email, $password, 'owner');
                 if ($trial && $trial['credits'] > 0) {

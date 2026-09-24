@@ -18,7 +18,7 @@ $siteName = $brand['name'];
 $initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)$siteName), 0, 2)) ?: 'DX';
 // Buying is the default path; only an explicit trial choice (a "try free"
 // button, or the switch on this page) opens the trial.
-$selectedPack = old('pack', $trial && ($plan ?? '') === 'trial' ? 'trial' : (string)$recommended);
+$selectedPack = old('pack', $trial && ($plan ?? '') === 'trial' ? 'trial' : ($recommended >= 0 ? (string)$recommended : ''));
 $selectedPlan = $trial && $selectedPack === 'trial' ? 'trial' : 'buy';
 $trialDays = $trial ? $trial['days'] . ' day' . ($trial['days'] === 1 ? '' : 's') : '';
 $siteEmail = trim((string)siteSetting('site_email', ''));
@@ -104,7 +104,7 @@ $sitePhone = trim((string)siteSetting('site_phone', ''));
 
                 <?php /* One choice for everyone: the paid packs lead, the free trial is the last card. */ ?>
                 <section class="reg-step">
-                    <h2 class="reg-step-title"><span>1</span> <?= $trial ? 'Choose a credit pack — or try it free' : 'Choose your credit pack' ?></h2>
+                    <h2 class="reg-step-title"><span>1</span> <?= e($trial ? $offer['heading'] : $offer['heading_no_trial']) ?></h2>
                     <div class="packs packs-sale" role="radiogroup" aria-label="Credit pack">
                         <?php foreach ($packs as $i => $pack):
                             $per = ArPartnerService::packItemPrice($pack, $rate);
@@ -112,48 +112,52 @@ $sitePhone = trim((string)siteSetting('site_phone', ''));
                             $bonus = $pack['credits'] - $pack['price'];
                             $isPopular = $i === $recommended; ?>
                             <label class="pack pack-option<?= $isPopular ? ' is-popular' : '' ?>">
-                                <?php if ($isPopular): ?><span class="pack-ribbon">Most popular</span><?php endif; ?>
+                                <?php if ($pack['badge'] !== ''): ?><span class="pack-ribbon"><?= e($pack['badge']) ?></span><?php endif; ?>
                                 <input type="radio" name="pack" value="<?= (int)$i ?>" required
                                        <?= $selectedPack === (string)$i ? 'checked' : '' ?>
-                                       data-label="Register — <?= e(GDD_CURRENCY_SYMBOL . number_format($pack['price'])) ?> pack">
+                                       data-label="<?= e(ArPartner::planText($offer['buy_button'], ['price' => GDD_CURRENCY_SYMBOL . number_format($pack['price']), 'credits' => $pack['credits']])) ?>">
                                 <span class="price"><?= e(GDD_CURRENCY_SYMBOL . number_format($pack['price'])) ?></span>
                                 <span class="get"><?= number_format($pack['credits']) ?> credits</span>
-                                <span class="per"><?= e(GDD_CURRENCY_SYMBOL . number_format($per, 2)) ?>/item</span>
-                                <?php if ($bonus > 0): ?><span class="save">+<?= number_format($bonus) ?> bonus</span><?php endif; ?>
+                                <?php if ($offer['show_per_item']): ?><span class="per"><?= e(GDD_CURRENCY_SYMBOL . number_format($per, 2)) ?>/item</span><?php endif; ?>
+                                <?php if ($bonus > 0 && $offer['bonus_label'] !== ''): ?><span class="save"><?= e(ArPartner::planText($offer['bonus_label'], ['bonus' => $bonus])) ?></span><?php endif; ?>
                             </label>
                         <?php endforeach; ?>
                         <?php if ($trial): ?>
                             <label class="pack pack-option pack-trial">
-                                <span class="pack-ribbon pack-ribbon-trial">Try first</span>
+                                <?php $tv = ['days' => (int)$trial['days'], 'credits' => (int)$trial['credits']]; ?>
+                                <?php if ($offer['trial_ribbon'] !== ''): ?><span class="pack-ribbon pack-ribbon-trial"><?= e(ArPartner::planText($offer['trial_ribbon'], $tv)) ?></span><?php endif; ?>
                                 <input type="radio" name="pack" value="trial" required <?= $selectedPack === 'trial' ? 'checked' : '' ?>
-                                       data-label="Start my free trial">
-                                <span class="price">Free</span>
+                                       data-label="<?= e($offer['trial_button']) ?>">
+                                <span class="price"><?= e(ArPartner::planText($offer['trial_title'] ?: 'Free', $tv)) ?></span>
                                 <span class="get"><?= number_format($trial['credits']) ?> credits</span>
-                                <span class="per">No payment</span>
-                                <span class="save save-warn" title="Everything created on the trial is deleted automatically <?= e($trialDays) ?> after it is made">Deletes in <?= e($trialDays) ?></span>
+                                <?php if ($offer['trial_sub'] !== ''): ?><span class="per"><?= e(ArPartner::planText($offer['trial_sub'], $tv)) ?></span><?php endif; ?>
+                                <?php /* The deletion warning is not optional: it is the trial's key term. */ ?>
+                                <span class="save save-warn" title="Everything created on the trial is deleted automatically <?= e($trialDays) ?> after it is made"><?= e(ArPartner::planText($offer['trial_warning'] ?: 'Deletes in {days} days', $tv)) ?></span>
                             </label>
                         <?php endif; ?>
                     </div>
 
                     <div data-show-for="buy"<?= $selectedPlan === 'trial' ? ' hidden' : '' ?>>
-                        <ul class="reg-perks">
-                            <li>Your DEx content stays live for its full validity</li>
-                            <li>Your own branded DEx Studio</li>
-                            <li>No subscription — top up whenever you need</li>
-                        </ul>
+                        <?php if ($offer['perks']): ?>
+                            <ul class="reg-perks">
+                                <?php foreach ($offer['perks'] as $perk): ?><li><?= e($perk) ?></li><?php endforeach; ?>
+                            </ul>
+                        <?php endif; ?>
                         <p class="hint">
                             A basic DEx item (one photo with a short video) uses <?= number_format((int)$rate['base_credits']) ?> credits.
-                            <strong>No payment is taken now:</strong> we contact you to arrange payment, then activate your account and add the credits.
+                            <?= e($offer['buy_note']) ?>
                         </p>
                     </div>
                     <?php if ($trial): ?>
                         <div class="trial-box" data-show-for="trial"<?= $selectedPlan === 'trial' ? '' : ' hidden' ?>>
                             <p class="trial-box-title">Free trial · <?= number_format($trial['credits']) ?> credits</p>
                             <ul>
-                                <li>No payment — your DEx Studio opens as soon as you register.</li>
+                                <?php /* The deletion term is fixed: it is what the trial is. */ ?>
                                 <li><strong>Trial content is temporary:</strong> every photo, video and QR link is
                                     <strong>deleted automatically <?= e($trialDays) ?> after it is created</strong>.</li>
-                                <li>One free trial per business. Buy a credit pack at any time to keep what you create from then on.</li>
+                                <?php foreach ($offer['trial_terms'] as $term): ?>
+                                    <li><?= e(ArPartner::planText($term, ['days' => (int)$trial['days'], 'credits' => (int)$trial['credits']])) ?></li>
+                                <?php endforeach; ?>
                             </ul>
                         </div>
                     <?php endif; ?>
@@ -197,12 +201,14 @@ $sitePhone = trim((string)siteSetting('site_phone', ''));
                 <?= CaptchaService::field('partner-register') ?>
                 <button class="btn" type="submit" style="width:100%" data-submit-label><?php
                     if ($selectedPlan === 'trial') {
-                        echo 'Start my free trial';
+                        echo e($offer['trial_button']);
                     } else {
                         $chosen = $packs[(int)$selectedPack] ?? null;
-                        echo $chosen ? 'Register — ' . e(GDD_CURRENCY_SYMBOL . number_format($chosen['price'])) . ' pack' : 'Register and choose payment';
+                        echo $chosen ? e(ArPartner::planText($offer['buy_button'], ['price' => GDD_CURRENCY_SYMBOL . number_format($chosen['price']), 'credits' => $chosen['credits']])) : 'Register as a DEx partner';
                     } ?></button>
-                <p class="hint" style="text-align:center;margin-top:8px" data-show-for="buy"<?= $selectedPlan === 'trial' ? ' hidden' : '' ?>>No payment now · we activate your account once payment is received</p>
+                <?php if ($offer['buy_footnote'] !== ''): ?>
+                    <p class="hint" style="text-align:center;margin-top:8px" data-show-for="buy"<?= $selectedPlan === 'trial' ? ' hidden' : '' ?>><?= e($offer['buy_footnote']) ?></p>
+                <?php endif; ?>
             </form>
             <script>
             // The chosen card decides: show its terms, and name what the button will do.

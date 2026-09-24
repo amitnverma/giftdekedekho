@@ -172,8 +172,8 @@ class AdminRouter
             case $path === '/ar-partners/settings':
                 (new AdminArPartnerController())->saveSettings();
                 break;
-            case $path === '/ar-partners/trial-settings':
-                (new AdminArPartnerController())->saveTrialSettings();
+            case $path === '/ar-partners/plans':
+                (new AdminArPartnerController())->plans();
                 break;
             case preg_match('#^/ar-partners/(\d+)$#', $path, $m) === 1:
                 (new AdminArPartnerController())->show((int)$m[1]);

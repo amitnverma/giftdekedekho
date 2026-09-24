@@ -26,6 +26,11 @@ class ArPartner extends BaseModel
         'lifetime' => ['Lifetime', null],
     ];
 
+    /**
+     * Built-in defaults only. The live defaults are edited in Admin → AR
+     * Partners → Sign-up plans & pricing — read them through signupPlan().
+     */
+
     /** Surcharges on top of the base rate, as in the reference pricing. */
     public const DEFAULT_DURATION_PRICES = ['15' => 0, '30' => 84, '60' => 158, '120' => 297, '300' => 495, '600' => 990];
     public const DEFAULT_VALIDITY_PRICES = ['1y' => 0, '5y' => 198, '10y' => 297, 'lifetime' => 495];
@@ -212,21 +217,129 @@ class ArPartner extends BaseModel
         return $local . '@' . $domain;
     }
 
+    // -------------------------------------------------- sign-up plans & pricing
+
+    /** Settings key holding everything Admin → AR Partners → Sign-up plans edits (JSON). */
+    public const PLAN_SETTING = 'dex_signup_plan';
+
+    /** Wording the sign-up page falls back to when the admin has not set its own. */
+    public const PLAN_TEXT_DEFAULTS = [
+        'heading'          => 'Choose a credit pack — or try it free',
+        'heading_no_trial' => 'Choose your credit pack',
+        'bonus_label'      => '+{bonus} bonus',
+        'perks'            => [
+            'Your DEx content stays live for its full validity',
+            'Your own branded DEx Studio',
+            'No subscription — top up whenever you need',
+        ],
+        'trial_ribbon'     => 'Try first',
+        'trial_title'      => 'Free',
+        'trial_sub'        => 'No payment',
+        'trial_warning'    => 'Deletes in {days} days',
+        'buy_button'       => 'Register — {price} pack',
+        'trial_button'     => 'Start my free trial',
+        'buy_note'         => 'No payment is taken now: we contact you to arrange payment, then activate your account and add the credits.',
+        'buy_footnote'     => 'No payment now · we activate your account once payment is received',
+        // The deletion term is always shown as well; these are the other points.
+        'trial_terms'      => [
+            'No payment — your DEx Studio opens as soon as you register.',
+            'One free trial per business. Buy a credit pack at any time to keep what you create from then on.',
+        ],
+    ];
+
     /**
-     * Index of the pack the sign-up page marks "Most popular" and preselects:
-     * the admin's choice (Admin → AR Partners), else the second pack — the
-     * usual anchor between the entry pack and the bulk ones.
+     * The sign-up offer and the default pricing, as the admin set them, with
+     * the built-in values for anything never saved.
+     *
+     * - packs: [{price, credits, badge}], cheapest first, as sold at sign-up
+     *   and given to every new partner as their credit packs;
+     * - preselected: index into packs of the highlighted, preselected pack
+     *   (-1 for none);
+     * - base_credits, duration_prices, validity_prices: what a new partner is
+     *   charged, copied into their own row when they are created;
+     * - show_per_item and the texts (PLAN_TEXT_DEFAULTS) for the page.
      */
-    public static function recommendedPack(array $packs): int
+    public static function signupPlan(): array
     {
-        if (!$packs) {
-            return -1;
+        static $plan = null;
+        if ($plan !== null) {
+            return $plan;
         }
-        $chosen = siteSetting('dex_recommended_pack', '');
-        if ($chosen !== '' && isset($packs[(int)$chosen])) {
-            return (int)$chosen;
+        $saved = self::decode(siteSetting(self::PLAN_SETTING, '')) ?? [];
+
+        $packs = [];
+        $source = isset($saved['packs']) && is_array($saved['packs']) ? $saved['packs']
+            : array_map(fn($p) => $p + ['badge' => ''], self::DEFAULT_CREDIT_PACKS);
+        foreach ($source as $pack) {
+            $price = (int)($pack['price'] ?? 0);
+            $credits = (int)($pack['credits'] ?? 0);
+            if ($price > 0 && $credits > 0) {
+                $packs[] = ['price' => $price, 'credits' => $credits, 'badge' => trim((string)($pack['badge'] ?? ''))];
+            }
         }
-        return count($packs) > 1 ? 1 : 0;
+        usort($packs, fn($a, $b) => $a['price'] <=> $b['price']);
+
+        if (array_key_exists('preselected', $saved)) {
+            $preselected = (int)$saved['preselected'];
+        } else {
+            // Before this page existed: the "Most popular" choice, else the second pack.
+            $legacy = siteSetting('dex_recommended_pack', '');
+            $preselected = $legacy !== '' ? (int)$legacy : (count($packs) > 1 ? 1 : 0);
+            if (isset($packs[$preselected]) && $packs[$preselected]['badge'] === '') {
+                $packs[$preselected]['badge'] = 'Most popular';
+            }
+        }
+        if (!isset($packs[$preselected])) {
+            $preselected = -1;
+        }
+
+        $texts = [];
+        foreach (self::PLAN_TEXT_DEFAULTS as $key => $default) {
+            $value = $saved[$key] ?? $default;
+            $texts[$key] = is_array($default)
+                ? array_values(array_filter(array_map('trim', (array)$value), fn($l) => $l !== ''))
+                : trim((string)$value);
+        }
+        // These cannot be hidden: a blank falls back to the built-in wording.
+        foreach (['heading', 'heading_no_trial', 'trial_title', 'trial_warning', 'buy_button', 'trial_button'] as $key) {
+            if ($texts[$key] === '') {
+                $texts[$key] = self::PLAN_TEXT_DEFAULTS[$key];
+            }
+        }
+
+        return $plan = $texts + [
+            'packs'           => $packs,
+            'preselected'     => $preselected,
+            'show_per_item'   => !array_key_exists('show_per_item', $saved) || !empty($saved['show_per_item']),
+            'base_credits'    => max(1, (int)($saved['base_credits'] ?? self::DEFAULT_BASE_CREDITS)),
+            'duration_prices' => is_array($saved['duration_prices'] ?? null) ? $saved['duration_prices'] : self::DEFAULT_DURATION_PRICES,
+            'validity_prices' => is_array($saved['validity_prices'] ?? null) ? $saved['validity_prices'] : self::DEFAULT_VALIDITY_PRICES,
+        ];
+    }
+
+    /**
+     * The pricing columns a new partner starts with — a copy of the current
+     * defaults, so changing the defaults later never reprices an existing partner.
+     */
+    public static function defaultPricingColumns(): array
+    {
+        $plan = self::signupPlan();
+        return [
+            'base_credits'    => $plan['base_credits'],
+            'duration_prices' => json_encode(self::durationPrices(['duration_prices' => $plan['duration_prices']])),
+            'validity_prices' => json_encode(self::validityPrices(['validity_prices' => $plan['validity_prices']])),
+            'credit_packs'    => json_encode(array_map(fn($p) => ['price' => $p['price'], 'credits' => $p['credits']], $plan['packs'])),
+        ];
+    }
+
+    /** "{bonus}", "{days}", "{credits}" filled into an admin-written label. */
+    public static function planText(string $text, array $values): string
+    {
+        $pairs = [];
+        foreach ($values as $key => $value) {
+            $pairs['{' . $key . '}'] = is_int($value) ? number_format($value) : (string)$value;
+        }
+        return strtr($text, $pairs);
     }
 
     public static function isTrial(array $partner): bool
@@ -318,7 +431,7 @@ class ArPartner extends BaseModel
     public static function durationPrices(array $partner): array
     {
         $stored = self::decode($partner['duration_prices'] ?? null);
-        $source = is_array($stored) ? $stored : self::DEFAULT_DURATION_PRICES;
+        $source = is_array($stored) ? $stored : self::signupPlan()['duration_prices'];
         $out = [];
         foreach (self::DURATIONS as $seconds) {
             if (array_key_exists((string)$seconds, $source) && $source[(string)$seconds] !== null) {
@@ -332,7 +445,7 @@ class ArPartner extends BaseModel
     public static function validityPrices(array $partner): array
     {
         $stored = self::decode($partner['validity_prices'] ?? null);
-        $source = is_array($stored) ? $stored : self::DEFAULT_VALIDITY_PRICES;
+        $source = is_array($stored) ? $stored : self::signupPlan()['validity_prices'];
         $out = [];
         foreach (array_keys(self::VALIDITIES) as $key) {
             if (array_key_exists($key, $source) && $source[$key] !== null) {
@@ -346,7 +459,7 @@ class ArPartner extends BaseModel
     public static function creditPacks(array $partner): array
     {
         $stored = self::decode($partner['credit_packs'] ?? null);
-        $source = is_array($stored) ? $stored : self::DEFAULT_CREDIT_PACKS;
+        $source = is_array($stored) ? $stored : self::signupPlan()['packs'];
         $packs = [];
         foreach ($source as $pack) {
             $price = (int)($pack['price'] ?? 0);
