@@ -42,7 +42,13 @@
                     <td>
                         <?= $row['content_kind'] === 'album' ? 'Album · ' . (int)$row['item_count'] . ' pages' : 'Single' ?>
                     </td>
-                    <td><?= empty($row['active_until']) ? 'Lifetime' : e(date('d M Y', strtotime($row['active_until']))) ?></td>
+                    <td>
+                        <?php if (!empty($row['delete_after'])): ?>
+                            <span class="deletes-on" title="Free-trial content is deleted automatically">Deleted <?= e(date('d M, h:i A', strtotime($row['delete_after']))) ?></span>
+                        <?php else: ?>
+                            <?= empty($row['active_until']) ? 'Lifetime' : e(date('d M Y', strtotime($row['active_until']))) ?>
+                        <?php endif; ?>
+                    </td>
                     <td><span class="tag tag-<?= $stateTone ?>"><?= e($stateLabel) ?></span></td>
                     <td class="num"><?= number_format((int)$row['opens']) ?></td>
                 </tr>

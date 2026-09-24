@@ -88,6 +88,7 @@ class PartnerController extends BaseController
             return;
         }
         $this->partner = $partner;
+        $this->purgeTrialContent();
 
         $path = '/' . implode('/', array_map('strval', $rest));
         $path = $path === '/' ? '/' : rtrim($path, '/');
@@ -383,20 +384,28 @@ class PartnerController extends BaseController
     }
 
     /**
-     * "Become a seller": /partner/register. There is no online payment yet, so
-     * this creates the shop paused (signup_status 'pending') with a pending
-     * credit request for the pack chosen. The applicant pays outside the site,
-     * and the admin activates the account from Admin → AR Partners, which adds
-     * the pack's credits. Until then the login is refused with an explanation.
+     * "Become a seller": /partner/register.
+     *
+     * With the free trial on (Admin → AR Partners, the default), the shop is
+     * created active and on trial with the trial credits, signed in, and sent
+     * straight to its DEx Studio. Everything it makes during the trial is
+     * deleted automatically a few days later, which every portal page says.
+     *
+     * With the trial off, there is no online payment yet, so this creates the
+     * shop paused (signup_status 'pending') with a pending credit request for
+     * the pack chosen. The applicant pays outside the site, and the admin
+     * activates the account, which adds the pack's credits.
      */
     private function register(): void
     {
         $packs = ArPartner::creditPacks([]);
         $rate = ['base_credits' => ArPartner::DEFAULT_BASE_CREDITS];
+        $trial = $this->partners->trialsReady() ? ArPartner::trialSettings() : ['enabled' => false];
         $view = [
             'brand'   => $this->brand(),
             'packs'   => $packs,
             'rate'    => $rate,
+            'trial'   => $trial['enabled'] ? $trial : null,
             'support' => $this->supportWhatsapp(),
             'closed'  => !$this->partners->signupsReady(),
             'done'    => null,
@@ -453,7 +462,7 @@ class PartnerController extends BaseController
                 $errors[] = 'The two passwords do not match.';
             }
             $pack = $packs[$packIndex] ?? null;
-            if ($pack === null) {
+            if ($pack === null && !$view['trial']) {
                 $errors[] = 'Choose a credit pack to start with.';
             }
             if ($errors) {
@@ -462,6 +471,7 @@ class PartnerController extends BaseController
             }
             $this->recordLoginAttempt($identifier);
 
+            $trial = $view['trial'];
             $credits = new ArPartnerCredit();
             $db = $credits->db();
             $db->beginTransaction();
@@ -473,13 +483,19 @@ class PartnerController extends BaseController
                     'contact_phone' => $phone,
                     'whatsapp'      => substr($digits, 0, 20),
                     'contact_email' => mb_substr($email, 0, 180),
-                    'is_active'     => 0,
-                    'signup_status' => 'pending',
+                    'is_active'     => $trial ? 1 : 0,
+                    'signup_status' => $trial ? 'approved' : 'pending',
                     'notes'         => 'Registered online on ' . date('d M Y H:i') . ($city !== '' ? '. City: ' . mb_substr($city, 0, 80) : '') . '.',
                     'created_at'    => date('Y-m-d H:i:s'),
-                ]);
+                ] + ($trial ? ['is_trial' => 1] : []));
                 $userId = $users->create($partnerId, mb_substr($name, 0, 120), $email, $password, 'owner');
-                $credits->createRequest($partnerId, $pack['price'], $pack['credits'], $userId);
+                if ($trial && $trial['credits'] > 0) {
+                    $credits->apply($partnerId, $trial['credits'], 'added', 'Free trial credits');
+                }
+                // A pack picked alongside the trial waits for payment, like any request.
+                if ($pack !== null) {
+                    $credits->createRequest($partnerId, $pack['price'], $pack['credits'], $userId);
+                }
                 $db->commit();
             } catch (Throwable $e) {
                 if ($db->inTransaction()) {
@@ -489,15 +505,34 @@ class PartnerController extends BaseController
             }
 
             $this->clearOld();
-            $_SESSION['partner_signup_done'] = [
-                'business' => $business,
-                'email'    => $email,
-                'price'    => $pack['price'],
-                'credits'  => $pack['credits'],
-            ];
+            if ($trial) {
+                // Straight into the new DEx Studio, signed in, like a login would.
+                $this->partner = $this->partners->find($partnerId);
+                session_regenerate_id(true);
+                $_SESSION['partner_auth'] = [
+                    'user_id'    => $userId,
+                    'partner_id' => $partnerId,
+                    'pw'         => ArPartnerService::passwordStamp($users->findForPartner($partnerId, $userId)),
+                    'seen'       => time(),
+                ];
+                $users->update($userId, ['last_login_at' => date('Y-m-d H:i:s')]);
+                flash('success', sprintf(
+                    'Welcome to DEx Studio, %s! Your free trial is ready with %s credits.',
+                    $business, number_format($trial['credits'])
+                ));
+                $next = $this->portalPath('/');
+            } else {
+                $_SESSION['partner_signup_done'] = [
+                    'business' => $business,
+                    'email'    => $email,
+                    'price'    => $pack['price'],
+                    'credits'  => $pack['credits'],
+                ];
+                $next = '/partner/register';
+            }
 
             // Reply first, then tell the admin: an SMTP round trip takes seconds.
-            header('Location: ' . url('/partner/register'));
+            header('Location: ' . url($next));
             session_write_close();
             if (function_exists('fastcgi_finish_request')) {
                 fastcgi_finish_request();
@@ -512,16 +547,23 @@ class PartnerController extends BaseController
                     'Mobile'   => $phone,
                     'Email'    => $email,
                     'City'     => $city !== '' ? $city : '—',
-                    'Pack'     => GDD_CURRENCY_SYMBOL . number_format($pack['price']) . ' for ' . number_format($pack['credits']) . ' credits',
+                    'Pack'     => $pack === null ? ($trial ? 'Free trial only' : '—')
+                        : GDD_CURRENCY_SYMBOL . number_format($pack['price']) . ' for ' . number_format($pack['credits']) . ' credits',
                 ];
                 $html = '<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#1f2937;max-width:520px">'
-                    . '<p>A new seller has registered and is waiting for activation.</p><table style="border-collapse:collapse">';
+                    . '<p>' . ($trial
+                        ? 'A new seller has registered and started a free trial with ' . number_format($trial['credits']) . ' credits.'
+                        : 'A new seller has registered and is waiting for activation.') . '</p><table style="border-collapse:collapse">';
                 foreach ($rows as $label => $value) {
                     $html .= '<tr><td style="padding:3px 14px 3px 0;color:#6b7280">' . e($label) . '</td><td style="padding:3px 0"><strong>' . e($value) . '</strong></td></tr>';
                 }
-                $html .= '</table><p>Once their payment is received, open the partner in the admin and press “Activate”. That adds the credits and lets them sign in.</p>'
+                $html .= '</table><p>' . ($trial
+                        ? 'They can use DEx Studio now. What they create is deleted automatically after ' . $trial['days'] . ' day' . ($trial['days'] === 1 ? '' : 's')
+                            . '. When they pay for a pack, mark it paid on their page in the admin — that ends the trial.'
+                        : 'Once their payment is received, open the partner in the admin and press “Activate”. That adds the credits and lets them sign in.') . '</p>'
                     . '<p><a href="' . e(url('/admin/ar-partners/' . $partnerId)) . '">Open in Admin → AR Partners</a></p></div>';
-                if (!(new NotificationService())->sendEmail($adminEmail, SITE_NAME . ' Admin', 'New seller registration: ' . $business, $html)) {
+                $subject = ($trial ? 'New DEx trial: ' : 'New seller registration: ') . $business;
+                if (!(new NotificationService())->sendEmail($adminEmail, SITE_NAME . ' Admin', $subject, $html)) {
                     error_log('Partner registration email to admin failed for partner ' . $partnerId);
                 }
             }
@@ -743,7 +785,7 @@ class PartnerController extends BaseController
             'customers'      => (new ArPartnerCustomer())->optionsForPartner((int)$this->partner['id']),
             'preselect'      => (int)$this->input('customer', 0),
             'durationPrices' => ArPartner::durationPrices($this->partner),
-            'validityPrices' => ArPartner::validityPrices($this->partner),
+            'validityPrices' => $this->offeredValidities(),
             'packs'          => ArPartner::creditPacks($this->partner),
             'maxPages'       => $this->maxAlbumPages(),
             'playbackModes'  => ArFrameItem::PLAYBACK_MODES,
@@ -770,7 +812,7 @@ class PartnerController extends BaseController
             $this->go('/');
         }
 
-        $validity = (string)$this->input('validity', '');
+        $validity = $this->onTrial() ? (string)ArPartner::trialValidity($this->partner) : (string)$this->input('validity', '');
         $title = trim((string)$this->input('title', ''));
         if ($title === '') {
             $title = ($kind === 'album' ? 'Album' : 'Single Frame') . ' - ' . date('d M Y, h:i A');
@@ -1255,7 +1297,39 @@ class PartnerController extends BaseController
             'partnerUser'  => $this->user,
             'brand'        => $this->brand(),
             'base'         => '/partner/' . $this->partner['slug'],
+            'trial'        => $this->onTrial() ? ArPartner::trialSettings() : null,
         ]));
+    }
+
+    /** On a trial that is really in force — not before its migration has run. */
+    private function onTrial(): bool
+    {
+        return ArPartner::isTrial($this->partner) && $this->partners->trialsReady();
+    }
+
+    /**
+     * Validity choices for the create form. A trial partner has none to make:
+     * its content is deleted after the trial days, so only the cheapest
+     * validity is offered (and charged), and the form says why.
+     */
+    private function offeredValidities(): array
+    {
+        $prices = ArPartner::validityPrices($this->partner);
+        if (!$this->onTrial()) {
+            return $prices;
+        }
+        $key = ArPartner::trialValidity($this->partner);
+        return $key === null ? [] : [$key => $prices[$key]];
+    }
+
+    /** Remove trial content whose time is up. Never lets a clean-up failure break the page. */
+    private function purgeTrialContent(): void
+    {
+        try {
+            $this->service->purgeDueTrialContent();
+        } catch (Throwable $e) {
+            error_log('Trial content clean-up failed: ' . $e->getMessage());
+        }
     }
 
     private function brand(): array

@@ -136,8 +136,16 @@ $action = $isEdit ? '/admin/ar-partners/' . (int)$partner['id'] . '/edit' : '/ad
                     <input type="text" name="owner_password" autocomplete="new-password" required minlength="<?= PASSWORD_MIN_LENGTH ?>">
                 </label>
             </div>
-            <label style="max-width:240px">Opening credits <span class="admin-label-hint">Recorded as “Joining bonus”</span>
-                <input type="number" name="opening_credits" min="0" value="<?= (int)($owner['opening_credits'] ?? 0) ?>">
+            <?php if (!empty($trialsReady)): ?>
+                <label class="admin-checkbox">
+                    <input type="checkbox" name="is_trial" value="1" <?= !empty($owner['is_trial']) ? 'checked' : '' ?>>
+                    Free trial account — everything they create is <strong>deleted automatically after <?= (int)$trial['days'] ?> day<?= (int)$trial['days'] === 1 ? '' : 's' ?></strong>,
+                    and their portal says so. End the trial from their page when they pay.
+                </label>
+            <?php endif; ?>
+            <label style="max-width:320px">Opening credits
+                <span class="admin-label-hint">Recorded as “Joining bonus”<?php if (!empty($trialsReady)): ?>; left blank on a trial account, <?= number_format((int)$trial['credits']) ?> trial credits<?php endif; ?></span>
+                <input type="number" name="opening_credits" min="0" value="<?= e((string)($owner['opening_credits'] ?? '')) ?>" placeholder="0">
             </label>
         </div>
     <?php else:

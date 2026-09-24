@@ -106,6 +106,17 @@ class ArPartnerService
 
         $years = ArPartner::VALIDITIES[$attrs['validity']][1];
         $now = time();
+        $activeUntil = $years === null ? null : date('Y-m-d H:i:s', strtotime('+' . $years . ' years', $now));
+        $editableUntil = $now + 86400 * (int)$partner['edit_window_days'];
+
+        // Trial content lives only a few days, whatever validity it records.
+        $deleteAfter = null;
+        if (ArPartner::isTrial($partner) && $this->partners->trialsReady()) {
+            $deleteAt = $now + 86400 * ArPartner::trialSettings()['days'];
+            $deleteAfter = date('Y-m-d H:i:s', $deleteAt);
+            $activeUntil = $deleteAfter;
+            $editableUntil = min($editableUntil, $deleteAt);
+        }
 
         $items = [];
         foreach ($pages as $page) {
@@ -121,15 +132,15 @@ class ArPartnerService
 
         $this->db->beginTransaction();
         try {
-            $frameId = $this->frames->createFrame([
+            $frameId = $this->frames->createFrame(($deleteAfter === null ? [] : ['delete_after' => $deleteAfter]) + [
                 'channel'             => 'partner',
                 'partner_id'          => (int)$partner['id'],
                 'partner_customer_id' => $attrs['customer_id'],
                 'title'               => $attrs['title'],
                 'content_kind'        => $attrs['kind'],
                 'validity'            => $attrs['validity'],
-                'active_until'        => $years === null ? null : date('Y-m-d H:i:s', strtotime('+' . $years . ' years', $now)),
-                'editable_until'      => date('Y-m-d H:i:s', $now + 86400 * (int)$partner['edit_window_days']),
+                'active_until'        => $activeUntil,
+                'editable_until'      => date('Y-m-d H:i:s', $editableUntil),
                 'credits_charged'     => $quote['total'],
                 // From PHP, like the validity and edit-window dates beside it —
                 // MySQL's own clock may be in a different timezone.
@@ -142,7 +153,7 @@ class ArPartnerService
                 -$quote['total'],
                 'used',
                 sprintf('%s (%d item%s, %s)', $label, count($items), count($items) === 1 ? '' : 's',
-                    ArPartner::validityLabel($attrs['validity'])),
+                    $deleteAfter === null ? ArPartner::validityLabel($attrs['validity']) : 'trial'),
                 ['frame_id' => $frameId]
             );
             if (empty($charge['ok'])) {
@@ -235,7 +246,87 @@ class ArPartnerService
 
     public static function isExpired(array $frame): bool
     {
-        return !empty($frame['active_until']) && strtotime((string)$frame['active_until']) < time();
+        return (!empty($frame['active_until']) && strtotime((string)$frame['active_until']) < time())
+            || self::isDeleteDue($frame);
+    }
+
+    /** Trial content past its deletion time, whether or not the clean-up has removed it yet. */
+    public static function isDeleteDue(array $frame): bool
+    {
+        return !empty($frame['delete_after']) && strtotime((string)$frame['delete_after']) <= time();
+    }
+
+    // ----------------------------------------------------------------- trials
+
+    /**
+     * Delete trial content whose time is up: its photos, videos, targets and
+     * cached QR codes, then the row (its items and scan events go with it; the
+     * credit ledger keeps its line, with the link to the frame cleared).
+     *
+     * Cheap when there is nothing to do — one indexed query — so it runs on
+     * partner and admin page loads as well as from tools/purge-trial-content.php.
+     *
+     * @return array[] the frames deleted (or, on a dry run, that would be)
+     */
+    public function purgeDueTrialContent(int $limit = 25, bool $dryRun = false): array
+    {
+        if (!$this->partners->trialsReady()) {
+            return [];
+        }
+        $stmt = $this->db->prepare(
+            'SELECT * FROM ar_frames WHERE delete_after IS NOT NULL AND delete_after <= ?
+             ORDER BY delete_after LIMIT ' . max(1, $limit)
+        );
+        $stmt->execute([date('Y-m-d H:i:s')]);
+        $due = $stmt->fetchAll();
+        if ($dryRun || !$due) {
+            return $due;
+        }
+
+        require_once APP_PATH . '/services/QrCodeService.php';
+        $frames = new ArFrame();
+        foreach ($due as $frame) {
+            // Files first: a row deleted before a failed unlink would orphan them.
+            $this->frames->deleteFrameFiles($frame);
+            $scanUrl = ArFrameService::scanUrl($frame['slug']);
+            // The sizes the portal's content page and sticker cache (see PartnerController).
+            $this->frames->deleteFile(QrCodeService::cachePath($scanUrl, 'Q', 8));
+            $this->frames->deleteFile(QrCodeService::cachePath($scanUrl, 'Q', 12));
+            $frames->delete((int)$frame['id']);
+        }
+        return $due;
+    }
+
+    /**
+     * End a partner's trial. Content made from now on is kept as normal.
+     * Content made during the trial is still deleted on schedule, unless
+     * $keepContent — then it runs for the validity it was recorded with.
+     *
+     * @return int how many pieces of trial content were kept
+     */
+    public function endTrial(int $partnerId, bool $keepContent): int
+    {
+        $this->partners->update($partnerId, ['is_trial' => 0]);
+        if (!$keepContent) {
+            return 0;
+        }
+
+        $stmt = $this->db->prepare(
+            'SELECT id, validity, created_at FROM ar_frames
+             WHERE partner_id = ? AND delete_after IS NOT NULL AND delete_after > ?'
+        );
+        $stmt->execute([$partnerId, date('Y-m-d H:i:s')]);
+        $update = $this->db->prepare('UPDATE ar_frames SET delete_after = NULL, active_until = ? WHERE id = ?');
+        $kept = 0;
+        foreach ($stmt->fetchAll() as $frame) {
+            $years = ArPartner::VALIDITIES[$frame['validity']][1] ?? 1;
+            $update->execute([
+                $years === null ? null : date('Y-m-d H:i:s', strtotime('+' . $years . ' years', strtotime((string)$frame['created_at']))),
+                (int)$frame['id'],
+            ]);
+            $kept++;
+        }
+        return $kept;
     }
 
     public static function isEditable(array $frame): bool

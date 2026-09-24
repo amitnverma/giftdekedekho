@@ -28,6 +28,7 @@ class AdminArPartnerController extends BaseController
         $this->requireAdmin();
         if ($this->schemaMissing()) return;
 
+        $this->purgeTrialContent();
         // Registrations waiting for activation first — they are the ones needing action.
         $partners = $this->partners->listWithStats();
         usort($partners, fn($a, $b) => (int)ArPartner::awaitingActivation($b) <=> (int)ArPartner::awaitingActivation($a));
@@ -36,7 +37,26 @@ class AdminArPartnerController extends BaseController
             'metaTitle'       => 'AR Partners',
             'partners'        => $partners,
             'supportWhatsapp' => (string)(new Settings())->get('ar_partner_support_whatsapp', ''),
+            'trialsReady'     => $this->partners->trialsReady(),
+            'trial'           => ArPartner::trialSettings(),
         ]);
+    }
+
+    /** The free trial new registrations get: on or off, its credits, and how long its content lives. */
+    public function saveTrialSettings(): void
+    {
+        $this->requireAdmin();
+        $this->requireCsrf();
+        $credits = max(0, min(1000000, (int)$this->input('dex_trial_credits', ArPartner::DEFAULT_TRIAL_CREDITS)));
+        $days = max(1, min(365, (int)$this->input('dex_trial_days', ArPartner::DEFAULT_TRIAL_DAYS)));
+        (new Settings())->setMany([
+            'dex_trial_enabled' => $this->input('dex_trial_enabled') ? '1' : '0',
+            'dex_trial_credits' => (string)$credits,
+            'dex_trial_days'    => (string)$days,
+        ]);
+        flash('success', sprintf('Free trial saved: %s credits, content deleted after %d day%s. Applies to new trial accounts and new trial content.',
+            number_format($credits), $days, $days === 1 ? '' : 's'));
+        redirect('/admin/ar-partners#trial');
     }
 
     public function saveSettings(): void
@@ -64,6 +84,8 @@ class AdminArPartnerController extends BaseController
         $this->viewAdmin('admin/ar_partners_form', [
             'metaTitle' => 'New AR Partner',
             'owner'     => $stash['owner'] ?? [],
+            'trialsReady' => $this->partners->trialsReady(),
+            'trial'       => ArPartner::trialSettings(),
             'partner'   => array_merge([
                 'id' => 0, 'slug' => '', 'name' => '', 'tagline' => '', 'logo_path' => null,
                 'brand_color' => ArPartnerService::DEFAULT_BRAND_COLOR,
@@ -99,11 +121,15 @@ class AdminArPartnerController extends BaseController
     {
         $this->requireAdmin();
         if ($this->schemaMissing()) return;
+        $this->purgeTrialContent();
         $partner = $this->findOrRedirect($id);
 
         $this->viewAdmin('admin/ar_partners_show', [
             'metaTitle' => $partner['name'],
             'partner'   => $partner,
+            'trial'     => ArPartner::isTrial($partner) && $this->partners->trialsReady() ? ArPartner::trialSettings() : null,
+            'trialsReady' => $this->partners->trialsReady(),
+            'trialDefaults' => ArPartner::trialSettings(),
             'portalUrl' => url('/partner/' . $partner['slug']),
             'users'     => (new ArPartnerUser())->forPartner($id),
             'requests'  => $this->credits->requests($id, 30),
@@ -235,7 +261,8 @@ class AdminArPartnerController extends BaseController
                     'contact_email' => $email,
                     'website_url'   => $website,
                 ]),
-                'owner' => ['name' => $ownerName, 'email' => $ownerEmail, 'opening_credits' => (int)$this->input('opening_credits', 0)],
+                'owner' => ['name' => $ownerName, 'email' => $ownerEmail, 'opening_credits' => (string)$this->input('opening_credits', ''),
+                    'is_trial' => (bool)$this->input('is_trial')],
             ];
             flash('error', implode(' ', $errors));
             redirect($back);
@@ -265,6 +292,12 @@ class AdminArPartnerController extends BaseController
         } else {
             // The partner, its first login and any opening credits exist
             // together or not at all — never a partner nobody can sign in to.
+            // A trial account: its content is deleted after the trial days, and a
+            // blank opening balance means the usual trial credits.
+            $trial = $this->input('is_trial') && $this->partners->trialsReady();
+            if ($trial) {
+                $data['is_trial'] = 1;
+            }
             $db = $this->credits->db();
             $db->beginTransaction();
             try {
@@ -277,9 +310,10 @@ class AdminArPartnerController extends BaseController
                     $ownerPassword,
                     'owner'
                 );
-                $bonus = (int)$this->input('opening_credits', 0);
+                $opening = trim((string)$this->input('opening_credits', ''));
+                $bonus = $trial && $opening === '' ? ArPartner::trialSettings()['credits'] : (int)$opening;
                 if ($bonus > 0) {
-                    $this->credits->apply($id, $bonus, 'added', 'Joining bonus', ['created_by' => currentUserId()]);
+                    $this->credits->apply($id, $bonus, 'added', $trial ? 'Free trial credits' : 'Joining bonus', ['created_by' => currentUserId()]);
                 }
                 $db->commit();
             } catch (Throwable $e) {
@@ -300,7 +334,7 @@ class AdminArPartnerController extends BaseController
 
         flash('success', $existing
             ? 'Partner saved. Their page is at /partner/' . $slug
-            : 'Partner created. They sign in at /partner/' . $slug . ' with ' . $ownerEmail . ' — share the password with them securely.');
+            : ($trial ? 'Trial partner' : 'Partner') . ' created. They sign in at /partner/' . $slug . ' with ' . $ownerEmail . ' — share the password with them securely.');
         redirect('/admin/ar-partners/' . $id);
     }
 
@@ -442,6 +476,11 @@ class AdminArPartnerController extends BaseController
             if ($activating) {
                 $this->partners->update($id, ['is_active' => 1, 'signup_status' => 'approved']);
             }
+            // A paid pack ends a trial. Content made on the trial keeps its deletion date.
+            $endingTrial = ArPartner::isTrial($partner) && $this->partners->trialsReady();
+            if ($endingTrial) {
+                $this->service->endTrial($id, false);
+            }
             $db->commit();
         } catch (Throwable $e) {
             if ($db->inTransaction()) {
@@ -453,7 +492,8 @@ class AdminArPartnerController extends BaseController
         if ($activating) {
             $this->finishActivation($partner, (int)$request['credits']);
         }
-        flash('success', number_format((int)$request['credits']) . ' credits added.');
+        flash('success', number_format((int)$request['credits']) . ' credits added.'
+            . ($endingTrial ? ' Their free trial has ended; content made during the trial is still deleted on schedule — use “Keep trial content” to keep it.' : ''));
         redirect('/admin/ar-partners/' . $id . '#credits');
     }
 
@@ -560,6 +600,43 @@ class AdminArPartnerController extends BaseController
             'Your ' . $siteName . ' DEx partner account is active', $html);
     }
 
+    /**
+     * End a trial by hand, optionally keeping what was made during it. Also
+     * used after a trial has ended, to rescue its remaining content.
+     */
+    public function endTrial(int $id): void
+    {
+        $this->requireAdmin();
+        $this->requireCsrf();
+        $partner = $this->findOrRedirect($id);
+        if (!$this->partners->trialsReady()) {
+            redirect('/admin/ar-partners/' . $id);
+        }
+        $wasTrial = ArPartner::isTrial($partner);
+        $kept = $this->service->endTrial($id, (bool)$this->input('keep_content'));
+        flash('success', ($wasTrial ? 'Free trial ended — new content is kept as normal.' : 'Done.')
+            . ($this->input('keep_content') ? ' ' . $kept . ' piece' . ($kept === 1 ? '' : 's') . ' of trial content will no longer be deleted.' : ''));
+        redirect('/admin/ar-partners/' . $id);
+    }
+
+    /** Put an existing partner on a trial: from now on, what they create is deleted after the trial days. */
+    public function startTrial(int $id): void
+    {
+        $this->requireAdmin();
+        $this->requireCsrf();
+        $partner = $this->findOrRedirect($id);
+        if (!$this->partners->trialsReady() || ArPartner::isTrial($partner)) {
+            redirect('/admin/ar-partners/' . $id);
+        }
+        $this->partners->update($id, ['is_trial' => 1]);
+        $credits = max(0, (int)$this->input('credits', 0));
+        if ($credits > 0) {
+            $this->credits->applyNow($id, $credits, 'added', 'Free trial credits', ['created_by' => currentUserId()]);
+        }
+        flash('success', $partner['name'] . ' is now on a free trial' . ($credits > 0 ? ' with ' . number_format($credits) . ' extra credits' : '') . '.');
+        redirect('/admin/ar-partners/' . $id);
+    }
+
     public function cancelRequest(int $id, int $requestId): void
     {
         $this->requireAdmin();
@@ -582,6 +659,16 @@ class AdminArPartnerController extends BaseController
     }
 
     // ------------------------------------------------------------ helpers
+
+    /** Remove trial content whose time is up. A failed clean-up must never break the admin. */
+    private function purgeTrialContent(): void
+    {
+        try {
+            $this->service->purgeDueTrialContent();
+        } catch (Throwable $e) {
+            error_log('Trial content clean-up failed: ' . $e->getMessage());
+        }
+    }
 
     /** Input kept from a failed save of this form (0 = the create form), used once. */
     private function takeFormStash(int $id): array

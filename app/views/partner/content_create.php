@@ -139,6 +139,18 @@ $durationOption = function (int $seconds, int $price): string {
                         <?php endforeach; ?>
                     </div>
                 </div>
+                <?php if (!empty($trial)): ?>
+                    <div class="field">
+                        <span class="field-label"><?= $isAlbum ? 'Album Active For' : 'Active For' ?></span>
+                        <?php /* A hidden radio, so the price script reads it like the normal choice. */ ?>
+                        <input type="radio" name="validity" value="<?= e($defaultValidity) ?>" checked hidden data-validity-choice>
+                        <p class="deletes-on" style="margin:4px 0 0">
+                            <?= e($trial['days'] . ' day' . ($trial['days'] === 1 ? '' : 's')) ?> — free trial.
+                            This <?= $isAlbum ? 'album' : 'content' ?>, its photos and videos are deleted automatically on
+                            <?= e(date('d M Y, h:i A', time() + 86400 * $trial['days'])) ?>.
+                        </p>
+                    </div>
+                <?php else: ?>
                 <div class="field">
                     <span class="field-label"><?= $isAlbum ? 'Album Active For' : 'Active For' ?></span>
                     <div class="chips">
@@ -150,6 +162,7 @@ $durationOption = function (int $seconds, int $price): string {
                         <?php endforeach; ?>
                     </div>
                 </div>
+                <?php endif; ?>
             </div>
             <div class="field" style="margin-bottom:0">
                 <span class="field-label">

@@ -7,7 +7,7 @@ $activeLogins = array_filter($users, fn($u) => !empty($u['is_active']));
 $awaiting = ArPartner::awaitingActivation($partner);
 // The pack chosen at registration is the oldest request still open.
 $signupRequest = $pending ? end($pending) : null;
-$statusBadge = $partner['is_active'] ? ['admin-badge-green', 'Active']
+$statusBadge = $partner['is_active'] ? ($trial ? ['admin-badge-yellow', 'Free trial'] : ['admin-badge-green', 'Active'])
     : ($awaiting ? ['admin-badge-yellow', 'Awaiting activation']
     : (($partner['signup_status'] ?? null) === 'rejected' ? ['admin-badge-red', 'Declined'] : ['admin-badge-gray', 'Paused']));
 ?>
@@ -50,6 +50,32 @@ $statusBadge = $partner['is_active'] ? ['admin-badge-green', 'Active']
                 <button class="admin-btn admin-btn-danger" type="submit">Decline</button>
             </form>
         </div>
+    </div>
+<?php endif; ?>
+<?php
+// Trial content still waiting to be deleted — it can be rescued after the trial ends too.
+$trialContent = array_filter($content, fn($row) => !empty($row['delete_after']));
+?>
+<?php if ($trial || $trialContent): ?>
+    <div class="admin-card" style="margin-bottom:16px;border:2px solid #f59e0b;background:#fffbeb">
+        <h3 class="admin-card-title" style="margin-top:0"><?= $trial ? 'Free trial account' : 'Trial content still scheduled for deletion' ?></h3>
+        <p style="margin:0 0 10px;font-size:13.5px">
+            <?php if ($trial): ?>
+                Everything they create is deleted automatically <?= (int)$trial['days'] ?> day<?= (int)$trial['days'] === 1 ? '' : 's' ?> after it is made.
+                Marking a credit request paid ends the trial; so does the button below.
+            <?php endif; ?>
+            <?= count($trialContent) ?> piece<?= count($trialContent) === 1 ? '' : 's' ?> of trial content
+            <?= count($trialContent) === 1 ? 'is' : 'are' ?> waiting to be deleted<?php if ($trialContent): ?>
+                — the next on <?= e(date('d M Y, H:i', strtotime(min(array_column($trialContent, 'delete_after'))))) ?><?php endif; ?>.
+        </p>
+        <form method="post" action="<?= url('/admin/ar-partners/' . $pid . '/end-trial') ?>" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"
+              onsubmit="return confirm(this.keep_content && this.keep_content.checked ? 'Keep the trial content? It will stay live for its normal validity.' : '<?= $trial ? 'End the free trial?' : 'Keep nothing?' ?>')">
+            <?= csrfField() ?>
+            <?php if ($trialContent): ?>
+                <label class="admin-checkbox" style="margin:0"><input type="checkbox" name="keep_content" value="1" <?= $trial ? '' : 'checked' ?>> Keep the trial content (stop it being deleted)</label>
+            <?php endif; ?>
+            <button class="admin-btn admin-btn-primary" type="submit"><?= $trial ? 'End trial' : 'Keep trial content' ?></button>
+        </form>
     </div>
 <?php endif; ?>
 <?php if (!$activeLogins): ?>
@@ -137,6 +163,20 @@ $statusBadge = $partner['is_active'] ? ['admin-badge-green', 'Active']
             <label class="admin-checkbox"><input type="checkbox" name="allow_negative" value="1"> Allow a negative balance</label>
             <div class="admin-form-actions"><button class="admin-btn admin-btn-primary" type="submit">Apply</button></div>
         </form>
+        <?php if ($trialsReady && !$trial): ?>
+            <form method="post" action="<?= url('/admin/ar-partners/' . $pid . '/start-trial') ?>" class="admin-form admin-mt"
+                  style="border-top:1px solid #e5e7eb;padding-top:12px"
+                  onsubmit="return confirm('Put <?= e(addslashes($partner['name'])) ?> on a free trial? Everything they create from now on is deleted automatically after <?= (int)$trialDefaults['days'] ?> days.')">
+                <?= csrfField() ?>
+                <p class="admin-muted" style="font-size:13px;margin:0 0 6px">
+                    <strong>Put on free trial</strong> — content they create from now on is deleted after <?= (int)$trialDefaults['days'] ?> days. Content they already have is not affected.
+                </p>
+                <div class="admin-form-row">
+                    <label>Trial credits to add <input type="number" name="credits" min="0" value="<?= (int)$trialDefaults['credits'] ?>"></label>
+                </div>
+                <div class="admin-form-actions"><button class="admin-btn" type="submit">Start free trial</button></div>
+            </form>
+        <?php endif; ?>
     </div>
 </div>
 
@@ -216,7 +256,12 @@ $statusBadge = $partner['is_active'] ? ['admin-badge-green', 'Active']
                                     <div class="admin-muted" style="font-size:12px"><?= $row['content_kind'] === 'album' ? 'Album · ' . (int)$row['item_count'] : 'Single' ?> · <?= e(date('d M Y', strtotime($row['created_at']))) ?></div>
                                 </td>
                                 <td><?= e($row['customer_name'] ?? '—') ?></td>
-                                <td><span class="admin-badge <?= $contentState[$tone] ?>"><?= e($label) ?></span></td>
+                                <td>
+                                    <span class="admin-badge <?= $contentState[$tone] ?>"><?= e($label) ?></span>
+                                    <?php if (!empty($row['delete_after'])): ?>
+                                        <div style="font-size:12px;color:#b91c1c">Trial · deleted <?= e(date('d M, H:i', strtotime($row['delete_after']))) ?></div>
+                                    <?php endif; ?>
+                                </td>
                                 <td style="text-align:right"><?= number_format((int)$row['credits_charged']) ?></td>
                                 <td style="text-align:right"><?= number_format((int)$row['opens']) ?></td>
                             </tr>

@@ -172,6 +172,9 @@ class AdminRouter
             case $path === '/ar-partners/settings':
                 (new AdminArPartnerController())->saveSettings();
                 break;
+            case $path === '/ar-partners/trial-settings':
+                (new AdminArPartnerController())->saveTrialSettings();
+                break;
             case preg_match('#^/ar-partners/(\d+)$#', $path, $m) === 1:
                 (new AdminArPartnerController())->show((int)$m[1]);
                 break;
@@ -186,6 +189,12 @@ class AdminRouter
                 break;
             case preg_match('#^/ar-partners/(\d+)/activate$#', $path, $m) === 1:
                 (new AdminArPartnerController())->activate((int)$m[1]);
+                break;
+            case preg_match('#^/ar-partners/(\d+)/end-trial$#', $path, $m) === 1:
+                (new AdminArPartnerController())->endTrial((int)$m[1]);
+                break;
+            case preg_match('#^/ar-partners/(\d+)/start-trial$#', $path, $m) === 1:
+                (new AdminArPartnerController())->startTrial((int)$m[1]);
                 break;
             case preg_match('#^/ar-partners/(\d+)/reject$#', $path, $m) === 1:
                 (new AdminArPartnerController())->reject((int)$m[1]);

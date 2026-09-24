@@ -57,9 +57,13 @@ $headAction = '<div class="toolbar">'
                     <dt>Created</dt><dd><?= e(date('d M Y, h:i A', strtotime($frame['created_at']))) ?></dd>
                     <dt>Active for</dt>
                     <dd>
+                        <?php if (!empty($frame['delete_after'])): ?>
+                            <span class="deletes-on">Free trial — deleted automatically on <?= e(date('d M Y, h:i A', strtotime($frame['delete_after']))) ?></span>
+                        <?php else: ?>
                         <?= e(ArPartner::validityLabel($frame['validity'])) ?>
                         <?php if (!empty($frame['active_until'])): ?>
                             <span class="muted">— until <?= e(date('d M Y', strtotime($frame['active_until']))) ?></span>
+                        <?php endif; ?>
                         <?php endif; ?>
                     </dd>
                     <dt>Credits</dt><dd><?= number_format((int)$frame['credits_charged']) ?></dd>

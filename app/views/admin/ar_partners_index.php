@@ -53,7 +53,9 @@ $awaitingCount = count(array_filter($partners, fn($p) => ArPartner::awaitingActi
                             <td style="text-align:right"><?= number_format((int)$p['customer_count']) ?></td>
                             <td style="text-align:right"><?= number_format((int)$p['opens']) ?></td>
                             <td>
-                                <?php if ($p['is_active']): ?>
+                                <?php if ($p['is_active'] && !empty($p['is_trial'])): ?>
+                                    <span class="admin-badge admin-badge-yellow" title="What they create is deleted automatically">Free trial</span>
+                                <?php elseif ($p['is_active']): ?>
                                     <span class="admin-badge admin-badge-green">Active</span>
                                 <?php elseif (ArPartner::awaitingActivation($p)): ?>
                                     <span class="admin-badge admin-badge-yellow">Awaiting activation</span>
@@ -68,6 +70,46 @@ $awaitingCount = count(array_filter($partners, fn($p) => ArPartner::awaitingActi
                 </tbody>
             </table>
         </div>
+    <?php endif; ?>
+</div>
+
+<div class="admin-card admin-mt" style="max-width:620px" id="trial">
+    <h3 class="admin-card-title">Free trial</h3>
+    <?php if (!$trialsReady): ?>
+        <p class="admin-muted" style="font-size:13px;margin:0">
+            Run <code>php tools/run-migration.php migrations/2026_09_23_partner_trials.sql</code> to switch on free trials.
+            Until then, new registrations wait for payment and activation as before.
+        </p>
+    <?php else: ?>
+        <p class="admin-muted" style="font-size:13px;margin-top:0">
+            A shop that registers at <a href="<?= url('/partner/register') ?>" target="_blank">/partner/register</a> gets its DEx Studio
+            straight away, on a free trial with these credits. Everything a trial account creates — photos, videos and QR links —
+            is <strong>deleted automatically</strong> this many days after it is made, and their portal says so on every page.
+            The trial ends when you mark one of their credit packs paid, or press “End trial” on their page.
+            You can also create a trial account yourself with <a href="<?= url('/admin/ar-partners/create') ?>">+ New Partner</a>.
+        </p>
+        <form method="post" action="<?= url('/admin/ar-partners/trial-settings') ?>" class="admin-form">
+            <?= csrfField() ?>
+            <label class="admin-checkbox">
+                <input type="checkbox" name="dex_trial_enabled" value="1" <?= $trial['enabled'] ? 'checked' : '' ?>>
+                Give new registrations a free trial — untick to go back to “pay first, then we activate”
+            </label>
+            <div class="admin-form-row">
+                <label>Trial credits <span class="admin-label-hint">Default <?= ArPartner::DEFAULT_TRIAL_CREDITS ?></span>
+                    <input type="number" name="dex_trial_credits" min="0" max="1000000" required value="<?= (int)$trial['credits'] ?>">
+                </label>
+                <label>Delete trial content after (days) <span class="admin-label-hint">Default <?= ArPartner::DEFAULT_TRIAL_DAYS ?></span>
+                    <input type="number" name="dex_trial_days" min="1" max="365" required value="<?= (int)$trial['days'] ?>">
+                </label>
+            </div>
+            <p class="admin-muted" style="font-size:12.5px;margin:0">
+                Changes apply to trial accounts created from now on, and to content created from now on — existing trial content keeps
+                the deletion date it was given.
+            </p>
+            <div class="admin-form-actions">
+                <button class="admin-btn admin-btn-primary" type="submit">Save</button>
+            </div>
+        </form>
     <?php endif; ?>
 </div>
 

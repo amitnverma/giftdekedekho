@@ -3,7 +3,8 @@
  * Shell for every signed-in partner page. The partner's name, logo and colour
  * come from their record, which is edited in Admin → AR Partners.
  *
- * Expects: $partner, $partnerUser, $brand, $base, $pageTitle, $activeNav, $_partnerView
+ * Expects: $partner, $partnerUser, $brand, $base, $pageTitle, $activeNav, $_partnerView,
+ * and $trial (ArPartner::trialSettings()) or null when the partner is not on a trial.
  */
 if (!function_exists('partnerIcon')) {
     /** Small line icons used by the stat tiles and action cards. */
@@ -106,6 +107,20 @@ $initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)$
         <?php endif; ?>
         <?php if ($msg = flash('error')): ?>
             <div class="banner banner-danger" role="alert"><p><?= e($msg) ?></p></div>
+        <?php endif; ?>
+
+        <?php if (!empty($trial)): $trialDays = $trial['days'] . ' day' . ($trial['days'] === 1 ? '' : 's'); ?>
+            <div class="banner banner-trial" role="note">
+                <p>
+                    <span class="trial-label">Free trial</span>
+                    <strong>Everything you create on the trial is temporary.</strong>
+                    Photos, videos and QR links are <strong>deleted automatically <?= e($trialDays) ?> after they are created</strong>,
+                    and their QR stickers stop working. Buy a credit pack to create DEx content that stays live.
+                </p>
+                <?php if ($activeNav !== 'credits'): ?>
+                    <a class="btn btn-amber btn-sm" href="<?= url($base . '/credits') ?>">Buy Credits</a>
+                <?php endif; ?>
+            </div>
         <?php endif; ?>
 
         <?= $pageHtml ?>

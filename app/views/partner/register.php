@@ -4,12 +4,15 @@
  *
  * Three states: the form; $done, the "what happens next" page shown once after
  * registering; and $closed, until the registration migration has been run.
- * There is no online payment: the applicant pays outside the site and the
- * admin activates the account, which adds the chosen pack's credits.
+ * With $trial set (the free trial is on), registering opens DEx Studio at
+ * once and $done is never shown; buying a pack is optional. Without it there
+ * is no online payment: the applicant pays outside the site and the admin
+ * activates the account, which adds the chosen pack's credits.
  */
 $siteName = $brand['name'];
 $initials = strtoupper(mb_substr(preg_replace('/[^\p{L}\p{N}]+/u', '', (string)$siteName), 0, 2)) ?: 'DX';
-$selectedPack = old('pack', '');
+$selectedPack = old('pack', $trial ? '-1' : '');
+$trialDays = $trial ? $trial['days'] . ' day' . ($trial['days'] === 1 ? '' : 's') : '';
 $siteEmail = trim((string)siteSetting('site_email', ''));
 $sitePhone = trim((string)siteSetting('site_phone', ''));
 ?>
@@ -37,7 +40,9 @@ $sitePhone = trim((string)siteSetting('site_phone', ''));
             <h1><?= $done ? 'Registration received' : 'Become a DEx partner' ?></h1>
             <p><?= $done
                 ? 'Thank you, ' . e($done['business']) . '. One step left.'
-                : 'Sell Living Photo DEx to your own customers, from your own branded DEx Studio.' ?></p>
+                : ($trial
+                    ? 'Start a free trial of DEx Studio — no payment needed.'
+                    : 'Sell Living Photo DEx to your own customers, from your own branded DEx Studio.') ?></p>
         </div>
 
         <?php if ($closed): ?>
@@ -80,6 +85,19 @@ $sitePhone = trim((string)siteSetting('site_phone', ''));
                 <div class="banner banner-danger" role="alert"><p><?= e($msg) ?></p></div>
             <?php endif; ?>
 
+            <?php if ($trial): ?>
+                <div class="trial-box">
+                    <p class="trial-box-title">Free trial · <?= number_format($trial['credits']) ?> credits</p>
+                    <ul>
+                        <li>Your DEx Studio opens as soon as you register — create DEx content and test it on your phone straight away.</li>
+                        <li>A basic DEx item (one photo with a short video) uses <?= number_format((int)$rate['base_credits']) ?> credits.</li>
+                        <li><strong>Trial content is temporary:</strong> every photo, video and QR link you create during the trial is
+                            <strong>deleted automatically <?= e($trialDays) ?> after it is created</strong>.
+                            Buy a credit pack to create content that stays live.</li>
+                    </ul>
+                </div>
+            <?php endif; ?>
+
             <form method="post" action="<?= url('/partner/register') ?>">
                 <?= csrfField() ?>
                 <div class="field">
@@ -117,11 +135,19 @@ $sitePhone = trim((string)siteSetting('site_phone', ''));
                 </div>
 
                 <fieldset class="field pack-pick">
-                    <legend class="field-label">Starting credits</legend>
+                    <legend class="field-label"><?= $trial ? 'Buy credits now as well? <span class="muted" style="font-weight:400">(optional)</span>' : 'Starting credits' ?></legend>
                     <div class="packs">
+                        <?php if ($trial): ?>
+                            <label class="pack pack-option pack-option-trial">
+                                <input type="radio" name="pack" value="-1" <?= $selectedPack === '-1' ? 'checked' : '' ?>>
+                                <span class="price">Free</span>
+                                <span class="get">Trial only</span>
+                                <span class="per"><?= number_format($trial['credits']) ?> credits</span>
+                            </label>
+                        <?php endif; ?>
                         <?php foreach ($packs as $i => $pack): ?>
                             <label class="pack pack-option">
-                                <input type="radio" name="pack" value="<?= (int)$i ?>" required <?= $selectedPack === (string)$i ? 'checked' : '' ?>>
+                                <input type="radio" name="pack" value="<?= (int)$i ?>" <?= $trial ? '' : 'required' ?> <?= $selectedPack === (string)$i ? 'checked' : '' ?>>
                                 <span class="price"><?= e(GDD_CURRENCY_SYMBOL . number_format($pack['price'])) ?></span>
                                 <span class="get"><?= number_format($pack['credits']) ?> credits</span>
                                 <span class="per"><?= e(GDD_CURRENCY_SYMBOL . number_format(ArPartnerService::packItemPrice($pack, $rate), 2)) ?>/item</span>
@@ -129,13 +155,18 @@ $sitePhone = trim((string)siteSetting('site_phone', ''));
                         <?php endforeach; ?>
                     </div>
                     <p class="hint">
-                        A basic DEx item (one photo with a short video) uses <?= number_format((int)$rate['base_credits']) ?> credits.
-                        <strong>No payment is taken now:</strong> we will contact you to arrange payment, then activate your account and add the credits.
+                        <?php if ($trial): ?>
+                            <strong>No payment is taken now.</strong> If you pick a pack, we will contact you to arrange payment and add the
+                            credits once it is received — that also ends your trial, so what you create afterwards stays live.
+                        <?php else: ?>
+                            A basic DEx item (one photo with a short video) uses <?= number_format((int)$rate['base_credits']) ?> credits.
+                            <strong>No payment is taken now:</strong> we will contact you to arrange payment, then activate your account and add the credits.
+                        <?php endif; ?>
                     </p>
                 </fieldset>
 
                 <?= CaptchaService::field('partner-register') ?>
-                <button class="btn" type="submit" style="width:100%">Register as a DEx partner</button>
+                <button class="btn" type="submit" style="width:100%"><?= $trial ? 'Start my free trial' : 'Register as a DEx partner' ?></button>
             </form>
             <div class="login-switch">
                 <p>Already a DEx partner? <a href="<?= url('/partner/login') ?>">Sign in</a></p>

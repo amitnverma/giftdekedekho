@@ -74,10 +74,72 @@ class ArPartner extends BaseModel
         return $ready;
     }
 
+    /**
+     * Whether the trial migration has been run. Until it has, registration
+     * keeps the "pay, then we activate" flow and nothing is ever auto-deleted.
+     */
+    public function trialsReady(): bool
+    {
+        static $ready = null;
+        if ($ready === null) {
+            try {
+                $ready = $this->signupsReady()
+                    && $this->db->query("SHOW COLUMNS FROM ar_partners LIKE 'is_trial'")->fetch() !== false
+                    && $this->db->query("SHOW COLUMNS FROM ar_frames LIKE 'delete_after'")->fetch() !== false;
+            } catch (Throwable $e) {
+                $ready = false;
+            }
+        }
+        return $ready;
+    }
+
     /** Registered online and waiting for the admin to activate it after payment. */
     public static function awaitingActivation(array $partner): bool
     {
         return empty($partner['is_active']) && ($partner['signup_status'] ?? null) === 'pending';
+    }
+
+    // ----------------------------------------------------------------- trials
+
+    public const DEFAULT_TRIAL_CREDITS = 300;
+    public const DEFAULT_TRIAL_DAYS = 3;
+
+    /**
+     * The trial as set in Admin → AR Partners: whether new registrations get
+     * one, the credits it comes with, and how many days trial content lives.
+     *
+     * @return array{enabled: bool, credits: int, days: int}
+     */
+    public static function trialSettings(): array
+    {
+        $credits = siteSetting('dex_trial_credits', '');
+        $days = siteSetting('dex_trial_days', '');
+        return [
+            'enabled' => (string)siteSetting('dex_trial_enabled', '1') === '1',
+            'credits' => $credits === '' ? self::DEFAULT_TRIAL_CREDITS : max(0, (int)$credits),
+            'days'    => $days === '' ? self::DEFAULT_TRIAL_DAYS : max(1, (int)$days),
+        ];
+    }
+
+    public static function isTrial(array $partner): bool
+    {
+        return !empty($partner['is_trial']);
+    }
+
+    /**
+     * The validity trial content is recorded with: the cheapest one offered.
+     * It never matters for how long the content lasts — delete_after decides
+     * that — but it is what the content keeps if the admin ends the trial and
+     * chooses to keep it.
+     */
+    public static function trialValidity(array $partner): ?string
+    {
+        $prices = self::validityPrices($partner);
+        if (!$prices) {
+            return null;
+        }
+        asort($prices);
+        return (string)array_key_first($prices);
     }
 
     public function findBySlug(string $slug): ?array
