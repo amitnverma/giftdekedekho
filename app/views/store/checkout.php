@@ -11,14 +11,14 @@
           <div id="savedAddresses">
             <?php foreach ($addresses as $i => $addr): ?>
               <label class="address-card <?= $i === 0 ? 'selected' : '' ?>">
-                <input type="radio" name="address_option" value="saved" data-address-id="<?= (int)$addr['id'] ?>" <?= $i === 0 ? 'checked' : '' ?> style="margin-right:8px">
-                <strong><?= e($addr['label']) ?></strong> — <?= e($addr['address_line1']) ?>, <?= e($addr['city']) ?>, <?= e($addr['state']) ?> - <?= e($addr['pincode']) ?>
+                <input type="radio" name="address_option" value="saved" data-address-id="<?= (int)$addr['id'] ?>" <?= $i === 0 ? 'checked' : '' ?>>
+                <span><strong><?= e($addr['label']) ?></strong> — <?= e($addr['address_line1']) ?>, <?= e($addr['city']) ?>, <?= e($addr['state']) ?> - <?= e($addr['pincode']) ?></span>
               </label>
             <?php endforeach; ?>
             <input type="hidden" name="address_id" id="selectedAddressId" value="<?= (int)$addresses[0]['id'] ?>">
           </div>
           <label class="address-card" style="font-weight:600">
-            <input type="radio" name="address_option" value="new" style="margin-right:8px"> Use a new address
+            <input type="radio" name="address_option" value="new"> <span>Use a new address</span>
           </label>
         <?php endif; ?>
 
@@ -46,26 +46,25 @@
         </div>
 
         <h3 style="margin-top:30px">Payment Method</h3>
+        <?php
+          $gatewayLabels = [
+            'cod' => 'Cash on Delivery',
+            'razorpay' => 'Razorpay (Cards / UPI / Netbanking)',
+            'paypal' => 'PayPal',
+            'stripe' => 'Credit / Debit Card (Stripe)',
+          ];
+        ?>
+        <?php if (empty($gateways)): ?>
+          <p class="flash flash-error">No payment method is available right now. Please try again later or contact us.</p>
+        <?php else: ?>
         <div class="payment-options">
-          <label class="payment-option selected">
-            <input type="radio" name="payment_gateway" value="cod" checked> Cash on Delivery
+          <?php foreach ($gateways as $i => $gw): ?>
+          <label class="payment-option <?= $i === 0 ? 'selected' : '' ?>">
+            <input type="radio" name="payment_gateway" value="<?= e($gw) ?>" <?= $i === 0 ? 'checked' : '' ?>> <?= e($gatewayLabels[$gw]) ?>
           </label>
-          <?php if (!empty($razorpayKeyId)): ?>
-          <label class="payment-option">
-            <input type="radio" name="payment_gateway" value="razorpay"> Razorpay (Cards / UPI / Netbanking)
-          </label>
-          <?php endif; ?>
-          <?php if (!empty($paypalClientId)): ?>
-          <label class="payment-option">
-            <input type="radio" name="payment_gateway" value="paypal"> PayPal
-          </label>
-          <?php endif; ?>
-          <?php if (!empty($stripePublishableKey)): ?>
-          <label class="payment-option">
-            <input type="radio" name="payment_gateway" value="stripe"> Credit / Debit Card (Stripe)
-          </label>
-          <?php endif; ?>
+          <?php endforeach; ?>
         </div>
+        <?php endif; ?>
       </div>
 
       <div class="order-summary">
@@ -77,7 +76,7 @@
         <?php if ($discount > 0): ?><div class="row" style="color:#1b7a43"><span>Discount</span><span>−<?= formatPrice($discount) ?></span></div><?php endif; ?>
         <div class="row"><span>Shipping</span><span><?= $shipping > 0 ? formatPrice($shipping) : 'FREE' ?></span></div>
         <div class="row total-row"><span>Total</span><span><?= formatPrice($total) ?></span></div>
-        <button type="submit" class="btn btn-primary btn-block" style="margin-top:14px">Place Order</button>
+        <button type="submit" class="btn btn-primary btn-block" style="margin-top:14px" <?= empty($gateways) ? 'disabled' : '' ?>>Place Order</button>
       </div>
     </div>
   </form>

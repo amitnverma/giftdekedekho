@@ -49,7 +49,11 @@
 
     <div class="admin-card admin-mt">
         <h2 class="admin-card-title">Cash on Delivery</h2>
-        <p class="admin-help">COD is always available as a fallback payment option and requires no API keys.</p>
+        <label style="display:flex;align-items:center;gap:8px;font-weight:600;">
+            <input type="checkbox" name="cod_enabled" value="1" <?= ($settings['cod_enabled'] ?? '0') === '1' ? 'checked' : '' ?>>
+            Offer Cash on Delivery at checkout
+        </label>
+        <p class="admin-help">Off by default. When on, customers can choose to pay in cash when the order arrives. Needs no API keys.</p>
     </div>
 
     <button type="submit" class="admin-btn admin-btn-primary admin-mt">Save Payment Settings</button>

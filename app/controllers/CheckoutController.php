@@ -40,7 +40,19 @@ class CheckoutController extends BaseController
             'razorpayKeyId' => $settings->get('razorpay_key_id'),
             'paypalClientId' => $settings->get('paypal_client_id'),
             'stripePublishableKey' => $settings->get('stripe_publishable_key'),
+            'gateways' => $this->enabledGateways($settings),
         ]);
+    }
+
+    /** Gateways the storefront may offer: those with keys configured, plus COD when the admin has switched it on. */
+    private function enabledGateways(Settings $settings): array
+    {
+        $gateways = [];
+        if ($settings->get('cod_enabled', '0') === '1') $gateways[] = 'cod';
+        if ($settings->get('razorpay_key_id') !== '') $gateways[] = 'razorpay';
+        if ($settings->get('paypal_client_id') !== '') $gateways[] = 'paypal';
+        if ($settings->get('stripe_publishable_key') !== '') $gateways[] = 'stripe';
+        return $gateways;
     }
 
     public function placeOrder(): void
@@ -82,9 +94,10 @@ class CheckoutController extends BaseController
         $shipping = $shippingModel->calculateCharge($subtotal - $discount);
         $total = max(0, $subtotal - $discount) + $shipping;
 
-        $gateway = $this->input('payment_gateway', 'cod');
-        if (!in_array($gateway, ['razorpay', 'paypal', 'stripe', 'cod'], true)) {
-            $gateway = 'cod';
+        $gateway = (string)$this->input('payment_gateway', '');
+        if (!in_array($gateway, $this->enabledGateways(new Settings()), true)) {
+            flash('error', 'Please choose an available payment method.');
+            redirect('/checkout');
         }
 
         $orderModel = new Order();

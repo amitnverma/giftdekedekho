@@ -56,6 +56,7 @@ class AdminSettingsController extends BaseController
                 'stripe_publishable_key' => trim((string)$this->input('stripe_publishable_key')),
                 'stripe_secret_key' => trim((string)$this->input('stripe_secret_key')),
                 'stripe_mode' => $this->input('stripe_mode') === 'live' ? 'live' : 'test',
+                'cod_enabled' => $this->input('cod_enabled') === '1' ? '1' : '0',
             ]);
             flash('success', 'Payment gateway settings updated.');
             redirect('/admin/settings/payments');

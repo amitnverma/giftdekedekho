@@ -282,7 +282,8 @@ h1, h2, h3, h4 { margin: 0 0 12px; line-height: 1.25; }
   width: 100%; padding: 11px 14px; border: 1px solid var(--color-border); border-radius: 8px; font-family: inherit; font-size: 14px;
 }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-.address-card { border: 1px solid var(--color-border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; cursor: pointer; }
+.address-card { border: 1px solid var(--color-border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; cursor: pointer; display: flex; align-items: center; gap: 12px; }
+.address-card input { margin: 0; flex-shrink: 0; }
 .address-card.selected { border-color: var(--color-primary); background: #fff5f5; }
 .payment-options { display: grid; gap: 10px; margin: 16px 0; }
 .payment-option { border: 1px solid var(--color-border); border-radius: 10px; padding: 14px; display: flex; align-items: center; gap: 12px; cursor: pointer; }
