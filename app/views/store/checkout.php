@@ -88,13 +88,23 @@
   var newForm = document.getElementById('newAddressForm');
   var savedWrap = document.getElementById('savedAddresses');
   var hiddenAddrId = document.getElementById('selectedAddressId');
+  // A hidden form's empty `required` fields would block submit with no visible
+  // message; disabled fields skip validation and are not posted.
+  function showNewForm(show) {
+    newForm.style.display = show ? '' : 'none';
+    newForm.querySelectorAll('input, select, textarea').forEach(function(el){ el.disabled = !show; });
+  }
+  if (radios.length) {
+    var checked = document.querySelector('input[name="address_option"]:checked');
+    showNewForm(!checked || checked.value === 'new');
+  }
   radios.forEach(function(r){
     r.addEventListener('change', function(){
       document.querySelectorAll('.address-card').forEach(function(c){ c.classList.remove('selected'); });
       r.closest('.address-card').classList.add('selected');
-      if (r.value === 'new') { newForm.style.display = ''; }
+      if (r.value === 'new') { showNewForm(true); }
       else {
-        newForm.style.display = 'none';
+        showNewForm(false);
         if (hiddenAddrId) hiddenAddrId.value = r.getAttribute('data-address-id');
       }
     });
