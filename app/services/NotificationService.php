@@ -141,7 +141,6 @@ class NotificationService
         ]);
         $result = curl_exec($ch);
         $err = curl_error($ch);
-        curl_close($ch);
 
         if ($err) {
             error_log('MSG91 SMS error: ' . $err);
@@ -166,6 +165,71 @@ class NotificationService
         if ($recipient['phone']) {
             $this->sendSms($recipient['phone'], $message);
         }
+    }
+
+    /** Customer skipped payment: tell them the order is on hold and give them a link to pay. */
+    public function sendPaymentPending(int $orderId): void
+    {
+        $order = (new Order())->findWithItems($orderId);
+        if (!$order || $order['payment_status'] === 'paid') return;
+        $recipient = $this->resolveRecipient($order);
+        require_once APP_PATH . '/services/PaymentService.php';
+        $link = (new PaymentService())->payLink($orderId);
+
+        if ($recipient['email']) {
+            $html = '<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#1f2937;max-width:520px">'
+                . '<p>Hi ' . e((string)$recipient['name']) . ',</p>'
+                . '<p>We have saved your order <strong>#' . $orderId . '</strong> for ' . e(formatPrice($order['total']))
+                . ', but its payment is still <strong>pending</strong>. We will start preparing it as soon as payment is received.</p>'
+                . $this->itemsTableHtml($order)
+                . '<p><a href="' . e($link) . '" style="display:inline-block;background:#e63946;color:#fff;text-decoration:none;padding:10px 18px;border-radius:6px;font-weight:bold">Complete payment</a></p>'
+                . '<p style="font-size:12px;color:#9ca3af;word-break:break-all">' . e($link) . '</p>'
+                . '</div>';
+            $this->sendEmail($recipient['email'], (string)$recipient['name'], 'Payment pending — Order #' . $orderId . ' | ' . SITE_NAME, $html);
+        }
+        if ($recipient['phone']) {
+            $this->sendSms($recipient['phone'], 'Hi ' . $recipient['name'] . ', payment for your ' . SITE_NAME . ' order #' . $orderId . ' is pending. Pay here: ' . $link);
+        }
+    }
+
+    /** Tells the shop (Contact Email in Admin → Settings) that an order is confirmed. */
+    public function sendAdminNewOrder(int $orderId): void
+    {
+        $to = trim((string)$this->settings->get('site_email', ''));
+        $order = (new Order())->findWithItems($orderId);
+        if ($to === '' || !$order) return;
+        $recipient = $this->resolveRecipient($order);
+        $addr = json_decode($order['address_snapshot_json'] ?? '{}', true) ?: [];
+        $payment = $order['payment_gateway'] === 'cod'
+            ? 'Cash on Delivery'
+            : ucfirst((string)$order['payment_gateway']) . ' — ' . $order['payment_status']
+                . (!empty($order['payment_reference']) ? ' (' . $order['payment_reference'] . ')' : '');
+
+        $html = '<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#1f2937;max-width:560px">'
+            . '<p>New order <strong>#' . $orderId . '</strong> for <strong>' . e(formatPrice($order['total'])) . '</strong>.</p>'
+            . '<p><strong>Customer:</strong> ' . e((string)$recipient['name'])
+            . ($recipient['email'] ? ' · ' . e((string)$recipient['email']) : '')
+            . ($recipient['phone'] ? ' · ' . e((string)$recipient['phone']) : '') . '<br>'
+            . '<strong>Payment:</strong> ' . e($payment) . '<br>'
+            . '<strong>Ship to:</strong> ' . e(trim(($addr['address_line1'] ?? '') . ' ' . ($addr['address_line2'] ?? '')))
+            . ', ' . e((string)($addr['city'] ?? '')) . ', ' . e((string)($addr['state'] ?? '')) . ' - ' . e((string)($addr['pincode'] ?? '')) . '</p>'
+            . $this->itemsTableHtml($order)
+            . '<p><a href="' . e(url('/admin/orders/' . $orderId)) . '">Open in admin</a></p>'
+            . '</div>';
+        $this->sendEmail($to, SITE_NAME . ' Admin', 'New order #' . $orderId . ' — ' . formatPrice($order['total']), $html);
+    }
+
+    private function itemsTableHtml(array $order): string
+    {
+        $rows = '';
+        foreach ($order['items'] as $item) {
+            $rows .= '<tr><td style="padding:4px 8px">' . e((string)$item['product_name_snapshot']) . '</td>'
+                . '<td style="padding:4px 8px;text-align:center">' . (int)$item['quantity'] . '</td>'
+                . '<td style="padding:4px 8px;text-align:right">' . e(formatPrice($item['unit_price'] * $item['quantity'])) . '</td></tr>';
+        }
+        return '<table style="border-collapse:collapse;font-size:14px;margin:8px 0 16px">' . $rows
+            . '<tr><td style="padding:4px 8px;font-weight:bold" colspan="2">Total</td>'
+            . '<td style="padding:4px 8px;text-align:right;font-weight:bold">' . e(formatPrice($order['total'])) . '</td></tr></table>';
     }
 
     public function sendOrderShipped(int $orderId): void

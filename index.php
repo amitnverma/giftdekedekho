@@ -147,6 +147,14 @@ try {
             (new CheckoutController())->paymentCallback();
             break;
 
+        case preg_match('#^/order/pay/(\d+)$#', $path, $m) === 1:
+            (new CheckoutController())->pay((int)$m[1]);
+            break;
+
+        case preg_match('#^/order/skip-payment/(\d+)$#', $path, $m) === 1 && $method === 'POST':
+            (new CheckoutController())->skipPayment((int)$m[1]);
+            break;
+
         case preg_match('#^/order/confirmation/(\d+)$#', $path, $m) === 1:
             (new CheckoutController())->confirmation((int)$m[1]);
             break;

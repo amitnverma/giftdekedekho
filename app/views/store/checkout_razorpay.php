@@ -2,7 +2,8 @@
   <h1>Complete Your Payment</h1>
   <p>Order #<?= (int)$orderId ?> — Amount: <?= formatPrice($total) ?></p>
   <button id="rzpPayBtn" class="btn btn-primary">Pay Now</button>
-  <p style="margin-top:20px"><a href="<?= url('/order/confirmation/' . $orderId) ?>">Skip for now</a></p>
+  <form method="post" action="<?= url('/order/skip-payment/' . $orderId) ?>" style="margin-top:20px"><?= csrfField() ?><button type="submit" style="background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer;text-decoration:underline">Skip for now — pay later</button></form>
+  <p style="font-size:13px;color:var(--color-muted)">Your order stays on hold until it is paid. We will email you a link to complete payment.</p>
 </div>
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <script>

@@ -366,9 +366,16 @@ class AccountController extends BaseController
             (new PageController())->notFound();
             return;
         }
+        $payLink = null;
+        if ($order['payment_gateway'] !== 'cod'
+            && in_array($order['payment_status'], ['pending', 'failed'], true)
+            && !in_array($order['order_status'], ['cancelled', 'refunded'], true)) {
+            $payLink = url('/order/pay/' . $orderId);
+        }
         $this->view('account_order_detail', [
             'metaTitle' => 'Order #' . $orderId . ' | ' . SITE_NAME,
             'order' => $order,
+            'payLink' => $payLink,
             'active' => 'orders',
         ]);
     }

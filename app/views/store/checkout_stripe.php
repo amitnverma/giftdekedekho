@@ -6,7 +6,8 @@
     <button id="stripeSubmitBtn" class="btn btn-primary btn-block">Pay Now</button>
     <div id="stripeError" style="color:#b3261e;margin-top:10px"></div>
   </form>
-  <p style="margin-top:20px;text-align:center"><a href="<?= url('/order/confirmation/' . $orderId) ?>">Skip for now</a></p>
+  <form method="post" action="<?= url('/order/skip-payment/' . $orderId) ?>" style="margin-top:20px;text-align:center"><?= csrfField() ?><button type="submit" style="background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer;text-decoration:underline">Skip for now — pay later</button></form>
+  <p style="font-size:13px;color:var(--color-muted);text-align:center">Your order stays on hold until it is paid. We will email you a link to complete payment.</p>
 </div>
 <script src="https://js.stripe.com/v3/"></script>
 <script>

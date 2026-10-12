@@ -12,6 +12,10 @@ $addr = json_decode($order['address_snapshot_json'], true) ?: [];
       Placed on <?= e(date('d M Y, h:i A', strtotime($order['created_at']))) ?>
     </p>
 
+    <?php if (!empty($payLink)): ?>
+      <p>Payment for this order is still pending. <a href="<?= e($payLink) ?>" class="btn btn-primary btn-sm">Pay Now — <?= formatPrice($order['total']) ?></a></p>
+    <?php endif; ?>
+
     <?php if (!empty($order['tracking_number'])): ?>
       <p>📦 Tracking Number: <strong><?= e($order['tracking_number']) ?></strong>
         <?php if (!empty($order['tracking_url'])): ?> — <a href="<?= e($order['tracking_url']) ?>" target="_blank" rel="noopener">Track Shipment</a><?php endif; ?>

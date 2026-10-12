@@ -136,20 +136,32 @@ class CheckoutController extends BaseController
             (new Coupon())->incrementUsage((int)$coupon['id']);
         }
 
-        // ---- Payment gateway dispatch ----
+        if ($gateway === 'cod') {
+            $orderModel->updateStatus($orderId, 'confirmed');
+            $cartModel->clear();
+            unset($_SESSION['coupon_code']);
+            $this->sendOrderNotifications($orderId);
+            redirect('/order/confirmation/' . $orderId);
+        }
+
+        $cartModel->clear();
+        unset($_SESSION['coupon_code']);
+        $this->startPayment($orderId, $gateway, $total);
+    }
+
+    /** Opens the gateway's payment step for an unpaid order: renders its page or redirects. */
+    private function startPayment(int $orderId, string $gateway, float $total): void
+    {
         require_once APP_PATH . '/services/PaymentService.php';
         $paymentService = new PaymentService();
+        $_SESSION['pending_order_id'] = $orderId;
 
         switch ($gateway) {
             case 'razorpay':
-                $rzpOrder = $paymentService->createRazorpayOrder($orderId, $total);
-                $_SESSION['pending_order_id'] = $orderId;
-                $cartModel->clear();
-                unset($_SESSION['coupon_code']);
                 $this->view('checkout_razorpay', [
                     'metaTitle' => 'Complete Payment | ' . SITE_NAME,
                     'orderId' => $orderId,
-                    'rzpOrder' => $rzpOrder,
+                    'rzpOrder' => $paymentService->createRazorpayOrder($orderId, $total),
                     'total' => $total,
                     'keyId' => (new Settings())->get('razorpay_key_id'),
                 ]);
@@ -157,58 +169,104 @@ class CheckoutController extends BaseController
 
             case 'paypal':
                 $approveUrl = $paymentService->createPaypalOrder($orderId, $total);
-                $_SESSION['pending_order_id'] = $orderId;
-                $cartModel->clear();
-                unset($_SESSION['coupon_code']);
                 if ($approveUrl) {
-                    redirect($approveUrl);
+                    // Absolute PayPal URL: redirect() would prefix our own site URL.
+                    header('Location: ' . $approveUrl);
+                    exit;
                 }
+                flash('error', 'We could not open PayPal right now. Your order is saved — please try paying again shortly.');
                 redirect('/order/confirmation/' . $orderId);
                 return;
 
             case 'stripe':
-                $clientSecret = $paymentService->createStripePaymentIntent($orderId, $total);
-                $_SESSION['pending_order_id'] = $orderId;
-                $cartModel->clear();
-                unset($_SESSION['coupon_code']);
                 $this->view('checkout_stripe', [
                     'metaTitle' => 'Complete Payment | ' . SITE_NAME,
                     'orderId' => $orderId,
-                    'clientSecret' => $clientSecret,
+                    'clientSecret' => $paymentService->createStripePaymentIntent($orderId, $total),
                     'total' => $total,
                     'publishableKey' => (new Settings())->get('stripe_publishable_key'),
                 ]);
                 return;
-
-            default: // COD
-                $orderModel->updateStatus($orderId, 'confirmed');
-                $cartModel->clear();
-                unset($_SESSION['coupon_code']);
-                $this->sendOrderNotifications($orderId);
-                redirect('/order/confirmation/' . $orderId);
         }
+        redirect('/order/confirmation/' . $orderId);
+    }
+
+    /** Pay-later link from the "payment pending" email, the confirmation page or My Orders. */
+    public function pay(int $orderId): void
+    {
+        require_once APP_PATH . '/services/PaymentService.php';
+        $order = (new Order())->find($orderId);
+        $allowed = $order && (
+            (new PaymentService())->verifyPayLink($orderId, (string)($_GET['t'] ?? ''))
+            || (int)($_SESSION['pending_order_id'] ?? 0) === $orderId
+            || (isLoggedIn() && (int)$order['user_id'] === currentUserId())
+        );
+        if (!$allowed) {
+            http_response_code(404);
+            (new PageController())->notFound();
+            return;
+        }
+        if (!$this->awaitingPayment($order)) {
+            redirect('/order/confirmation/' . $orderId);
+        }
+        $this->startPayment($orderId, (string)$order['payment_gateway'], (float)$order['total']);
+    }
+
+    /** "Skip for now" on the payment page: keep the order unpaid and email the customer a link to pay. */
+    public function skipPayment(int $orderId): void
+    {
+        $this->requireCsrf();
+        $order = (new Order())->find($orderId);
+        if (!$order || (int)($_SESSION['pending_order_id'] ?? 0) !== $orderId) {
+            redirect('/');
+        }
+        if ($this->awaitingPayment($order) && empty($_SESSION['payment_link_sent'][$orderId])) {
+            $_SESSION['payment_link_sent'][$orderId] = true;
+            try {
+                require_once APP_PATH . '/services/NotificationService.php';
+                (new NotificationService())->sendPaymentPending($orderId);
+            } catch (Throwable $e) {
+                error_log('Payment pending notification error: ' . $e->getMessage());
+            }
+        }
+        redirect('/order/confirmation/' . $orderId);
+    }
+
+    /** An online-payment order that has not been paid (or cancelled) yet. */
+    private function awaitingPayment(array $order): bool
+    {
+        return $order['payment_gateway'] !== 'cod'
+            && in_array($order['payment_status'], ['pending', 'failed'], true)
+            && !in_array($order['order_status'], ['cancelled', 'refunded'], true);
     }
 
     public function paymentCallback(): void
     {
-        $orderId = (int)($_SESSION['pending_order_id'] ?? $this->input('order_id'));
-        if (!$orderId) {
+        // The posted order wins over the session: a pay-later link may be used in a
+        // browser that still remembers a different pending order.
+        $orderId = (int)($this->input('order_id') ?: ($_SESSION['pending_order_id'] ?? 0));
+        $orderModel = new Order();
+        $order = $orderId ? $orderModel->find($orderId) : null;
+        if (!$order) {
             redirect('/');
+        }
+        if ($order['payment_status'] === 'paid') {
+            redirect('/order/confirmation/' . $orderId);
         }
         $gateway = $this->input('gateway', '');
         require_once APP_PATH . '/services/PaymentService.php';
         $paymentService = new PaymentService();
-        $orderModel = new Order();
 
         $verified = false;
         $reference = null;
 
         if ($gateway === 'razorpay') {
+            $rzpOrderId = (string)$this->input('razorpay_order_id');
             $verified = $paymentService->verifyRazorpaySignature(
-                $this->input('razorpay_order_id'),
-                $this->input('razorpay_payment_id'),
-                $this->input('razorpay_signature')
-            );
+                $rzpOrderId,
+                (string)$this->input('razorpay_payment_id'),
+                (string)$this->input('razorpay_signature')
+            ) && $paymentService->razorpayOrderBelongsTo($rzpOrderId, $orderId);
             $reference = $this->input('razorpay_payment_id');
         } elseif ($gateway === 'paypal') {
             $token = $this->input('token');
@@ -216,8 +274,8 @@ class CheckoutController extends BaseController
             $verified = $result['ok'] ?? false;
             $reference = $result['capture_id'] ?? $token;
         } elseif ($gateway === 'stripe') {
-            $intentId = $this->input('payment_intent');
-            $verified = $paymentService->confirmStripePaymentIntent($intentId);
+            $intentId = (string)$this->input('payment_intent');
+            $verified = $paymentService->confirmStripePaymentIntent($intentId, $orderId);
             $reference = $intentId;
         }
 
@@ -248,9 +306,17 @@ class CheckoutController extends BaseController
             die('Forbidden');
         }
 
+        $paymentPending = $this->awaitingPayment($order);
+        $payLink = null;
+        if ($paymentPending) {
+            require_once APP_PATH . '/services/PaymentService.php';
+            $payLink = (new PaymentService())->payLink($orderId);
+        }
         $this->view('order_confirmation', [
-            'metaTitle' => 'Order Confirmed | ' . SITE_NAME,
+            'metaTitle' => ($paymentPending ? 'Payment Pending' : 'Order Confirmed') . ' | ' . SITE_NAME,
             'order' => $order,
+            'paymentPending' => $paymentPending,
+            'payLink' => $payLink,
         ]);
     }
 
@@ -435,7 +501,9 @@ class CheckoutController extends BaseController
     {
         try {
             require_once APP_PATH . '/services/NotificationService.php';
-            (new NotificationService())->sendOrderConfirmed($orderId);
+            $notifications = new NotificationService();
+            $notifications->sendOrderConfirmed($orderId);
+            $notifications->sendAdminNewOrder($orderId);
         } catch (Throwable $e) {
             // Notification failures must not block order placement
             error_log('Notification error: ' . $e->getMessage());

@@ -1,14 +1,28 @@
 <?php
 /** @var array $order */
+/** @var bool $paymentPending */
+/** @var string|null $payLink */
+$paymentPending = !empty($paymentPending);
 $addr = json_decode($order['address_snapshot_json'], true) ?: [];
 ?>
 <div class="container" style="max-width:760px;padding:50px 20px">
+  <?php if ($paymentPending): ?>
+  <div class="empty-state" style="padding:30px 20px">
+    <div class="icon">⏳</div>
+    <h2>Payment pending</h2>
+    <p>Order ID: <strong>#<?= (int)$order['id'] ?></strong> — Amount due: <strong><?= formatPrice($order['total']) ?></strong></p>
+    <p>Your order is saved but <strong>not confirmed yet</strong>. We will start preparing it once payment is received.
+      A link to complete payment has been sent to your email.</p>
+    <a href="<?= e($payLink) ?>" class="btn btn-primary">Pay Now</a>
+  </div>
+  <?php else: ?>
   <div class="empty-state" style="padding:30px 20px">
     <div class="icon">🎉</div>
     <h2>Thank you! Your order has been placed.</h2>
     <p>Order ID: <strong>#<?= (int)$order['id'] ?></strong></p>
     <p>A confirmation has been sent to your email/phone. You can track your order from My Account.</p>
   </div>
+  <?php endif; ?>
 
   <h3>Order Summary</h3>
   <table class="data-table">

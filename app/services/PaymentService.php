@@ -44,6 +44,21 @@ class PaymentService
         return hash_equals($expected, $signature);
     }
 
+    /**
+     * Whether a Razorpay order was created for our order. A valid signature only proves
+     * the payment is genuine, not which of our orders it paid for — without this, paying
+     * a cheap order could be replayed against a dearer one.
+     */
+    public function razorpayOrderBelongsTo(string $rzpOrderId, int $orderId): bool
+    {
+        $keyId = $this->settings->get('razorpay_key_id');
+        $keySecret = $this->settings->get('razorpay_key_secret');
+        if (!$keyId || !$keySecret || !preg_match('/^order_[A-Za-z0-9]+$/', $rzpOrderId)) return false;
+
+        $response = $this->curlRequest('https://api.razorpay.com/v1/orders/' . $rzpOrderId, 'GET', null, [], $keyId . ':' . $keySecret);
+        return ($response['receipt'] ?? '') === 'order_' . $orderId;
+    }
+
     // ===================== PAYPAL =====================
 
     public function createPaypalOrder(int $orderId, float $amount): ?string
@@ -141,13 +156,38 @@ class PaymentService
         return $response['client_secret'] ?? null;
     }
 
-    public function confirmStripePaymentIntent(string $intentId): bool
+    /** True when the intent succeeded and was created for $orderId (see razorpayOrderBelongsTo). */
+    public function confirmStripePaymentIntent(string $intentId, int $orderId): bool
     {
         $secretKey = $this->settings->get('stripe_secret_key');
-        if (!$secretKey || !$intentId) return false;
+        if (!$secretKey || !preg_match('/^pi_[A-Za-z0-9]+$/', $intentId)) return false;
 
         $response = $this->curlRequest('https://api.stripe.com/v1/payment_intents/' . $intentId, 'GET', null, [], $secretKey . ':');
-        return ($response['status'] ?? '') === 'succeeded';
+        return ($response['status'] ?? '') === 'succeeded'
+            && (string)($response['metadata']['order_id'] ?? '') === (string)$orderId;
+    }
+
+    // ===================== Pay-later links =====================
+
+    /** Signed link that lets the customer pay for an unpaid order from any device. */
+    public function payLink(int $orderId): string
+    {
+        return url('/order/pay/' . $orderId . '?t=' . $this->payLinkSignature($orderId));
+    }
+
+    public function verifyPayLink(int $orderId, string $token): bool
+    {
+        return $token !== '' && hash_equals($this->payLinkSignature($orderId), $token);
+    }
+
+    private function payLinkSignature(int $orderId): string
+    {
+        $key = (string)$this->settings->get('payment_link_key', '');
+        if ($key === '') {
+            $key = bin2hex(random_bytes(32));
+            $this->settings->set('payment_link_key', $key);
+        }
+        return hash_hmac('sha256', 'pay|' . $orderId, $key);
     }
 
     // ===================== Shared cURL helper =====================
@@ -169,7 +209,6 @@ class PaymentService
         }
         $raw = curl_exec($ch);
         $error = curl_error($ch);
-        curl_close($ch);
 
         if ($error || $raw === false) {
             error_log('PaymentService cURL error: ' . $error);
