@@ -1,6 +1,9 @@
 <div class="admin-flex-between" style="margin-bottom:18px;">
     <a href="<?= url('/admin/orders') ?>" class="admin-btn admin-btn-sm">&larr; Back to Orders</a>
-    <a href="<?= url('/admin/orders/' . $order['id'] . '/invoice') ?>" target="_blank" class="admin-btn admin-btn-primary">Download Invoice (PDF)</a>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a href="<?= url('/admin/orders/' . $order['id'] . '/edit') ?>" class="admin-btn">Edit Order</a>
+        <a href="<?= url('/admin/orders/' . $order['id'] . '/invoice') ?>" target="_blank" class="admin-btn admin-btn-primary">Download Invoice (PDF)</a>
+    </div>
 </div>
 
 <div class="admin-grid admin-grid-2" style="align-items:start;">
@@ -234,3 +237,16 @@ function gddToggleVideo(itemId, btn) {
     });
 }
 </script>
+
+<div class="admin-card admin-mt" style="border-left:4px solid var(--admin-error);">
+    <h2 class="admin-card-title">Delete Order</h2>
+    <p class="admin-help">Permanently removes this order, its items and any uploaded video/QR. Use this to clear test orders.</p>
+    <form method="post" action="<?= url('/admin/orders/' . $order['id'] . '/delete') ?>" class="admin-form">
+        <?= csrfField() ?>
+        <label style="display:flex;align-items:center;gap:6px;">
+            <input type="checkbox" name="restore_stock" value="1" <?= in_array($order['order_status'], ['shipped', 'delivered'], true) ? '' : 'checked' ?>>
+            Put the stock back and release the coupon use
+        </label>
+        <button type="submit" class="admin-btn admin-btn-danger" data-confirm="Permanently delete order #<?= (int)$order['id'] ?>? This cannot be undone.">Delete Order</button>
+    </form>
+</div>

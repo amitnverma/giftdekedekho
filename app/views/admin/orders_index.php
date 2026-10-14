@@ -21,13 +21,24 @@
     <button class="admin-btn" type="submit">Filter</button>
 </form>
 
+<form method="post" action="<?= url('/admin/orders/bulk-delete') ?>" id="ordersBulkForm"><?= csrfField() ?></form>
+
 <div class="admin-card admin-mt">
+    <div class="admin-flex-between" style="margin-bottom:12px;gap:12px;flex-wrap:wrap;">
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;">
+            <input type="checkbox" name="restore_stock" value="1" form="ordersBulkForm" checked>
+            Put stock back &amp; release coupon uses
+        </label>
+        <button type="submit" form="ordersBulkForm" class="admin-btn admin-btn-sm admin-btn-danger"
+                data-confirm="Permanently delete the selected orders? This cannot be undone.">Delete Selected</button>
+    </div>
     <div class="admin-table-wrap">
         <table class="admin-table">
-            <thead><tr><th>Order #</th><th>Customer</th><th>Total</th><th>Payment</th><th>Status</th><th>Date</th><th></th></tr></thead>
+            <thead><tr><th><input type="checkbox" data-select-all="orders"></th><th>Order #</th><th>Customer</th><th>Total</th><th>Payment</th><th>Status</th><th>Date</th><th></th></tr></thead>
             <tbody>
             <?php foreach ($orders as $o): ?>
                 <tr>
+                    <td><input type="checkbox" name="ids[]" value="<?= (int)$o['id'] ?>" data-bulk="orders" form="ordersBulkForm"></td>
                     <td>
                         #<?= (int)$o['id'] ?>
                         <?php if (!empty($o['has_personalization'])): ?>
@@ -42,11 +53,19 @@
                     </td>
                     <td><span class="admin-badge admin-badge-blue"><?= e($o['order_status']) ?></span></td>
                     <td><?= date('d M Y', strtotime($o['created_at'])) ?></td>
-                    <td><a class="admin-btn admin-btn-sm" href="<?= url('/admin/orders/' . $o['id']) ?>">View</a></td>
+                    <td style="white-space:nowrap;">
+                        <a class="admin-btn admin-btn-sm" href="<?= url('/admin/orders/' . $o['id']) ?>">View</a>
+                        <a class="admin-btn admin-btn-sm" href="<?= url('/admin/orders/' . $o['id'] . '/edit') ?>">Edit</a>
+                        <form method="post" action="<?= url('/admin/orders/' . $o['id'] . '/delete') ?>" style="display:inline">
+                            <?= csrfField() ?>
+                            <?php if (!in_array($o['order_status'], ['shipped', 'delivered'], true)): ?><input type="hidden" name="restore_stock" value="1"><?php endif; ?>
+                            <button type="submit" class="admin-btn admin-btn-sm admin-btn-danger" data-confirm="Permanently delete order #<?= (int)$o['id'] ?>? This cannot be undone.">Delete</button>
+                        </form>
+                    </td>
                 </tr>
             <?php endforeach; ?>
             <?php if (empty($orders)): ?>
-                <tr><td colspan="7" class="admin-muted">No orders found.</td></tr>
+                <tr><td colspan="8" class="admin-muted">No orders found.</td></tr>
             <?php endif; ?>
             </tbody>
         </table>

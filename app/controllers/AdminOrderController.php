@@ -44,6 +44,139 @@ class AdminOrderController extends BaseController
         ]);
     }
 
+    public function edit(int $id): void
+    {
+        $this->requireAdmin();
+        $order = (new Order())->findWithItems($id);
+        if (!$order) { flash('error', 'Order not found.'); redirect('/admin/orders'); }
+
+        $this->viewAdmin('admin/orders_edit', [
+            'metaTitle' => 'Edit Order #' . $id,
+            'order' => $order,
+            'address' => json_decode($order['address_snapshot_json'], true) ?: [],
+            'account' => !empty($order['user_id']) ? (new User())->find((int)$order['user_id']) : null,
+        ]);
+    }
+
+    /**
+     * Saves the edit form. Order status stays on the order page's own form,
+     * because changing it there sends customer emails and books Shiprocket —
+     * an edit made to fix a typo must never do either.
+     */
+    public function update(int $id): void
+    {
+        $this->requireAdmin();
+        $this->requireCsrf();
+
+        $orderModel = new Order();
+        $order = $orderModel->find($id);
+        if (!$order) { flash('error', 'Order not found.'); redirect('/admin/orders'); }
+
+        $back = "/admin/orders/{$id}/edit";
+        $pincode = (string)$this->input('pincode', '');
+        if ($pincode !== '' && !preg_match('/^\d{6}$/', $pincode)) {
+            flash('error', 'Pincode must be 6 digits.');
+            redirect($back);
+        }
+        $email = (string)$this->input('guest_email', '');
+        if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            flash('error', 'Please enter a valid email address.');
+            redirect($back);
+        }
+        $gateway = (string)$this->input('payment_gateway');
+        $paymentStatus = (string)$this->input('payment_status');
+        if (!in_array($gateway, ['razorpay', 'paypal', 'stripe', 'cod'], true)
+            || !in_array($paymentStatus, ['pending', 'paid', 'failed', 'refunded'], true)) {
+            flash('error', 'Invalid payment method or status.');
+            redirect($back);
+        }
+
+        // Merge into the existing snapshot so keys this form doesn't show
+        // (e.g. 'label' from a saved address) survive the edit.
+        $address = json_decode($order['address_snapshot_json'], true) ?: [];
+        foreach (['full_name', 'phone', 'address_line1', 'address_line2', 'city', 'state', 'pincode'] as $key) {
+            $address[$key] = (string)$this->input($key, '');
+        }
+
+        $items = [];
+        foreach ((array)($_POST['items'] ?? []) as $itemId => $line) {
+            if (!is_array($line)) continue;
+            $items[(int)$itemId] = [
+                'quantity' => (int)($line['quantity'] ?? 1),
+                'unit_price' => (float)($line['unit_price'] ?? 0),
+            ];
+        }
+
+        $orderModel->adminUpdate($id, [
+            'address_snapshot_json' => json_encode($address),
+            'guest_email' => $email !== '' ? $email : null,
+            'guest_phone' => ((string)$this->input('guest_phone', '')) ?: null,
+            'payment_gateway' => $gateway,
+            'payment_status' => $paymentStatus,
+            'payment_reference' => ((string)$this->input('payment_reference', '')) ?: null,
+            'discount' => (float)$this->input('discount', 0),
+            'shipping_charge' => (float)$this->input('shipping_charge', 0),
+            'notes' => ((string)$this->input('notes', '')) ?: null,
+        ], $items);
+
+        flash('success', 'Order #' . $id . ' updated.');
+        redirect("/admin/orders/{$id}");
+    }
+
+    public function destroy(int $id): void
+    {
+        $this->requireAdmin();
+        $this->requireCsrf();
+
+        $result = (new Order())->adminDelete($id, (bool)$this->input('restore_stock'));
+        $this->removeOrderFiles($result['files']);
+
+        $msg = 'Order #' . $id . ' deleted.';
+        if ($result['ar_frames']) {
+            $msg .= ' Its AR frames (' . implode(', ', $result['ar_frames']) . ') were kept but unlinked — delete them from AR Frames if they were test frames.';
+        }
+        flash('success', $msg);
+        redirect('/admin/orders');
+    }
+
+    public function bulkDelete(): void
+    {
+        $this->requireAdmin();
+        $this->requireCsrf();
+
+        $ids = array_unique(array_filter(array_map('intval', (array)($_POST['ids'] ?? []))));
+        if (!$ids) { flash('error', 'Select at least one order to delete.'); redirect('/admin/orders'); }
+
+        $orderModel = new Order();
+        $restore = (bool)$this->input('restore_stock');
+        $arFrames = [];
+        foreach ($ids as $id) {
+            $result = $orderModel->adminDelete($id, $restore);
+            $this->removeOrderFiles($result['files']);
+            $arFrames = array_merge($arFrames, $result['ar_frames']);
+        }
+
+        $msg = count($ids) . ' order(s) deleted.';
+        if ($arFrames) {
+            $msg .= ' Their AR frames (' . implode(', ', $arFrames) . ') were kept but unlinked — delete them from AR Frames if they were test frames.';
+        }
+        flash('success', $msg);
+        redirect('/admin/orders');
+    }
+
+    /** Unlinks the video/QR files read back from a deleted order's rows — never a pattern. */
+    private function removeOrderFiles(array $relativePaths): void
+    {
+        $root = realpath(UPLOAD_PATH);
+        if ($root === false) return;
+        foreach ($relativePaths as $rel) {
+            $abs = realpath(UPLOAD_PATH . '/' . ltrim($rel, '/'));
+            if ($abs !== false && str_starts_with($abs, $root . DIRECTORY_SEPARATOR) && is_file($abs)) {
+                @unlink($abs);
+            }
+        }
+    }
+
     public function updateStatus(int $id): void
     {
         $this->requireAdmin();

@@ -72,6 +72,100 @@ class Order extends BaseModel
     }
 
     /**
+     * Admin edit: replaces the order's customer/payment fields and item lines,
+     * then re-derives subtotal and total from the saved lines so the figures
+     * can never disagree with what the order actually contains.
+     *
+     * $items maps order_item id => ['quantity' => int, 'unit_price' => float].
+     * Ids that don't belong to this order are ignored.
+     */
+    public function adminUpdate(int $orderId, array $fields, array $items): void
+    {
+        $this->db->beginTransaction();
+        try {
+            $upd = $this->db->prepare('UPDATE order_items SET quantity = ?, unit_price = ? WHERE id = ? AND order_id = ?');
+            foreach ($items as $itemId => $line) {
+                $upd->execute([max(1, (int)$line['quantity']), max(0, round((float)$line['unit_price'], 2)), (int)$itemId, $orderId]);
+            }
+
+            $stmt = $this->db->prepare('SELECT COALESCE(SUM(unit_price * quantity), 0) s FROM order_items WHERE order_id = ?');
+            $stmt->execute([$orderId]);
+            $subtotal = round((float)$stmt->fetch()['s'], 2);
+
+            $discount = min(max(0, (float)$fields['discount']), $subtotal);
+            $shipping = max(0, (float)$fields['shipping_charge']);
+            $fields['discount'] = $discount;
+            $fields['shipping_charge'] = $shipping;
+            $fields['subtotal'] = $subtotal;
+            $fields['total'] = round($subtotal - $discount + $shipping, 2);
+
+            $this->updateTable('orders', $orderId, $fields);
+            $this->db->commit();
+        } catch (Throwable $e) {
+            $this->db->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
+     * Permanently delete an order. order_items and order_video_photos go with it
+     * (ON DELETE CASCADE); AR frames made for its items are kept but unlinked
+     * (ON DELETE SET NULL), so their slugs are returned for the admin to review.
+     *
+     * With $restore, the stock taken at checkout is put back and the coupon's
+     * use is released — what you want when removing a test order.
+     *
+     * Returns ['files' => paths relative to UPLOAD_PATH that are now unreferenced,
+     *          'ar_frames' => slugs of AR frames that were linked to the order].
+     */
+    public function adminDelete(int $orderId, bool $restore): array
+    {
+        $order = $this->find($orderId);
+        if (!$order) return ['files' => [], 'ar_frames' => []];
+        $items = $this->items($orderId);
+        $itemIds = array_map(fn($i) => (int)$i['id'], $items);
+
+        $files = [];
+        $arFrames = [];
+        if ($itemIds) {
+            $in = implode(',', array_fill(0, count($itemIds), '?'));
+            $stmt = $this->db->prepare("SELECT admin_video_path, qr_code_path FROM order_video_photos WHERE order_item_id IN ({$in})");
+            $stmt->execute($itemIds);
+            foreach ($stmt->fetchAll() as $row) {
+                foreach (['admin_video_path', 'qr_code_path'] as $col) {
+                    if (!empty($row[$col])) $files[] = $row[$col];
+                }
+            }
+            if ((new ArFrame())->tableExists()) {
+                $stmt = $this->db->prepare("SELECT slug FROM ar_frames WHERE order_item_id IN ({$in})");
+                $stmt->execute($itemIds);
+                $arFrames = array_column($stmt->fetchAll(), 'slug');
+            }
+        }
+
+        $this->db->beginTransaction();
+        try {
+            if ($restore) {
+                $stock = $this->db->prepare('UPDATE products SET stock_qty = stock_qty + ? WHERE id = ?');
+                foreach ($items as $item) {
+                    if (!empty($item['product_id'])) $stock->execute([(int)$item['quantity'], (int)$item['product_id']]);
+                }
+                if (!empty($order['coupon_id'])) {
+                    $this->db->prepare('UPDATE coupons SET used_count = GREATEST(0, used_count - 1) WHERE id = ?')
+                             ->execute([(int)$order['coupon_id']]);
+                }
+            }
+            $this->db->prepare('DELETE FROM orders WHERE id = ?')->execute([$orderId]);
+            $this->db->commit();
+        } catch (Throwable $e) {
+            $this->db->rollBack();
+            throw $e;
+        }
+
+        return ['files' => $files, 'ar_frames' => $arFrames];
+    }
+
+    /**
      * Admin order list with filters: status, payment_gateway, search, date_from, date_to
      */
     public function adminList(array $filters, int $limit, int $offset): array

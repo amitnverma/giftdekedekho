@@ -85,8 +85,19 @@ class AdminRouter
             case $path === '/orders':
                 (new AdminOrderController())->index();
                 break;
+            case $path === '/orders/bulk-delete' && $_SERVER['REQUEST_METHOD'] === 'POST':
+                (new AdminOrderController())->bulkDelete();
+                break;
             case preg_match('#^/orders/(\d+)$#', $path, $m) === 1:
                 (new AdminOrderController())->show((int)$m[1]);
+                break;
+            case preg_match('#^/orders/(\d+)/edit$#', $path, $m) === 1:
+                $_SERVER['REQUEST_METHOD'] === 'POST'
+                    ? (new AdminOrderController())->update((int)$m[1])
+                    : (new AdminOrderController())->edit((int)$m[1]);
+                break;
+            case preg_match('#^/orders/(\d+)/delete$#', $path, $m) === 1 && $_SERVER['REQUEST_METHOD'] === 'POST':
+                (new AdminOrderController())->destroy((int)$m[1]);
                 break;
             case preg_match('#^/orders/(\d+)/update-status$#', $path, $m) === 1:
                 (new AdminOrderController())->updateStatus((int)$m[1]);
